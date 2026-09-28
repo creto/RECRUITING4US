@@ -121,6 +121,7 @@ function ApplicationPage() {
             <article key={String(item.id)} className="rounded-md border border-line bg-surface p-4 text-sm">
               <h2 className="text-xl">{String(item.assessment_name)}</h2>
               <p className="text-muted">{String(item.status)} · start by {when(String(item.start_by))} · attempts {String(item.attempts)}</p>
+              <p className="mt-2">{scoreLine(item)}</p>
               {item.attempt_id ? (
                 <form className="mt-3 grid gap-2 md:grid-cols-2" onSubmit={(event) => {
                   event.preventDefault();
@@ -267,4 +268,27 @@ function OfferForm({ slug, applicationId, onDone, onError }: { slug: string; app
       <Button type="submit">Create offer for approval</Button>
     </form>
   );
+}
+
+function scoreLine(item: {
+  score_status?: string | null;
+  score_origin?: string | null;
+  basis_points?: number | string | null;
+  score_release?: string | null;
+}) {
+  const status = item.score_status ? String(item.score_status) : "";
+  if (!status) return "No evaluation yet. Choice and numeric questions score on submit. Written and code work stays pending until a person grades it.";
+  if (status === "PENDING") return "Grading is pending. That is not a zero.";
+  if (status === "FAILED") return "Scoring failed. No score was invented.";
+  const points = item.basis_points == null || item.basis_points === "" ? null : Number(item.basis_points);
+  const shown = points != null && Number.isFinite(points)
+    ? `${(points / 100).toFixed(2)}% (${points} basis points)`
+    : "a final result with no stored percentage";
+  const origin = item.score_origin === "MANUAL"
+    ? "Human rubric"
+    : item.score_origin === "EXTERNAL"
+      ? "External scale, kept on the provider’s range"
+      : "Automatic exact match or numeric tolerance";
+  const release = String(item.score_release) === "NONE" ? " Not released to the candidate." : "";
+  return `${origin}: ${shown}.${release}`;
 }

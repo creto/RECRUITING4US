@@ -38,6 +38,8 @@ import {
   distinctApplicationCount,
   grantAllows,
   includeInScoreDistribution,
+  explainAuthorQuestion,
+  manualBasisPoints,
   mapExternalScore,
   operationalFailure,
   outboxDisposition,
@@ -136,6 +138,35 @@ describe("assessment invariants", () => {
     assert.equal(weighted.status, "FINAL");
     assert.equal(weighted.basisPoints, 6750);
     assert.notEqual(weighted.basisPoints, 5625);
+  });
+
+  it("explains the grader without copying hidden key material", () => {
+    const exact = explainAuthorQuestion({
+      type: "single",
+      points: 1,
+      payload: { options: [{ id: "b", label: "Use an idempotency key." }] },
+      rubric: null,
+      key: { correct: ["b"], sentinel: "HIDDEN_SENTINEL_northstar_key_9f3a" },
+    });
+    assert.equal(exact.method, "exact");
+    assert.match(exact.keySummary, /Use an idempotency key/);
+    assert.equal(JSON.stringify(exact).includes("HIDDEN_SENTINEL"), false);
+    const numeric = explainAuthorQuestion({
+      type: "numeric",
+      points: 2,
+      payload: { absTolerance: "0.1", relTolerance: "0" },
+      rubric: null,
+      key: { expected: "80" },
+    });
+    assert.match(numeric.keySummary, /absolute tolerance 0\.1/);
+    assert.match(numeric.keySummary, /\|80\|/);
+    const pending = manualBasisPoints({ substance: 2 }, ["substance", "clarity"]);
+    assert.equal(pending, null);
+    assert.deepEqual(manualBasisPoints({ substance: 2, clarity: 2 }, ["substance", "clarity"]), {
+      earned: 4,
+      possible: 8,
+      basisPoints: 5000,
+    });
   });
 
   it("rejects a start exactly at the start-by instant", () => {

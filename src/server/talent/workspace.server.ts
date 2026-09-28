@@ -810,7 +810,19 @@ export async function getApplication(userId: string, slug: string, applicationId
       to_char(g.start_by at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as start_by,
       v.score_release,
       (select count(*) from attempts t where t.assignment_id = g.id) as attempts,
-      (select t.id from attempts t where t.assignment_id = g.id order by t.ordinal desc limit 1) as attempt_id
+      (select t.id from attempts t where t.assignment_id = g.id order by t.ordinal desc limit 1) as attempt_id,
+      (select e.status from evaluations e
+        where e.company_id = g.company_id
+          and e.attempt_id = (select t.id from attempts t where t.assignment_id = g.id order by t.ordinal desc limit 1)
+        order by e.revision desc limit 1) as score_status,
+      (select e.origin from evaluations e
+        where e.company_id = g.company_id
+          and e.attempt_id = (select t.id from attempts t where t.assignment_id = g.id order by t.ordinal desc limit 1)
+        order by e.revision desc limit 1) as score_origin,
+      (select e.basis_points from evaluations e
+        where e.company_id = g.company_id
+          and e.attempt_id = (select t.id from attempts t where t.assignment_id = g.id order by t.ordinal desc limit 1)
+        order by e.revision desc limit 1) as basis_points
     from assignments g
     join assessment_versions v on v.id = g.assessment_version_id
     join assessments s on s.id = v.assessment_id

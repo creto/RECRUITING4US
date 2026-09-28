@@ -9,10 +9,13 @@ import {
   executionUnavailable,
   gradeExactMultipleChoice,
   gradeNumeric,
+  gradingMethod,
+  explainAuthorQuestion,
+  manualBasisPoints,
+  DEFAULT_TEXT_RUBRIC,
   mapExternalScore,
   operationalFailure,
   planExtension,
-  rubricComplete,
   seededShuffle,
   validateAssessmentPublish,
 } from "@/domain/rules";
@@ -20,13 +23,6 @@ import { allow, audit, canonical, db, dbNow, json, mapDbError, nid, requireActor
 import { ensureReview, rememberEvent } from "./workflows.server";
 
 const HUMAN_TYPES = new Set(["text", "code", "file", "sql", "spreadsheet", "recording"]);
-
-const TEXT_RUBRIC = {
-  dimensions: [
-    { id: "substance", label: "Substance", anchors: ["Missing", "Thin", "Adequate", "Strong", "Exceptional"] },
-    { id: "clarity", label: "Clarity", anchors: ["Unclear", "Hard to follow", "Understandable", "Clear", "Precise"] },
-  ],
-};
 
 export async function listAssessments(userId: string, slug: string) {
   const actor = await requireActor(userId, slug);
@@ -63,8 +59,21 @@ export async function listQuestions(userId: string, slug: string) {
   const actor = await requireActor(userId, slug);
   allow(actor, "assessment.author");
   const sql = await db();
-  return sql`
-    select q.id, q.type, q.tags, q.archived, v.prompt, v.version_number, v.id as version_id, v.points
+  const rows = await sql<{
+    id: string;
+    type: string;
+    tags: string;
+    archived: boolean;
+    prompt: string;
+    version_number: number;
+    version_id: string;
+    points: number;
+    payload: unknown;
+    rubric: unknown;
+    key_payload: unknown;
+  }>`
+    select q.id, q.type, q.tags, q.archived, v.prompt, v.version_number, v.id as version_id, v.points,
+      v.payload, v.rubric, v.key_payload
     from questions q
     join question_versions v on v.question_id = q.id and v.company_id = q.company_id
     where q.company_id = ${actor.companyId}
@@ -73,6 +82,30 @@ export async function listQuestions(userId: string, slug: string) {
       )
     order by q.created_at desc
   `;
+  return rows.map((row) => {
+    const grading = gradingMethod(row.type)
+      ? explainAuthorQuestion({
+          type: row.type,
+          points: row.points,
+          payload: row.payload,
+          rubric: row.rubric,
+          key: row.key_payload,
+        })
+      : null;
+    return {
+      id: row.id,
+      type: row.type,
+      tags: row.tags,
+      archived: row.archived,
+      prompt: row.prompt,
+      version_number: row.version_number,
+      version_id: row.version_id,
+      points: row.points,
+      grading: grading
+        ? { method: grading.method, title: grading.title, keySummary: grading.keySummary, steps: grading.steps }
+        : null,
+    };
+  });
 }
 
 export async function createQuestion(
@@ -111,7 +144,7 @@ export async function createQuestion(
   if (!HUMAN_TYPES.has(input.type) && input.type !== "single" && input.type !== "multi" && input.type !== "numeric") {
     throw new Error("That question type is not supported.");
   }
-  const rubric = HUMAN_TYPES.has(input.type) ? TEXT_RUBRIC : null;
+  const rubric = HUMAN_TYPES.has(input.type) ? DEFAULT_TEXT_RUBRIC : null;
   if ((input.type === "single" || input.type === "multi") && input.correct.length === 0) {
     throw new Error("Choose the correct option or options.");
   }
@@ -1043,22 +1076,25 @@ export async function getReview(userId: string, slug: string, reviewId: string) 
   `;
   const task = tasks[0];
   if (!task) throw new Error("Not found.");
-  const items = await sql<{ id: string; prompt: string; answer: { text?: string } | null; rubric: typeof TEXT_RUBRIC | null }>`
-    select i.id, v.prompt, r.answer, v.rubric
+  const items = await sql<{ id: string; prompt: string; type: string; points: number; answer: { text?: string } | null; rubric: { dimensions: { id: string; label: string; anchors: string[] }[] } | null }>`
+    select i.id, v.prompt, q.type, i.points, r.answer, v.rubric
     from attempt_items i
     join question_versions v on v.id = i.question_version_id
     join questions q on q.id = v.question_id
     left join responses r on r.attempt_item_id = i.id
-    where i.attempt_id = ${task.attempt_id} and q.type in ('text', 'code', 'file')
+    where i.attempt_id = ${task.attempt_id}
+      and q.type in ('text', 'code', 'file', 'sql', 'spreadsheet', 'recording')
     order by i.position
   `;
   return {
     task,
     items: items.map((item) => ({
       id: item.id,
+      type: item.type,
+      points: item.points,
       prompt: item.prompt,
       answer: item.answer?.text ?? "",
-      rubric: item.rubric ?? TEXT_RUBRIC,
+      rubric: item.rubric ?? DEFAULT_TEXT_RUBRIC,
     })),
   };
 }
@@ -1072,7 +1108,8 @@ export async function submitReview(
   allow(actor, "evaluation.grade");
   const review = await getReview(userId, input.slug, input.reviewId);
   const required = review.items[0]?.rubric.dimensions.map((dimension) => dimension.id) ?? ["substance", "clarity"];
-  if (!rubricComplete(input.ratings, required)) throw new Error("Score every required dimension from 0 to 4.");
+  const scored = manualBasisPoints(input.ratings, required);
+  if (!scored) throw new Error("Score every required dimension from 0 to 4.");
   const sql = await db();
   const tasks = await sql<{ attempt_id: string; application_id: string }>`
     select attempt_id, application_id from review_tasks
@@ -1084,8 +1121,8 @@ export async function submitReview(
       notes = ${input.notes.slice(0, 4000)}, submitted_at = now(), assignee_user_id = ${actor.userId}
     where id = ${input.reviewId}
   `;
-  const earned = required.reduce((sum, id) => sum + (input.ratings[id] ?? 0), 0);
-  const possible = required.length * 4;
+  const earned = scored.earned;
+  const possible = scored.possible;
   const revisionRows = await sql<{ n: number }>`
     select coalesce(max(revision), 0) as n from evaluations where attempt_id = ${tasks[0].attempt_id}
   `;
@@ -1094,7 +1131,7 @@ export async function submitReview(
       id, company_id, attempt_id, revision, origin, status, basis_points, raw, created_by, reason
     ) values (
       ${nid()}, ${actor.companyId}, ${tasks[0].attempt_id}, ${Number(revisionRows[0]?.n ?? 0) + 1},
-      'MANUAL', 'FINAL', ${Math.round((earned / possible) * 10000)},
+      'MANUAL', 'FINAL', ${scored.basisPoints},
       ${json({ ratings: input.ratings, earned, possible })}::jsonb, ${actor.userId}, ${"Human review"}
     )
   `;

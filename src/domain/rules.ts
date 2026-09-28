@@ -870,3 +870,161 @@ export function saveStatusLabel(state: string | undefined): string {
   return "Answers save after you pause typing.";
 }
 
+export const DEFAULT_TEXT_RUBRIC = {
+  dimensions: [
+    { id: "substance", label: "Substance", anchors: ["Missing", "Thin", "Adequate", "Strong", "Exceptional"] },
+    { id: "clarity", label: "Clarity", anchors: ["Unclear", "Hard to follow", "Understandable", "Clear", "Precise"] },
+  ],
+} as const;
+
+const HUMAN_QUESTION_TYPES = ["text", "code", "file", "sql", "spreadsheet", "recording"] as const;
+
+export function gradingMethod(type: string): "exact" | "numeric" | "rubric" | null {
+  if (type === "single" || type === "multi") return "exact";
+  if (type === "numeric") return "numeric";
+  if ((HUMAN_QUESTION_TYPES as readonly string[]).includes(type)) return "rubric";
+  return null;
+}
+
+/** The rule the grader actually applies. No answer key. */
+export function gradingGuide(type: string): { method: "exact" | "numeric" | "rubric"; title: string; steps: string[] } {
+  const method = gradingMethod(type);
+  if (method === "exact") {
+    return {
+      method,
+      title: type === "multi" ? "Exact set" : "Exact option",
+      steps: [
+        "The saved selection is compared with the answer key as a set. Order does not matter.",
+        "The sets must be identical. A missing option or an extra option scores 0.",
+        "There is no partial credit.",
+        "A blank answer scores 0 only after a final submission.",
+        "Credit is 1 or 0, then multiplied by the question's points.",
+      ],
+    };
+  }
+  if (method === "numeric") {
+    return {
+      method,
+      title: "Numeric tolerance",
+      steps: [
+        "The answer and the expected value are parsed as plain decimals. Commas, NaN, and Infinity score 0.",
+        "The answer is accepted when the absolute difference is at most the larger of the absolute tolerance and (relative tolerance × |expected|).",
+        "Relative tolerance is a ratio: 0.01 means 1 percent, not 1.",
+        "The boundary is inclusive. A match earns the full point value. A miss earns 0.",
+      ],
+    };
+  }
+  if (method === "rubric") {
+    return {
+      method,
+      title: "Human rubric",
+      steps: [
+        "The answer is stored. Code, SQL, spreadsheets, and recordings are not executed.",
+        "Each required dimension is an integer from 0 to 4.",
+        "The review stays pending until every required dimension is scored. Pending is not zero.",
+        "Earned points are the sum of the dimension scores. Possible points are 4 times the number of dimensions.",
+        "The stored score is round(earned ÷ possible × 10000) basis points. 10000 is 100 percent.",
+        "If a scoring provider fails, the result is an operational failure. No zero is invented.",
+      ],
+    };
+  }
+  throw new Error("That question type is not supported.");
+}
+
+type RubricDimension = { id: string; label: string; anchors: string[] };
+
+function rubricDimensions(rubric: unknown): RubricDimension[] {
+  if (!rubric || typeof rubric !== "object") return [];
+  const dimensions = (rubric as { dimensions?: unknown }).dimensions;
+  if (!Array.isArray(dimensions)) return [];
+  return dimensions.flatMap((dimension) => {
+    if (!dimension || typeof dimension !== "object") return [];
+    const id = (dimension as { id?: unknown }).id;
+    const label = (dimension as { label?: unknown }).label;
+    const anchors = (dimension as { anchors?: unknown }).anchors;
+    if (typeof id !== "string" || typeof label !== "string" || !Array.isArray(anchors)) return [];
+    return [{ id, label, anchors: anchors.filter((anchor): anchor is string => typeof anchor === "string") }];
+  });
+}
+
+function optionRows(payload: unknown): { id: string; label: string }[] {
+  if (!payload || typeof payload !== "object") return [];
+  const options = (payload as { options?: unknown }).options;
+  if (!Array.isArray(options)) return [];
+  return options.flatMap((option) => {
+    if (!option || typeof option !== "object") return [];
+    const id = (option as { id?: unknown }).id;
+    const label = (option as { label?: unknown }).label;
+    if (typeof id !== "string" || typeof label !== "string") return [];
+    return [{ id, label }];
+  });
+}
+
+function keyStrings(key: unknown, field: string): string[] {
+  if (!key || typeof key !== "object") return [];
+  const value = (key as Record<string, unknown>)[field];
+  if (typeof value === "string") return [value];
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+function keyText(key: unknown, field: string): string {
+  if (!key || typeof key !== "object") return "";
+  const value = (key as Record<string, unknown>)[field];
+  return typeof value === "string" ? value.trim() : "";
+}
+
+/** Author-facing grading line. Copies only the fields the grader uses, never other key material. */
+export function explainAuthorQuestion(input: {
+  type: string;
+  points: number;
+  payload: unknown;
+  rubric: unknown;
+  key: unknown;
+}): { method: "exact" | "numeric" | "rubric"; title: string; steps: string[]; keySummary: string } {
+  const guide = gradingGuide(input.type);
+  const points = Number.isInteger(input.points) && input.points > 0 ? input.points : 0;
+  if (guide.method === "exact") {
+    const options = optionRows(input.payload);
+    const correct = keyStrings(input.key, "correct");
+    const labels = correct.map((id) => options.find((option) => option.id === id)?.label ?? id);
+    const listed = labels.length ? labels.join("; ") : "no option selected";
+    return {
+      ...guide,
+      keySummary: `Full credit (${points} pt) only when the selection is exactly: ${listed}. Any other set scores 0. Partial credit is not used.`,
+    };
+  }
+  if (guide.method === "numeric") {
+    const expected = keyText(input.key, "expected");
+    const abs = keyText(input.payload, "absTolerance") || "0";
+    const rel = keyText(input.payload, "relTolerance") || "0";
+    if (!expected) {
+      return { ...guide, keySummary: "This numeric question has no expected value, so a submitted answer cannot earn credit." };
+    }
+    return {
+      ...guide,
+      keySummary: `Full credit (${points} pt) when the answer is within the larger of absolute tolerance ${abs} and relative tolerance ${rel} × |${expected}|. A miss is 0.`,
+    };
+  }
+  const dimensions = rubricDimensions(input.rubric);
+  if (dimensions.length === 0) {
+    return { ...guide, keySummary: "This question has no rubric, so it cannot be published or finalized." };
+  }
+  const names = dimensions.map((dimension) => dimension.label).join(" and ");
+  return {
+    ...guide,
+    keySummary: `A person scores ${names} from 0 to 4. The score is round(sum ÷ ${dimensions.length * 4} × 10000) basis points. Until every dimension is scored, the result stays pending, not zero.`,
+  };
+}
+
+/** Same conversion submitReview stores. Incomplete ratings stay pending. */
+export function manualBasisPoints(
+  ratings: Readonly<Record<string, number | null | undefined>>,
+  dimensionIds: readonly string[],
+): { earned: number; possible: number; basisPoints: number } | null {
+  if (dimensionIds.length === 0 || !rubricComplete(ratings, dimensionIds)) return null;
+  const earned = dimensionIds.reduce((sum, id) => sum + (ratings[id] as number), 0);
+  const possible = dimensionIds.length * 4;
+  return { earned, possible, basisPoints: Math.round((earned / possible) * 10000) };
+}
+
