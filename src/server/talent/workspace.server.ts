@@ -19,10 +19,14 @@ import {
   assertSameCompany,
   grantAllows,
   retentionDue,
+  roleHas,
 } from "@/domain/rules";
+import { stringList, termsFromJson } from "@/domain/screen";
+import { applicationReceipt, applicationSheetCsv, cvResultLabel, storedAnswerText, type SheetField, type SheetRow } from "@/domain/sheet";
 import { enterTenant } from "@/lib/tenant";
 import { allow, audit, canonical, db, json, mapDbError, nid, requireActor, requireUser, sha256, withTransaction, type Actor } from "./db.server";
 import { rememberEvent } from "./workflows.server";
+import { ensureDemoCvSamples, runCvScreen } from "./screen.server";
 
 const STAGES = [
   ["Applied", "APPLIED"],
@@ -55,6 +59,7 @@ async function assigned(actor: Actor, applicationId: string): Promise<boolean> {
 }
 
 export async function listMyCompanies(userId: string) {
+  await requireUser(userId);
   const sql = await db();
   return sql<{ id: string; name: string; slug: string; role: string; demo: boolean }>`
     select c.id, c.name, c.slug, m.role, c.demo
@@ -160,7 +165,7 @@ export async function getWorkspace(userId: string, slug: string) {
 
 export async function updateCompany(
   userId: string,
-  input: { slug: string; name: string; timezone: string; retentionDays: number },
+  input: { slug: string; name: string; timezone: string; retentionDays: number; embedBackground: string; embedInk: string; embedAccent: string; embedAccentInk: string },
 ) {
   assertSameSiteRequest();
   const actor = await requireActor(userId, input.slug);
@@ -171,7 +176,12 @@ export async function updateCompany(
   const sql = await db();
   await sql`
     update companies set name = ${input.name.trim()}, timezone = ${input.timezone},
-      retention_days = ${input.retentionDays}, updated_at = now()
+      retention_days = ${input.retentionDays},
+      embed_background = ${input.embedBackground.toLowerCase()},
+      embed_ink = ${input.embedInk.toLowerCase()},
+      embed_accent = ${input.embedAccent.toLowerCase()},
+      embed_accent_ink = ${input.embedAccentInk.toLowerCase()},
+      updated_at = now()
     where id = ${actor.companyId}
   `;
   await audit(actor, "company.update", "company", actor.companyId, "Company settings updated.");
@@ -185,7 +195,7 @@ export async function listMembers(userId: string, slug: string) {
   const members = await sql<{ id: string; role: string; email: string; name: string; status: string }>`
     select m.id, m.role, u.email, u.name, m.status
     from memberships m
-    join "user" u on u.id = m.user_id
+    join lateral app_user_identity(m.user_id) u on true
     where m.company_id = ${actor.companyId}
     order by u.name
   `;
@@ -356,11 +366,14 @@ export async function getJob(userId: string, slug: string, jobId: string) {
   const rows = await sql`
     select id, title, slug as job_slug, department, locations, work_arrangement, employment_type,
       description, skills, salary_min, salary_max, salary_currency, salary_visible, openings, status,
-      form_schema
+      form_schema, screen_required, screen_preferred, screen_assessment_id
     from jobs where id = ${jobId} and company_id = ${actor.companyId}
   `;
   const job = rows[0] as Record<string, unknown> | undefined;
   if (!job) throw new Error("Not found.");
+  job.screen_required = termsFromJson(job.screen_required).join(", ");
+  job.screen_preferred = termsFromJson(job.screen_preferred).join(", ");
+  job.screen_assessment_id = job.screen_assessment_id ?? "";
   if (!canSeeCompensation(actor.role)) {
     job.salary_min = null;
     job.salary_max = null;
@@ -429,6 +442,19 @@ export async function updateJob(userId: string, input: Record<string, unknown>) 
     select status from jobs where id = ${jobId} and company_id = ${actor.companyId}
   `;
   if (!current[0] || current[0].status === "ARCHIVED") throw new Error("This job can no longer be edited.");
+  let assessmentId: string | null = null;
+  if (typeof input.screenAssessmentId === "string" && input.screenAssessmentId) {
+    const published = await sql<{ id: string }>`
+      select a.id from assessments a
+      join assessment_versions v on v.assessment_id = a.id and v.company_id = a.company_id and v.status = 'PUBLISHED'
+      where a.id = ${input.screenAssessmentId} and a.company_id = ${actor.companyId}
+      limit 1
+    `;
+    if (!published[0]) throw new Error("Choose a published assessment, or leave that field blank.");
+    assessmentId = input.screenAssessmentId;
+  }
+  const requiredTerms = termsFromJson(String(input.screenRequired ?? ""));
+  const preferredTerms = termsFromJson(String(input.screenPreferred ?? ""));
   await sql`
     update jobs set
       title = ${String(input.title).trim()},
@@ -444,6 +470,9 @@ export async function updateJob(userId: string, input: Record<string, unknown>) 
       salary_visible = ${Boolean(input.salaryVisible)},
       openings = ${Number(input.openings) || 1},
       form_schema = ${json(input.formSchema ?? defaultForm())}::jsonb,
+      screen_required = case when ${input.screenRequired === undefined} then screen_required else ${json(requiredTerms)}::jsonb end,
+      screen_preferred = case when ${input.screenPreferred === undefined} then screen_preferred else ${json(preferredTerms)}::jsonb end,
+      screen_assessment_id = case when ${input.screenAssessmentId === undefined} then screen_assessment_id else ${assessmentId} end,
       updated_at = now()
     where id = ${jobId} and company_id = ${actor.companyId}
   `;
@@ -532,6 +561,11 @@ export async function archiveStage(userId: string, input: { slug: string; stageI
 
 export async function listPipeline(userId: string, slug: string, jobId: string) {
   const actor = await requireActor(userId, slug);
+  try {
+    await ensureDemoCvSamples(actor.companyId);
+  } catch {
+    // A demo sample that cannot be stored does not hide the pipeline.
+  }
   const sql = await db();
   const stages = await sql<{ id: string; name: string; category: string; position: number; archived: boolean }>`
     select id, name, category, position, archived from pipeline_stages
@@ -547,10 +581,14 @@ export async function listPipeline(userId: string, slug: string, jobId: string) 
     name: string;
     email: string;
     source: string;
+    fit: string | null;
+    screen_action: string | null;
   }>`
-    select a.id, a.version, a.lifecycle, a.current_stage_id as stage_id, c.name, c.email, a.source
+    select a.id, a.version, a.lifecycle, a.current_stage_id as stage_id, c.name, c.email, a.source,
+      cv.fit, cv.action as screen_action
     from applications a
     join candidates c on c.id = a.candidate_id and c.company_id = a.company_id
+    left join cv_screens cv on cv.application_id = a.id and cv.company_id = a.company_id
     where a.company_id = ${actor.companyId} and a.job_id = ${jobId}
     order by a.submitted_at desc
   `;
@@ -784,6 +822,11 @@ export async function getApplication(userId: string, slug: string, applicationId
   `;
   const application = rows[0];
   if (!application) throw new Error("Not found.");
+  try {
+    await ensureDemoCvSamples(actor.companyId);
+  } catch {
+    // The open application is still shown if a demo sample cannot be stored.
+  }
   const answers = await sql<{ field_id: string; value: unknown }>`
     select field_id, value from application_answers
     where application_id = ${applicationId} and company_id = ${actor.companyId}
@@ -857,6 +900,18 @@ export async function getApplication(userId: string, slug: string, applicationId
     select id, display_name, scan_state, size_bytes from file_objects
     where company_id = ${actor.companyId} and owner_id = ${applicationId}
   `;
+  const screens = await sql<{
+    fit: string;
+    action: string;
+    matched_required: unknown;
+    missing_required: unknown;
+    matched_preferred: unknown;
+    reasons: unknown;
+    assignment_id: string | null;
+  }>`
+    select fit, action, matched_required, missing_required, matched_preferred, reasons, assignment_id
+    from cv_screens where company_id = ${actor.companyId} and application_id = ${applicationId}
+  `;
   const showPay = canSeeCompensation(actor.role);
   return {
     application: limited ? { ...application, email: "", phone: null, rejection_reason: null } : application,
@@ -870,7 +925,19 @@ export async function getApplication(userId: string, slug: string, applicationId
       showPay ? offer : { ...offer, salary_minor: null, message: limited ? "" : offer.message },
     ),
     files,
+    screen: screens[0]
+      ? {
+          fit: screens[0].fit,
+          action: screens[0].action,
+          matchedRequired: stringList(screens[0].matched_required),
+          missingRequired: stringList(screens[0].missing_required),
+          matchedPreferred: stringList(screens[0].matched_preferred),
+          reasons: stringList(screens[0].reasons),
+          assignmentId: screens[0].assignment_id,
+        }
+      : null,
     canMove: actor.role !== "INTERVIEWER" && actor.role !== "ASSESSMENT_REVIEWER",
+    canAssign: roleHas(actor.role, "assessment.assign"),
     canSeePay: showPay,
   };
 }
@@ -936,6 +1003,77 @@ export async function exportCsv(userId: string, slug: string) {
   ]);
   await audit(actor, "export.csv", "company", actor.companyId, `Exported ${rows.length} applications.`);
   return { csv, rows: rows.length };
+}
+
+export async function applicationSheet(userId: string, slug: string, jobId: string) {
+  assertSameSiteRequest();
+  const actor = await requireActor(userId, slug);
+  allow(actor, "candidate.export");
+  const sql = await db();
+  const jobs = await sql<{ title: string; slug: string; form_schema: unknown; published_schema: unknown }>`
+    select j.title, j.slug, j.form_schema, r.form_schema as published_schema
+    from jobs j
+    left join job_revisions r on r.id = j.published_revision_id and r.company_id = j.company_id
+    where j.id = ${jobId} and j.company_id = ${actor.companyId}
+  `;
+  const job = jobs[0];
+  if (!job) throw new Error("Not found.");
+  const missing = await sql<{ id: string }>`
+    select a.id from applications a
+    where a.company_id = ${actor.companyId} and a.job_id = ${jobId}
+      and not exists (
+        select 1 from application_rows r where r.company_id = a.company_id and r.application_id = a.id
+      )
+  `;
+  for (const app of missing) await rowFromApplication(actor.companyId, app.id, false);
+  const stored = await sql<{
+    receipt: string;
+    submitted_at: string;
+    name: string;
+    email: string;
+    phone: string;
+    cv_name: string;
+    cv_result: string;
+    answers: unknown;
+  }>`
+    select receipt,
+      to_char(submitted_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as submitted_at,
+      name, email, phone, cv_name, cv_result, answers
+    from application_rows
+    where company_id = ${actor.companyId} and job_id = ${jobId}
+    order by submitted_at asc
+  `;
+  const schemaSource = job.published_schema ?? job.form_schema;
+  const schema = (Array.isArray(schemaSource) ? schemaSource : []) as { id?: string; label?: string }[];
+  const fields: SheetField[] = schema
+    .filter((field) => typeof field.id === "string")
+    .map((field) => ({ id: String(field.id), label: String(field.label ?? field.id) }));
+  const sheetRows: SheetRow[] = stored.map((row) => ({
+    receipt: row.receipt,
+    submittedAt: row.submitted_at,
+    name: row.name,
+    email: row.email,
+    phone: row.phone,
+    cvName: row.cv_name,
+    cvResult: row.cv_result,
+    answers: plainAnswers(row.answers),
+  }));
+  await audit(actor, "export.sheet", "job", jobId, `Downloaded ${sheetRows.length} application rows.`);
+  return { filename: `${job.slug}-applications.csv`, csv: applicationSheetCsv(fields, sheetRows), rows: sheetRows.length };
+}
+
+function plainAnswers(value: unknown): Record<string, string> {
+  if (typeof value === "string") {
+    try {
+      return plainAnswers(JSON.parse(value));
+    } catch {
+      return {};
+    }
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) out[key] = storedAnswerText(item);
+  return out;
 }
 
 function parseCsv(text: string): string[][] {
@@ -1091,10 +1229,15 @@ export async function getPublicJob(companySlug: string, jobSlug: string) {
     salary_max: number | null;
     salary_currency: string;
     status: string;
+    embed_background: string;
+    embed_ink: string;
+    embed_accent: string;
+    embed_accent_ink: string;
   }>`
     select c.name as company_name, c.timezone, r.title, j.department, j.locations, j.work_arrangement,
       j.employment_type, r.description, r.form_schema, r.salary_visible, r.salary_min, r.salary_max,
-      r.salary_currency, j.status
+      r.salary_currency, j.status,
+      c.embed_background, c.embed_ink, c.embed_accent, c.embed_accent_ink
     from jobs j
     join companies c on c.id = j.company_id
     join job_revisions r on r.id = j.published_revision_id and r.company_id = j.company_id
@@ -1117,9 +1260,135 @@ type ApplyInput = {
   phone?: string;
   answers: Record<string, string>;
   idempotencyKey: string;
+  source?: "CAREERS" | "EMBED";
   resume?: { name: string; mime: string; dataBase64: string } | null;
   sessionUserId?: string | null;
 };
+
+type ApplyResult = {
+  applicationId: string;
+  alreadyApplied: boolean;
+  receipt: string;
+  cvResult: string;
+};
+
+async function ensureApplicationRow(input: {
+  companyId: string;
+  jobId: string;
+  applicationId: string;
+  name: string;
+  email: string;
+  phone: string;
+  cvName: string;
+  cvResult: string;
+  answers: Record<string, string>;
+  source: string;
+  submittedAt: string | null;
+  confirm: boolean;
+}): Promise<ApplyResult> {
+  const sql = await db();
+  const existing = await sql<{ receipt: string; cv_result: string }>`
+    select receipt, cv_result from application_rows
+    where company_id = ${input.companyId} and application_id = ${input.applicationId}
+  `;
+  if (existing[0]) {
+    return {
+      applicationId: input.applicationId,
+      alreadyApplied: true,
+      receipt: existing[0].receipt,
+      cvResult: existing[0].cv_result,
+    };
+  }
+  const receipt = applicationReceipt(input.applicationId);
+  await sql`
+    insert into application_rows (
+      id, company_id, job_id, application_id, receipt, name, email, phone, cv_name, cv_result, answers, source, submitted_at
+    ) values (
+      ${nid()}, ${input.companyId}, ${input.jobId}, ${input.applicationId}, ${receipt},
+      ${input.name}, ${input.email}, ${input.phone}, ${input.cvName}, ${input.cvResult},
+      ${json(input.answers)}::jsonb, ${input.source},
+      ${input.submittedAt ?? new Date().toISOString()}
+    )
+    on conflict (company_id, application_id) do nothing
+  `;
+  const stored = await sql<{ receipt: string; cv_result: string }>`
+    select receipt, cv_result from application_rows
+    where company_id = ${input.companyId} and application_id = ${input.applicationId}
+  `;
+  const row = stored[0] ?? { receipt, cv_result: input.cvResult };
+  if (input.confirm && row.receipt === receipt) {
+    try {
+      await sql`
+        insert into mail_messages (id, company_id, to_email, subject, body, status, related_id)
+        values (
+          ${nid()}, ${input.companyId}, ${input.email},
+          ${"Application received " + receipt},
+          ${`Form complete. Receipt ${receipt}. The answers were added as one row on the application sheet. CV result: ${input.cvResult}. This confirmation is stored here and was not emailed.`},
+          'CAPTURED', ${input.applicationId}
+        )
+      `;
+    } catch {
+      // The row is already stored. A missed inbox copy does not undo the form.
+    }
+  }
+  return {
+    applicationId: input.applicationId,
+    alreadyApplied: false,
+    receipt: row.receipt,
+    cvResult: row.cv_result,
+  };
+}
+
+async function rowFromApplication(companyId: string, applicationId: string, confirm: boolean): Promise<ApplyResult | null> {
+  const sql = await db();
+  const apps = await sql<{
+    job_id: string;
+    name: string;
+    email: string;
+    phone: string | null;
+    source: string;
+    submitted_at: string;
+    fit: string | null;
+    action: string | null;
+    cv_name: string | null;
+  }>`
+    select a.job_id, c.name, c.email, c.phone, a.source,
+      to_char(a.submitted_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as submitted_at,
+      cv.fit, cv.action,
+      (
+        select f.display_name from file_objects f
+        where f.company_id = a.company_id and f.owner_id = a.id
+        order by f.created_at desc limit 1
+      ) as cv_name
+    from applications a
+    join candidates c on c.id = a.candidate_id and c.company_id = a.company_id
+    left join cv_screens cv on cv.application_id = a.id and cv.company_id = a.company_id
+    where a.id = ${applicationId} and a.company_id = ${companyId}
+  `;
+  const app = apps[0];
+  if (!app) return null;
+  const answers = await sql<{ field_id: string; value: unknown }>`
+    select field_id, value from application_answers
+    where company_id = ${companyId} and application_id = ${applicationId}
+  `;
+  const mapped: Record<string, string> = {};
+  for (const answer of answers) mapped[answer.field_id] = storedAnswerText(answer.value);
+  const saved = await ensureApplicationRow({
+    companyId,
+    jobId: app.job_id,
+    applicationId,
+    name: app.name,
+    email: app.email,
+    phone: app.phone ?? "",
+    cvName: app.cv_name ?? "",
+    cvResult: cvResultLabel(app.fit, app.action, Boolean(app.cv_name)),
+    answers: mapped,
+    source: app.source || "CAREERS",
+    submittedAt: app.submitted_at,
+    confirm,
+  });
+  return { ...saved, alreadyApplied: true };
+}
 
 export async function submitApplication(input: ApplyInput) {
   assertSameSiteRequest();
@@ -1170,14 +1439,20 @@ export async function submitApplication(input: ApplyInput) {
     job: job.job_id,
   }));
   const actorKey = `apply:${email}`;
-  const prior = await sql<{ payload_hash: string; result: { applicationId: string; alreadyApplied: boolean } }>`
+  const prior = await sql<{ payload_hash: string; result: ApplyResult }>`
     select payload_hash, result from idempotency_records
     where actor_key = ${actorKey} and operation = 'apply' and idem_key = ${input.idempotencyKey}
   `;
   if (prior[0]) {
     const decision = idempotencyDecision({ payloadHash: prior[0].payload_hash }, payloadHash);
     if (decision === "conflict") throw new Error("This submission key was already used with different answers.");
-    return prior[0].result;
+    const stored = prior[0].result;
+    return {
+      applicationId: stored.applicationId,
+      alreadyApplied: stored.alreadyApplied,
+      receipt: stored.receipt || applicationReceipt(stored.applicationId),
+      cvResult: stored.cvResult || "",
+    };
   }
   for (const field of job.form_schema ?? []) {
     const value = (input.answers[field.id] ?? "").trim();
@@ -1196,13 +1471,14 @@ export async function submitApplication(input: ApplyInput) {
       and c.email_normalized = ${email} and a.lifecycle = 'ACTIVE'
   `;
   if (active[0]) {
-    const result = { applicationId: active[0].id, alreadyApplied: true };
+    const result = await rowFromApplication(job.company_id, active[0].id, false)
+      ?? { applicationId: active[0].id, alreadyApplied: true, receipt: applicationReceipt(active[0].id), cvResult: "" };
     await sql`
       insert into idempotency_records (id, actor_key, operation, idem_key, payload_hash, result)
       values (${nid()}, ${actorKey}, 'apply', ${input.idempotencyKey}, ${payloadHash}, ${json(result)}::jsonb)
       on conflict (actor_key, operation, idem_key) do nothing
     `;
-    return result;
+    return { ...result, alreadyApplied: true };
   }
   const candidateId = nid();
   const applicationId = nid();
@@ -1224,7 +1500,7 @@ export async function submitApplication(input: ApplyInput) {
         id, company_id, job_id, candidate_id, job_revision_id, current_stage_id, source
       ) values (
         ${applicationId}, ${job.company_id}, ${job.job_id}, ${candidate[0]!.id}, ${job.revision_id},
-        ${job.stage_id}, 'CAREERS'
+        ${job.stage_id}, ${input.source ?? "CAREERS"}
       )
     `;
     for (const field of job.form_schema ?? []) {
@@ -1249,22 +1525,47 @@ export async function submitApplication(input: ApplyInput) {
       where a.company_id = ${job.company_id} and a.job_id = ${job.job_id}
         and c.email_normalized = ${email} and a.lifecycle = 'ACTIVE'
     `;
-    if (again[0]) return { applicationId: again[0].id, alreadyApplied: true };
+    if (again[0]) {
+      const result = await rowFromApplication(job.company_id, again[0].id, false);
+      return result ?? { applicationId: again[0].id, alreadyApplied: true, receipt: applicationReceipt(again[0].id), cvResult: "" };
+    }
     mapDbError(error);
   }
-  const result = { applicationId, alreadyApplied: false };
-  await sql`
-    insert into idempotency_records (id, actor_key, operation, idem_key, payload_hash, result)
-    values (${nid()}, ${actorKey}, 'apply', ${input.idempotencyKey}, ${payloadHash}, ${json(result)}::jsonb)
-    on conflict (actor_key, operation, idem_key) do nothing
-  `;
   await rememberEvent(job.company_id, "APPLICATION_SUBMITTED", applicationId, {
     applicationId,
     jobId: job.job_id,
-    source: "CAREERS",
+    source: input.source ?? "CAREERS",
   });
   await audit({ companyId: job.company_id, userId: input.sessionUserId ?? null }, "application.submit", "application", applicationId, "Public application stored.");
-  return result;
+  try {
+    await runCvScreen({ companyId: job.company_id, applicationId, actorUserId: input.sessionUserId ?? null });
+  } catch {
+    // The application is already stored. A failed screen does not reject the person.
+  }
+  const screened = await sql<{ fit: string | null; action: string | null }>`
+    select fit, action from cv_screens where company_id = ${job.company_id} and application_id = ${applicationId}
+  `;
+  const cvResult = cvResultLabel(screened[0]?.fit ?? null, screened[0]?.action ?? null, Boolean(input.resume?.dataBase64));
+  const result = await ensureApplicationRow({
+    companyId: job.company_id,
+    jobId: job.job_id,
+    applicationId,
+    name: input.name.trim(),
+    email: input.email.trim(),
+    phone: input.phone?.trim() ?? "",
+    cvName: input.resume?.name ?? "",
+    cvResult,
+    answers: input.answers,
+    source: input.source ?? "CAREERS",
+    submittedAt: null,
+    confirm: true,
+  });
+  await sql`
+    insert into idempotency_records (id, actor_key, operation, idem_key, payload_hash, result)
+    values (${nid()}, ${actorKey}, 'apply', ${input.idempotencyKey}, ${payloadHash}, ${json({ ...result, alreadyApplied: false })}::jsonb)
+    on conflict (actor_key, operation, idem_key) do nothing
+  `;
+  return { ...result, alreadyApplied: false };
 }
 
 async function storeResume(
@@ -1490,10 +1791,27 @@ export async function listDeletionRequests(userId: string, slug: string) {
 
 export async function integrationStatus(userId: string, slug: string) {
   const actor = await requireActor(userId, slug);
+  const sql = await db();
+  const rows = await sql<{
+    embed_background: string;
+    embed_ink: string;
+    embed_accent: string;
+    embed_accent_ink: string;
+  }>`
+    select embed_background, embed_ink, embed_accent, embed_accent_ink
+    from companies where id = ${actor.companyId}
+  `;
+  const colors = rows[0];
   return {
     companyName: actor.companyName,
     timezone: actor.timezone,
     retentionDays: actor.retentionDays,
+    embed: {
+      background: colors?.embed_background ?? "#ffffff",
+      ink: colors?.embed_ink ?? "#14221b",
+      accent: colors?.embed_accent ?? "#036145",
+      accentInk: colors?.embed_accent_ink ?? "#ffffff",
+    },
     items: [
       { name: "Email", state: "Configured", detail: "Messages are captured in this workspace. Nothing is sent to the public internet." },
       { name: "Files", state: "Configured", detail: "Uploads stay in the database, quarantined until the local demo scanner marks them clean. This is not a commercial antivirus." },

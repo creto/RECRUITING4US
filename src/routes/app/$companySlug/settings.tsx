@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { DEFAULT_EMBED_THEME, embedCssVars, embedTheme, type EmbedTheme } from "@/domain/embed-theme";
 import {
   anonymizeCandidate,
   integrationStatus,
@@ -42,23 +43,15 @@ function Settings() {
       {notice ? <p className="mb-3 text-sm">{notice}</p> : null}
       {tab === "Company" ? (
         status.loading && !status.data ? <Loading /> :
-        <form className="max-w-lg space-y-3" onSubmit={(event) => {
-          event.preventDefault();
-          const data = new FormData(event.currentTarget);
-          updateCompany({
-            data: {
-              slug: companySlug,
-              name: String(data.get("name")),
-              timezone: String(data.get("timezone")),
-              retentionDays: Number(data.get("retention")),
-            },
-          }).then(() => refreshPage()).catch((err) => setError(err.message));
-        }}>
-          <Field label="Name"><input name="name" className={inputClass} defaultValue={status.data?.companyName ?? ""} placeholder="Company name" required /></Field>
-          <Field label="Timezone"><input name="timezone" className={inputClass} defaultValue={status.data?.timezone ?? "America/New_York"} /></Field>
-          <Field label="Retention days"><input name="retention" className={inputClass} type="number" min={30} max={3650} defaultValue={status.data?.retentionDays ?? 365} /></Field>
-          <Button type="submit">Save</Button>
-        </form>
+        <CompanySettings
+          key={`${status.data?.companyName ?? ""}:${status.data?.embed.background ?? ""}:${status.data?.embed.ink ?? ""}:${status.data?.embed.accent ?? ""}:${status.data?.embed.accentInk ?? ""}`}
+          companySlug={companySlug}
+          companyName={status.data?.companyName ?? ""}
+          timezone={status.data?.timezone ?? "America/New_York"}
+          retentionDays={status.data?.retentionDays ?? 365}
+          embed={embedTheme(status.data?.embed)}
+          onError={setError}
+        />
       ) : null}
       {tab === "Members" ? (
         members.loading && !members.data ? <Loading /> :
@@ -146,3 +139,84 @@ function Settings() {
     </div>
   );
 }
+
+function CompanySettings({
+  companySlug,
+  companyName,
+  timezone,
+  retentionDays,
+  embed,
+  onError,
+}: {
+  companySlug: string;
+  companyName: string;
+  timezone: string;
+  retentionDays: number;
+  embed: EmbedTheme;
+  onError: (message: string) => void;
+}) {
+  const [colors, setColors] = useState<EmbedTheme>(embed);
+  const swatch = embedCssVars(colors);
+  function setColor(key: keyof EmbedTheme, value: string) {
+    setColors((current) => ({ ...current, [key]: value }));
+  }
+  return (
+    <form className="max-w-lg space-y-3" onSubmit={(event) => {
+      event.preventDefault();
+      const data = new FormData(event.currentTarget);
+      updateCompany({
+        data: {
+          slug: companySlug,
+          name: String(data.get("name")),
+          timezone: String(data.get("timezone")),
+          retentionDays: Number(data.get("retention")),
+          embedBackground: colors.background,
+          embedInk: colors.ink,
+          embedAccent: colors.accent,
+          embedAccentInk: colors.accentInk,
+        },
+      }).then(() => refreshPage()).catch((err) => onError(err instanceof Error ? err.message : "Could not save."));
+    }}>
+      <Field label="Name"><input name="name" className={inputClass} defaultValue={companyName} placeholder="Company name" required /></Field>
+      <Field label="Timezone"><input name="timezone" className={inputClass} defaultValue={timezone} /></Field>
+      <Field label="Retention days"><input name="retention" className={inputClass} type="number" min={30} max={3650} defaultValue={retentionDays} /></Field>
+      <fieldset className="space-y-3 rounded-md border border-line p-4">
+        <legend className="px-1 text-sm font-medium">Apply form colors</legend>
+        <p className="text-sm text-muted">The website form is white unless you change these. They apply to every job for this company.</p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <ColorField label="Background" value={colors.background} onChange={(value) => setColor("background", value)} />
+          <ColorField label="Text" value={colors.ink} onChange={(value) => setColor("ink", value)} />
+          <ColorField label="Button" value={colors.accent} onChange={(value) => setColor("accent", value)} />
+          <ColorField label="Button text" value={colors.accentInk} onChange={(value) => setColor("accentInk", value)} />
+        </div>
+        <div className="rounded-md border p-4" style={swatch}>
+          <p className="text-sm" style={{ color: "var(--color-muted)" }}>{companyName || "Company"}</p>
+          <p className="text-2xl">Apply</p>
+          <div className="mt-3 rounded-md border px-3 py-2 text-sm" style={{ borderColor: "var(--color-line)", background: "var(--color-bg)" }}>Name</div>
+          <span className="mt-3 inline-flex min-h-11 items-center rounded-md px-4 text-sm" style={{ background: colors.accent, color: colors.accentInk }}>Submit application</span>
+        </div>
+        <button type="button" className="text-sm text-accent" onClick={() => setColors(DEFAULT_EMBED_THEME)}>Use the white default</button>
+      </fieldset>
+      <Button type="submit">Save</Button>
+    </form>
+  );
+}
+
+function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="block space-y-1 text-sm">
+      <span className="font-medium">{label}</span>
+      <span className="flex items-center gap-2">
+        <input
+          aria-label={label}
+          type="color"
+          className="h-11 w-14 cursor-pointer rounded-md border border-line bg-surface p-1"
+          value={value}
+          onChange={(event) => onChange(event.target.value.toLowerCase())}
+        />
+        <span className="font-mono text-xs text-muted">{value}</span>
+      </span>
+    </label>
+  );
+}
+

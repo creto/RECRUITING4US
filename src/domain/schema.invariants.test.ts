@@ -13,6 +13,10 @@ async function fresh() {
   const rls = await readFile(new URL("../../migrations/0005_rls_runner_calendar.sql", import.meta.url), "utf8");
   const policies = await readFile(new URL("../../migrations/0006_rls_policies.sql", import.meta.url), "utf8");
   const judgements = await readFile(new URL("../../migrations/0007_code_judgements.sql", import.meta.url), "utf8");
+  const screens = await readFile(new URL("../../migrations/0008_cv_screens.sql", import.meta.url), "utf8");
+  const rows = await readFile(new URL("../../migrations/0009_application_rows.sql", import.meta.url), "utf8");
+  const identity = await readFile(new URL("../../migrations/0010_user_identity.sql", import.meta.url), "utf8");
+  const embed = await readFile(new URL("../../migrations/0011_embed_theme.sql", import.meta.url), "utf8");
   await pg.exec(auth);
   await pg.exec(base);
   await pg.exec(extra);
@@ -20,6 +24,10 @@ async function fresh() {
   await pg.exec(rls);
   await pg.exec(policies);
   await pg.exec(judgements);
+  await pg.exec(screens);
+  await pg.exec(rows);
+  await pg.exec(identity);
+  await pg.exec(embed);
   await pg.query("select set_config('app.company_id', 'co-a', false)");
   await pg.exec(`
     insert into companies (id, name, slug, created_by) values
@@ -38,12 +46,29 @@ async function fresh() {
     insert into candidates (id, company_id, name, email, email_normalized) values
       ('cand-b', 'co-b', 'Ada', 'ada@harbor.example', 'ada@harbor.example');
   `);
+  await pg.exec(`
+    insert into "user" (id, name, email, "emailVerified")
+    values ('owner-a', 'Ada Owner', 'owner-a@example.com', true)
+  `);
   await pg.exec("set role app_user");
   await pg.query("select set_config('app.company_id', 'co-a', false)");
   return pg;
 }
 
 describe("database invariants", () => {
+  it("lets the app role read one identity without the auth table", async () => {
+    const pg = await fresh();
+    const rows = await pg.query<{ id: string; email: string; email_verified: boolean }>(
+      `select id, email, email_verified from app_user_identity('owner-a')`,
+    );
+    assert.equal(rows.rows[0]?.id, "owner-a");
+    assert.equal(rows.rows[0]?.email, "owner-a@example.com");
+    assert.equal(rows.rows[0]?.email_verified, true);
+    const missing = await pg.query(`select id from app_user_identity('nobody')`);
+    assert.equal(missing.rows.length, 0);
+    await assert.rejects(() => pg.query(`select id from "user"`));
+  });
+
   it("allows one active application and rejects a second", async () => {
     const pg = await fresh();
     await pg.exec(`

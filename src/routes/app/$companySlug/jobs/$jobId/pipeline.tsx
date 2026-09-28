@@ -54,6 +54,10 @@ function Pipeline() {
                       <span>
                         <AppLink className="font-medium" href={`/app/${companySlug}/applications/${card.id}`}>{card.name}</AppLink>
                         <span className="block text-muted">{card.source}</span>
+                        {card.fit === "GOOD" && card.screen_action === "SEND" ? <span className="block text-ok">CV: send assessment</span> : null}
+                        {card.fit === "GOOD" && card.screen_action !== "SEND" ? <span className="block text-muted">CV: match, not sent</span> : null}
+                        {card.fit === "NOT_A_FIT" ? <span className="block text-muted">CV: do not send</span> : null}
+                        {card.fit === "NEEDS_A_PERSON" ? <span className="block text-muted">CV: needs a person</span> : null}
                       </span>
                     </label>
                     <label className="mt-2 block text-xs text-muted">

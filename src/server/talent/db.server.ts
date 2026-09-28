@@ -85,8 +85,8 @@ type UserRow = { id: string; email: string; name: string; email_verified: boolea
 export async function requireUser(userId: string): Promise<UserRow & { emailNormalized: string }> {
   const sql = await db();
   const rows = await sql<UserRow>`
-    select id, email, name, "emailVerified" as email_verified
-    from "user" where id = ${userId}
+    select id, email, name, email_verified
+    from app_user_identity(${userId})
   `;
   const user = rows[0];
   if (!user?.email) throw new Error("You need to sign in again.");
@@ -110,6 +110,7 @@ export function requireActor(userId: string, slug: string): Promise<Actor> {
     (actor) => {
       actorCache.set(key, { at: Date.now(), actor });
       actorPending.delete(key);
+      enterTenant({ userId: actor.userId, companyId: actor.companyId, publicSlug: "" });
       return actor;
     },
     (error: unknown) => {
@@ -123,6 +124,7 @@ export function requireActor(userId: string, slug: string): Promise<Actor> {
 
 async function loadActor(userId: string, slug: string): Promise<Actor> {
   const user = await requireUser(userId);
+  enterTenant({ userId: user.id, companyId: "", publicSlug: "" });
   const sql = await db();
   const rows = await sql<{
     membership_id: string;

@@ -257,9 +257,9 @@ export async function claimSlot(userId: string, slotId: string, applicationId: s
   const apps = await sql<{ company_id: string }>`
     select a.company_id from applications a
     join candidates c on c.id = a.candidate_id
-    join "user" u on u.id = ${userId}
+    join lateral app_user_identity(${userId}) u on true
     where a.id = ${applicationId}
-      and (c.user_id = ${userId} or (lower(c.email) = lower(u.email) and u."emailVerified" = true))
+      and (c.user_id = ${userId} or (lower(c.email) = lower(u.email) and u.email_verified = true))
   `;
   if (!apps[0]) throw new Error("Not found.");
   const claimed = await sql<{ id: string }>`
@@ -427,10 +427,10 @@ export async function getMyOffer(userId: string, offerId: string) {
     join jobs j on j.id = a.job_id
     join companies c on c.id = o.company_id
     join candidates cand on cand.id = a.candidate_id
-    join "user" u on u.id = ${userId}
+    join lateral app_user_identity(${userId}) u on true
     where o.id = ${offerId}
       and o.status in ('SENT', 'ACCEPTED', 'DECLINED', 'WITHDRAWN', 'EXPIRED')
-      and (cand.user_id = ${userId} or (lower(cand.email) = lower(u.email) and u."emailVerified" = true))
+      and (cand.user_id = ${userId} or (lower(cand.email) = lower(u.email) and u.email_verified = true))
   `;
   const offer = rows[0];
   if (!offer) throw new Error("Not found.");
@@ -457,9 +457,9 @@ export async function respondToOffer(
     from offers o
     join applications a on a.id = o.application_id
     join candidates c on c.id = a.candidate_id
-    join "user" u on u.id = ${userId}
+    join lateral app_user_identity(${userId}) u on true
     where o.id = ${input.offerId}
-      and (c.user_id = ${userId} or (lower(c.email) = lower(u.email) and u."emailVerified" = true))
+      and (c.user_id = ${userId} or (lower(c.email) = lower(u.email) and u.email_verified = true))
   `;
   const offer = offers[0];
   if (!offer) throw new Error("Not found.");

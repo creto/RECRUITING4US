@@ -352,14 +352,14 @@ async function candidateOwns(userId: string, applicationId: string) {
   const user = await requireUser(userId);
   const sql = await db();
   const rows = await sql<{ company_id: string; candidate_id: string; email_verified: boolean }>`
-    select a.company_id, a.candidate_id, u."emailVerified" as email_verified
+    select a.company_id, a.candidate_id, u.email_verified as email_verified
     from applications a
     join candidates c on c.id = a.candidate_id and c.company_id = a.company_id
-    join "user" u on u.id = ${userId}
+    join lateral app_user_identity(${userId}) u on true
     where a.id = ${applicationId}
       and (
         c.user_id = ${userId}
-        or (lower(c.email) = lower(u.email) and u."emailVerified" = true)
+        or (lower(c.email) = lower(u.email) and u.email_verified = true)
       )
   `;
   if (!rows[0]) throw new Error("Not found.");
@@ -386,9 +386,9 @@ export async function listMyApplications(userId: string) {
     join jobs j on j.id = a.job_id
     join pipeline_stages s on s.id = a.current_stage_id
     join candidates cand on cand.id = a.candidate_id
-    join "user" u on u.id = ${userId}
+    join lateral app_user_identity(${userId}) u on true
     where cand.user_id = ${userId}
-      or (lower(cand.email) = lower(u.email) and u."emailVerified" = true)
+      or (lower(cand.email) = lower(u.email) and u.email_verified = true)
     order by a.submitted_at desc
   `;
   return rows.map((row) => ({
@@ -1238,8 +1238,8 @@ export async function exportMine(userId: string) {
     join candidates c on c.id = a.candidate_id and c.company_id = a.company_id
     join jobs j on j.id = a.job_id
     join companies co on co.id = a.company_id
-    join "user" u on u.id = ${userId}
-    where c.user_id = ${userId} or (lower(c.email) = lower(u.email) and u."emailVerified" = true)
+    join lateral app_user_identity(${userId}) u on true
+    where c.user_id = ${userId} or (lower(c.email) = lower(u.email) and u.email_verified = true)
   `;
   const applications = rows.map((row) => ({
     jobTitle: row.job_title,

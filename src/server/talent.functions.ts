@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { EMBED_HEX } from "@/domain/embed-theme";
 import { authMiddleware } from "@/lib/auth/middleware";
 
 const Slug = z.string().regex(/^[a-z0-9-]{2,48}$/);
@@ -43,6 +44,10 @@ export const updateCompany = createServerFn({ method: "POST" })
     name: z.string().trim().min(2).max(80),
     timezone: z.string().min(1).max(80),
     retentionDays: z.number().int().min(30).max(3650),
+    embedBackground: z.string().regex(EMBED_HEX),
+    embedInk: z.string().regex(EMBED_HEX),
+    embedAccent: z.string().regex(EMBED_HEX),
+    embedAccentInk: z.string().regex(EMBED_HEX),
   }))
   .handler(async ({ context, data }) => {
     const userId = context.userId;
@@ -149,6 +154,9 @@ export const updateJob = createServerFn({ method: "POST" })
     salaryVisible: z.boolean(),
     openings: z.number().int().min(1).max(100),
     formSchema: z.array(z.record(z.string(), z.unknown())).max(30),
+    screenRequired: z.string().max(400).optional(),
+    screenPreferred: z.string().max(400).optional(),
+    screenAssessmentId: z.string().max(80).optional(),
   }))
   .handler(async ({ context, data }) => {
     const userId = context.userId;
@@ -268,6 +276,14 @@ export const addTag = createServerFn({ method: "POST" })
     return api.addTag(userId, data);
   });
 
+export const applicationSheet = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ slug: Slug, jobId: z.string().min(8).max(80) }))
+  .handler(async ({ context, data }) => {
+    const api = await import("./talent/workspace.server");
+    return api.applicationSheet(context.userId, data.slug, data.jobId);
+  });
+
 export const exportCsv = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ slug: Slug }))
@@ -313,6 +329,7 @@ const applySchema = z.object({
   phone: z.string().max(40).optional(),
   answers: z.record(z.string(), z.string().max(8000)),
   idempotencyKey: z.string().min(8).max(80),
+  source: z.enum(["CAREERS", "EMBED"]).optional(),
   resume: z.object({
     name: z.string().max(180),
     mime: z.string().max(80),
@@ -543,6 +560,14 @@ export const publishAssessment = createServerFn({ method: "POST" })
     const userId = context.userId;
     const api = await import("./talent/assess.server");
     return api.publishAssessment(userId, data);
+  });
+
+export const rescreenCv = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ slug: Slug, applicationId: z.string().min(8).max(80) }))
+  .handler(async ({ context, data }) => {
+    const api = await import("./talent/screen.server");
+    return api.rescreenCv(context.userId, data);
   });
 
 export const assignAssessment = createServerFn({ method: "POST" })

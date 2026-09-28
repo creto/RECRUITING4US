@@ -401,6 +401,14 @@ export async function seedDemo(userId: string) {
     [{ title: "Numerical reasoning", weight: 10000, items: numericIds }],
   );
 
+  await sql`
+    update jobs set
+      screen_required = ${json(["TypeScript", "SQL", "PostgreSQL"])}::jsonb,
+      screen_preferred = ${json(["React"])}::jsonb,
+      screen_assessment_id = ${engineering.aid}
+    where id = ${platform.jobId} and company_id = ${companyId}
+  `;
+
   const invitedApp = applicationIds[0]!;
   await sql`
     insert into assignments (

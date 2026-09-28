@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { getJob, setJobStatus, updateJob } from "@/server/talent.functions";
+import { applicationSheet, getJob, listAssessments, setJobStatus, updateJob } from "@/server/talent.functions";
 import { Alert, AppLink, Button, Field, inputClass, Loading, PageTitle, refreshPage, useAuthed } from "@/components/talent/kit";
 
 export const Route = createFileRoute("/app/$companySlug/jobs/$jobId")({ component: JobEditor });
@@ -8,6 +8,7 @@ export const Route = createFileRoute("/app/$companySlug/jobs/$jobId")({ componen
 function JobEditor() {
   const { companySlug, jobId } = Route.useParams();
   const state = useAuthed(() => getJob({ data: { slug: companySlug, jobId } }), [companySlug, jobId]);
+  const tests = useAuthed(() => listAssessments({ data: { slug: companySlug } }), [companySlug]);
   const [form, setForm] = useState<Record<string, string | boolean | number | null>>({});
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState("");
@@ -23,6 +24,9 @@ function JobEditor() {
       employmentType: String(job.employment_type ?? "FULL_TIME"),
       description: String(job.description ?? ""),
       skills: String(job.skills ?? ""),
+      screenRequired: String(job.screen_required ?? ""),
+      screenPreferred: String(job.screen_preferred ?? ""),
+      screenAssessmentId: String(job.screen_assessment_id ?? ""),
       salaryMin: job.salary_min == null ? "" : String(job.salary_min),
       salaryMax: job.salary_max == null ? "" : String(job.salary_max),
       salaryVisible: Boolean(job.salary_visible),
@@ -63,6 +67,9 @@ function JobEditor() {
             { id: "why", type: "long_text", label: "Why this role?", required: false, help: "" },
             { id: "website", type: "url", label: "Portfolio or website", required: false, help: "" },
           ],
+          screenRequired: String(form.screenRequired ?? ""),
+          screenPreferred: String(form.screenPreferred ?? ""),
+          screenAssessmentId: String(form.screenAssessmentId ?? ""),
         },
       });
       setSaved("Draft saved. Publish to update the public page.");
@@ -90,6 +97,7 @@ function JobEditor() {
           <AppLink className="inline-flex min-h-11 items-center text-sm text-accent" href={`/careers/${companySlug}/${job.job_slug}`}>View public page</AppLink>
         ) : null}
       </div>
+      <ApplyPortal companySlug={companySlug} jobId={jobId} jobSlug={String(job.job_slug ?? "")} published={job.status === "PUBLISHED"} />
       <form className="space-y-3" onSubmit={save}>
         <Field label="Title"><input className={inputClass} value={String(form.title ?? "")} onChange={(event) => set("title", event.target.value)} /></Field>
         <div className="grid gap-3 md:grid-cols-2">
@@ -120,6 +128,21 @@ function JobEditor() {
           <textarea className={`${inputClass} min-h-48 py-3`} value={String(form.description ?? "")} onChange={(event) => set("description", event.target.value)} />
         </Field>
         <Field label="Skills"><input className={inputClass} value={String(form.skills ?? "")} onChange={(event) => set("skills", event.target.value)} /></Field>
+        <Field label="Must-have skills for the CV screen">
+          <input className={inputClass} value={String(form.screenRequired ?? "")} onChange={(event) => set("screenRequired", event.target.value)} placeholder="TypeScript, SQL, PostgreSQL" />
+        </Field>
+        <p className="text-sm text-muted">Comma-separated, up to 12. Every one must appear in the CV or the assessment is not sent. Saving applies to the next screen. This is a word check, not a model score.</p>
+        <Field label="Preferred skills (recorded only)">
+          <input className={inputClass} value={String(form.screenPreferred ?? "")} onChange={(event) => set("screenPreferred", event.target.value)} placeholder="React" />
+        </Field>
+        <Field label="Assessment to send when the CV matches">
+          <select className={inputClass} value={String(form.screenAssessmentId ?? "")} onChange={(event) => set("screenAssessmentId", event.target.value)}>
+            <option value="">Do not send one automatically</option>
+            {(tests.data ?? []).filter((test: { published?: number; archived?: boolean }) => Number(test.published) > 0 && !test.archived).map((test: { id: string; name: string }) => (
+              <option key={test.id} value={test.id}>{test.name}</option>
+            ))}
+          </select>
+        </Field>
         {error ? <Alert>{error}</Alert> : null}
         {saved ? <p className="text-sm text-ok">{saved}</p> : null}
         <div className="flex flex-wrap gap-2">
@@ -131,5 +154,61 @@ function JobEditor() {
         </div>
       </form>
     </div>
+  );
+}
+
+function ApplyPortal({
+  companySlug,
+  jobId,
+  jobSlug,
+  published,
+}: {
+  companySlug: string;
+  jobId: string;
+  jobSlug: string;
+  published: boolean;
+}) {
+  const [origin, setOrigin] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => { setOrigin(window.location.origin); }, []);
+  const src = origin && jobSlug ? `${origin}/embed/${companySlug}/${jobSlug}` : "";
+  const snippet = src
+    ? `<iframe src="${src}" title="Apply" width="100%" height="900" style="border:0;max-width:40rem;background:#ffffff"></iframe>`
+    : "";
+
+  async function download() {
+    setError(null);
+    try {
+      const result = await applicationSheet({ data: { slug: companySlug, jobId } });
+      const blob = new Blob([result.csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = result.filename;
+      link.click();
+      URL.revokeObjectURL(url);
+      setNote(`${result.rows} row${result.rows === 1 ? "" : "s"} downloaded.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not download the sheet.");
+    }
+  }
+
+  return (
+    <section className="mb-6 space-y-2 rounded-md border border-line bg-surface p-4">
+      <h2 className="text-2xl">Website apply form</h2>
+      <p className="text-sm text-muted">Paste this HTML into another site. The form is white unless this company changes the colors in Settings. It checks the CV and adds the other answers as one CSV row. The applicant sees a receipt on the form. It is not emailed.</p>
+      {published ? null : <p className="text-sm">Publish the job before the frame will accept an application.</p>}
+      <textarea className={`${inputClass} min-h-24 py-2 font-mono text-xs`} readOnly value={snippet} aria-label="Embed HTML" />
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="secondary" onClick={() => { void navigator.clipboard.writeText(snippet).then(() => setCopied(true)).catch(() => setError("Could not copy. Select the HTML and copy it.")); }}>Copy HTML</Button>
+        {src ? <a className="inline-flex min-h-11 items-center text-sm text-accent" href={src}>Open the form</a> : null}
+        <Button type="button" variant="secondary" onClick={() => void download()}>Download application CSV</Button>
+      </div>
+      {copied ? <p className="text-sm text-ok">Copied.</p> : null}
+      {note ? <p className="text-sm">{note}</p> : null}
+      {error ? <Alert>{error}</Alert> : null}
+    </section>
   );
 }

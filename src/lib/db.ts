@@ -1,6 +1,21 @@
 import { pendingMigrations } from "../../scripts/migration-plan.mjs";
 import { bindQuery, currentQuery, runExclusive, type QueryFn } from "@/domain/exclusive";
-import { currentTenant } from "@/lib/tenant";
+import { getRequest } from "@tanstack/react-start/server";
+import { bindRequestTenant, currentTenant, type TenantScope } from "@/lib/tenant";
+
+const requestTenants = new WeakMap<object, TenantScope>();
+if (typeof window === "undefined") {
+  bindRequestTenant(
+    () => {
+      const request = getRequest();
+      return request ? requestTenants.get(request) : undefined;
+    },
+    (scope) => {
+      const request = getRequest();
+      if (request) requestTenants.set(request, scope);
+    },
+  );
+}
 
 /** Which database backend is active. */
 export type DbSource = "neon" | "pglite";
@@ -247,10 +262,9 @@ async function createPgliteSql(): Promise<Sql> {
   // Apply migrations/ (the single schema source) so preview matches production.
   // SQL is inlined by the bundler via import.meta.glob (no runtime fs); applied
   // files are tracked in _migrations. The glob does not descend, so the opt-in
-  // auth schema under migrations/auth/ stays out. Runs once per module instance
-  // — so an HMR reload after adding a migration file applies it live — with
-  // passes serialized on a global chain so concurrent callers never
-  // double-apply.
+  // auth schema under migrations/auth/ stays out. A reload after a new SQL file
+  // applies that file to the existing database (including the embed color columns), and
+  // passes are serialized so concurrent callers never double-apply.
   const migrate = async (): Promise<void> => {
     const migrations = import.meta.glob("/migrations/*.sql", {
       query: "?raw",

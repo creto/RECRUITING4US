@@ -33,6 +33,7 @@ import { Route as CandidateAttemptsAttemptIdRouteImport } from './routes/candida
 import { Route as CandidateOffersOfferIdRouteImport } from './routes/candidate/offers/$offerId'
 import { Route as CareersCompanySlugIndexRouteImport } from './routes/careers/$companySlug/index'
 import { Route as CareersCompanySlugJobSlugRouteImport } from './routes/careers/$companySlug/$jobSlug'
+import { Route as EmbedCompanySlugJobSlugRouteImport } from './routes/embed/$companySlug/$jobSlug'
 import { Route as AppCompanySlugApplicationsApplicationIdRouteImport } from './routes/app/$companySlug/applications/$applicationId'
 import { Route as AppCompanySlugJobsIndexRouteImport } from './routes/app/$companySlug/jobs/index'
 import { Route as AppCompanySlugJobsJobIdRouteImport } from './routes/app/$companySlug/jobs/$jobId'
@@ -165,6 +166,11 @@ const CareersCompanySlugJobSlugRoute =
     path: '/careers/$companySlug/$jobSlug',
     getParentRoute: () => rootRouteImport,
   } as any)
+const EmbedCompanySlugJobSlugRoute = EmbedCompanySlugJobSlugRouteImport.update({
+  id: '/embed/$companySlug/$jobSlug',
+  path: '/embed/$companySlug/$jobSlug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppCompanySlugApplicationsApplicationIdRoute =
   AppCompanySlugApplicationsApplicationIdRouteImport.update({
     id: '/applications/$applicationId',
@@ -211,6 +217,7 @@ export interface FileRoutesByFullPath {
   '/candidate/attempts/$attemptId': typeof CandidateAttemptsAttemptIdRoute
   '/candidate/offers/$offerId': typeof CandidateOffersOfferIdRoute
   '/careers/$companySlug/$jobSlug': typeof CareersCompanySlugJobSlugRoute
+  '/embed/$companySlug/$jobSlug': typeof EmbedCompanySlugJobSlugRoute
   '/app/$companySlug/': typeof AppCompanySlugIndexRoute
   '/careers/$companySlug/': typeof CareersCompanySlugIndexRoute
   '/app/$companySlug/applications/$applicationId': typeof AppCompanySlugApplicationsApplicationIdRoute
@@ -240,6 +247,7 @@ export interface FileRoutesByTo {
   '/candidate/attempts/$attemptId': typeof CandidateAttemptsAttemptIdRoute
   '/candidate/offers/$offerId': typeof CandidateOffersOfferIdRoute
   '/careers/$companySlug/$jobSlug': typeof CareersCompanySlugJobSlugRoute
+  '/embed/$companySlug/$jobSlug': typeof EmbedCompanySlugJobSlugRoute
   '/app/$companySlug': typeof AppCompanySlugIndexRoute
   '/careers/$companySlug': typeof CareersCompanySlugIndexRoute
   '/app/$companySlug/applications/$applicationId': typeof AppCompanySlugApplicationsApplicationIdRoute
@@ -271,6 +279,7 @@ export interface FileRoutesById {
   '/candidate/attempts/$attemptId': typeof CandidateAttemptsAttemptIdRoute
   '/candidate/offers/$offerId': typeof CandidateOffersOfferIdRoute
   '/careers/$companySlug/$jobSlug': typeof CareersCompanySlugJobSlugRoute
+  '/embed/$companySlug/$jobSlug': typeof EmbedCompanySlugJobSlugRoute
   '/app/$companySlug/': typeof AppCompanySlugIndexRoute
   '/careers/$companySlug/': typeof CareersCompanySlugIndexRoute
   '/app/$companySlug/applications/$applicationId': typeof AppCompanySlugApplicationsApplicationIdRoute
@@ -303,6 +312,7 @@ export interface FileRouteTypes {
     | '/candidate/attempts/$attemptId'
     | '/candidate/offers/$offerId'
     | '/careers/$companySlug/$jobSlug'
+    | '/embed/$companySlug/$jobSlug'
     | '/app/$companySlug/'
     | '/careers/$companySlug/'
     | '/app/$companySlug/applications/$applicationId'
@@ -332,6 +342,7 @@ export interface FileRouteTypes {
     | '/candidate/attempts/$attemptId'
     | '/candidate/offers/$offerId'
     | '/careers/$companySlug/$jobSlug'
+    | '/embed/$companySlug/$jobSlug'
     | '/app/$companySlug'
     | '/careers/$companySlug'
     | '/app/$companySlug/applications/$applicationId'
@@ -362,6 +373,7 @@ export interface FileRouteTypes {
     | '/candidate/attempts/$attemptId'
     | '/candidate/offers/$offerId'
     | '/careers/$companySlug/$jobSlug'
+    | '/embed/$companySlug/$jobSlug'
     | '/app/$companySlug/'
     | '/careers/$companySlug/'
     | '/app/$companySlug/applications/$applicationId'
@@ -385,6 +397,7 @@ export interface RootRouteChildren {
   CandidateAttemptsAttemptIdRoute: typeof CandidateAttemptsAttemptIdRoute
   CandidateOffersOfferIdRoute: typeof CandidateOffersOfferIdRoute
   CareersCompanySlugJobSlugRoute: typeof CareersCompanySlugJobSlugRoute
+  EmbedCompanySlugJobSlugRoute: typeof EmbedCompanySlugJobSlugRoute
   CareersCompanySlugIndexRoute: typeof CareersCompanySlugIndexRoute
 }
 
@@ -558,6 +571,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CareersCompanySlugJobSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/embed/$companySlug/$jobSlug': {
+      id: '/embed/$companySlug/$jobSlug'
+      path: '/embed/$companySlug/$jobSlug'
+      fullPath: '/embed/$companySlug/$jobSlug'
+      preLoaderRoute: typeof EmbedCompanySlugJobSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/app/$companySlug/applications/$applicationId': {
       id: '/app/$companySlug/applications/$applicationId'
       path: '/applications/$applicationId'
@@ -653,6 +673,7 @@ const rootRouteChildren: RootRouteChildren = {
   CandidateAttemptsAttemptIdRoute: CandidateAttemptsAttemptIdRoute,
   CandidateOffersOfferIdRoute: CandidateOffersOfferIdRoute,
   CareersCompanySlugJobSlugRoute: CareersCompanySlugJobSlugRoute,
+  EmbedCompanySlugJobSlugRoute: EmbedCompanySlugJobSlugRoute,
   CareersCompanySlugIndexRoute: CareersCompanySlugIndexRoute,
 }
 export const routeTree = rootRouteImport

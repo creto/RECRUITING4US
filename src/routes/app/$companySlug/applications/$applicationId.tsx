@@ -11,6 +11,7 @@ import {
   importExternalScore,
   listAssessments,
   mergeCandidates,
+  rescreenCv,
   scheduleInterview,
   sendOffer,
   setLifecycle,
@@ -58,6 +59,12 @@ function ApplicationPage() {
             <p>{app.email || "Email hidden for this role"}</p>
             <p className="text-muted">Source {app.source} · submitted {when(app.submitted_at)}</p>
             <p>Lifecycle: {app.lifecycle}</p>
+            <CvScreen
+              screen={state.data.screen}
+              files={state.data.files}
+              canAssign={Boolean(state.data.canAssign)}
+              onRun={() => run(() => rescreenCv({ data: { slug: companySlug, applicationId } }))}
+            />
             {state.data.canMove ? (
               <form className="space-y-2" onSubmit={(event) => { event.preventDefault(); void run(() => setLifecycle({ data: { slug: companySlug, applicationId, lifecycle: "REJECTED", expectedVersion: app.version, reason } })); }}>
                 <Field label="Decision reason">
@@ -170,6 +177,7 @@ function ApplicationPage() {
             <Field label="Time multiplier (basis points, 15000 = 1.5×)">
               <input name="multiplier" className={inputClass} defaultValue="10000" />
             </Field>
+            <p className="text-sm text-muted">Assigning here overrides a do-not-send result. It does not change the CV screen.</p>
             <Button type="submit">Assign</Button>
           </form>
         </div>
@@ -211,6 +219,56 @@ function ApplicationPage() {
           ))}
         </ul>
       ) : null}
+    </div>
+  );
+}
+
+function CvScreen({
+  screen,
+  files,
+  canAssign,
+  onRun,
+}: {
+  screen: {
+    fit: string;
+    action: string;
+    matchedRequired: string[];
+    missingRequired: string[];
+    matchedPreferred: string[];
+    reasons: string[];
+  } | null;
+  files: { id: string; display_name: string; scan_state: string }[];
+  canAssign: boolean;
+  onRun: () => void;
+}) {
+  const label = !screen
+    ? "Not screened yet."
+    : screen.fit === "GOOD" && screen.action === "SEND"
+      ? "Good fit. Assessment sent."
+      : screen.fit === "GOOD"
+        ? "Good fit. Assessment was not sent."
+        : screen.fit === "NOT_A_FIT"
+          ? "Not a fit. Assessment was not sent."
+          : "Needs a person. Assessment was not sent.";
+  return (
+    <div className="mt-3 space-y-2 border-t border-line pt-3">
+      <h2 className="text-xl">CV screen</h2>
+      <p className="text-muted">Looks for this job’s must-have words in the CV. It is not a model score, and it does not read photos, schools, or age.</p>
+      <p>{label}</p>
+      {files.length ? files.map((file) => (
+        <p key={file.id} className="text-muted">{file.display_name} · file check {file.scan_state}</p>
+      )) : <p className="text-muted">No CV uploaded.</p>}
+      {screen ? (
+        <>
+          <p>Found: {screen.matchedRequired.length ? screen.matchedRequired.join(", ") : "none"}</p>
+          <p>Missing: {screen.missingRequired.length ? screen.missingRequired.join(", ") : "none"}</p>
+          {screen.matchedPreferred.length ? <p>Preferred found: {screen.matchedPreferred.join(", ")}</p> : null}
+          <ul className="list-disc pl-4">
+            {screen.reasons.map((reason) => <li key={reason}>{reason}</li>)}
+          </ul>
+        </>
+      ) : null}
+      {canAssign ? <Button type="button" variant="secondary" onClick={onRun}>Screen the CV</Button> : null}
     </div>
   );
 }
