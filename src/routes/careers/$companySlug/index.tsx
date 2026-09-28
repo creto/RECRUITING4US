@@ -1,0 +1,66 @@
+import { useEffect, useState } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { listPublicJobs } from "@/server/talent.functions";
+import { Empty, AppLink, inputClass, Loading, Wordmark } from "@/components/talent/kit";
+
+export const Route = createFileRoute("/careers/$companySlug/")({ component: Careers });
+
+function Careers() {
+  const { companySlug } = Route.useParams();
+  const [q, setQ] = useState("");
+  const [work, setWork] = useState("");
+  const [data, setData] = useState<Awaited<ReturnType<typeof listPublicJobs>> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let live = true;
+    setLoading(true);
+    listPublicJobs({ data: { companySlug, q, workArrangement: work } })
+      .then((value) => {
+        if (!live) return;
+        setData(value);
+        setError(null);
+      })
+      .catch((err: unknown) => {
+        if (live) setError(err instanceof Error ? err.message : "Could not load jobs.");
+      })
+      .finally(() => {
+        if (live) setLoading(false);
+      });
+    return () => {
+      live = false;
+    };
+  }, [companySlug, q, work]);
+
+  return (
+    <main className="mx-auto max-w-3xl px-4 py-8">
+      <Link to="/"><Wordmark /></Link>
+      <h1 className="mt-3 text-4xl">{data?.company?.name ?? "Careers"}</h1>
+      <p className="mt-2 text-sm text-muted">Published jobs only. Drafts, paused roles, and closed roles are hidden.</p>
+      <form className="mt-6 flex flex-col gap-2 sm:flex-row" onSubmit={(event) => event.preventDefault()}>
+        <input className={inputClass} value={q} onChange={(event) => setQ(event.target.value)} aria-label="Search jobs" placeholder="Search" />
+        <select className={inputClass} value={work} aria-label="Work arrangement" onChange={(event) => setWork(event.target.value)}>
+          <option value="">Any arrangement</option>
+          <option value="REMOTE">Remote</option>
+          <option value="HYBRID">Hybrid</option>
+          <option value="ONSITE">Onsite</option>
+        </select>
+      </form>
+      {loading ? <Loading /> : null}
+      {error ? <p className="text-sm text-danger">{error}</p> : null}
+      {!loading && data && !data.company ? <Empty title="Unknown employer" body="Check the careers link and try again." /> : null}
+      {!loading && (data?.jobs.length ?? 0) === 0 && data?.company ? <Empty title="No open roles" body="Check back when this employer publishes a job." /> : null}
+      <ul className="mt-4 space-y-3">
+        {(data?.jobs ?? []).map((job) => (
+          <li key={job.id}>
+            <AppLink className="block rounded-md border border-line bg-surface p-4" href={`/careers/${companySlug}/${job.slug}`}>
+              <span className="text-xl">{job.title}</span>
+              <span className="mt-1 block text-sm text-muted">{job.department} · {job.locations || job.work_arrangement}</span>
+            </AppLink>
+          </li>
+        ))}
+      </ul>
+    </main>
+  );
+}
