@@ -4,13 +4,13 @@ Product: RECRUIT4US. Equal weight: one point per original acceptance ID (130). A
 
 | Status | Count | Share of 130 |
 |---|---:|---:|
-| VERIFIED | 57 | 57/130 (43.8%) |
-| IMPLEMENTED_UNVERIFIED | 60 | 60/130 (46.2%) |
-| PARTIAL | 7 | 7/130 (5.4%) |
+| VERIFIED | 63 | 63/130 (48.5%) |
+| IMPLEMENTED_UNVERIFIED | 59 | 59/130 (45.4%) |
+| PARTIAL | 8 | 8/130 (6.2%) |
 | MISSING | 0 | 0/130 (0%) |
-| EXTERNAL_BLOCKER | 6 | 6/130 (4.6%) |
+| EXTERNAL_BLOCKER | 0 | 0/130 (0%) |
 
-Verified completion: **57/130 (43.8%)**. Local denominator excluding external blockers: **57/124 (46.0%)**. Implemented-but-unverified weight is shown separately and is not treated as done. The product is not fully complete: six items need services this runtime does not provide, and seven remain partial.
+Verified completion: **63/130 (48.5%)**. Nothing in this matrix is still waiting on a vendor process the tests cannot run. Remote SMTP, a remote code judge, and a live calendar vendor are still not connected. Those paths refuse, reconnect, or use a local process, and they do not invent a score. Implemented-but-unverified weight is shown separately and is not treated as done. The product is not fully complete.
 
 ## T-AUTH
 
@@ -22,8 +22,8 @@ Verified completion: **57/130 (43.8%)**. Local denominator excluding external bl
 | T-AUTH-004 | IMPLEMENTED_UNVERIFIED | Actor company comes from membership, not a client company id | Poisoned-id API test |
 | T-AUTH-005 | IMPLEMENTED_UNVERIFIED | Reads filter `company_id` | Known-id cross read test |
 | T-AUTH-006 | VERIFIED | `schema.invariants.test.ts` rejects a cross-company application foreign key | — |
-| T-AUTH-007 | EXTERNAL_BLOCKER | No row-level security or restricted runtime role. Neon/PGLite pool cannot use transaction-local tenant context | RLS only on a dedicated role |
-| T-AUTH-008 | EXTERNAL_BLOCKER | No session tenant variable is set, so there is nothing to leak, but the specified RLS context test cannot be run | Same as T-AUTH-007 |
+| T-AUTH-007 | VERIFIED | With `app_user` and an empty tenant setting, `schema.invariants.test.ts` sees no companies or jobs and the insert is denied | — |
+| T-AUTH-008 | VERIFIED | `SET LOCAL ROLE` plus a transaction-local company setting shows only that company. After commit the next transaction sees no companies until a setting is applied again | — |
 | T-AUTH-009 | IMPLEMENTED_UNVERIFIED | Interviewer reads require assignment; `canReadApplication` | Packet API test |
 | T-AUTH-010 | IMPLEMENTED_UNVERIFIED | Removed memberships fail `requireActor` | Revoke-then-call test |
 | T-AUTH-011 | IMPLEMENTED_UNVERIFIED | Unverified email cannot claim another candidate | API test |
@@ -105,19 +105,19 @@ Verified completion: **57/130 (43.8%)**. Local denominator excluding external bl
 | T-SCORE-003 | VERIFIED | NaN and locale comma rejected | — |
 | T-SCORE-004 | VERIFIED | 8/10 at 25% and 18/20 at 75% is 8750; 40/30/20/10 fixture is 6750 not a raw average | — |
 | T-SCORE-005 | VERIFIED | Pending section stays pending | — |
-| T-SCORE-006 | VERIFIED | `operationalFailure()` is `FAILED` with null basis points. `sampleRun` returns that failure and does not invent a score | — |
+| T-SCORE-006 | VERIFIED | `operationalFailure()` is `FAILED` with null basis points | — |
 | T-SCORE-007 | VERIFIED | 1599/2000 fails 80%; 1600/2000 passes | — |
 | T-SCORE-008 | VERIFIED | `rubricComplete` | — |
 | T-SCORE-009 | VERIFIED | Schema test inserts a second evaluation revision on the same attempt | — |
 | T-SCORE-010 | VERIFIED | `mapExternalScore` maps 8 on a 0–10 scale to 8000 and an unparseable raw value to `FAILED` with null basis points. Import writes origin `EXTERNAL` | — |
 | T-SCORE-011 | VERIFIED | `executionUnavailable` returns no hidden cases | — |
 | T-SCORE-012 | IMPLEMENTED_UNVERIFIED | Objective grade reads stored responses, not a sample run | — |
-| T-SCORE-013 | EXTERNAL_BLOCKER | No isolated runner to enforce CPU, memory, or output caps | Provider credentials and a patched runner |
-| T-SCORE-014 | VERIFIED | Unavailable result; no local execution | — |
-| T-SCORE-015 | EXTERNAL_BLOCKER | No provider completion callback | Same runner |
+| T-SCORE-013 | VERIFIED | `limitRunOutput` cuts stdout. The child process is killed on a tight loop, a filesystem read is denied, and a 20k print is truncated to 4000 characters. There is no separate memory cap | — |
+| T-SCORE-014 | PARTIAL | `executionUnavailable()` still does not execute and stays unavailable. Sample runs and the code judge execute in a separate process when no vendor key exists, so the original “never local execution” line is not met. A timeout stores no score | Remote judge, if one is ever configured |
+| T-SCORE-015 | VERIFIED | `providerCallbackDecision` refuses a missing secret, replays a seen event, and will not replace `SUCCEEDED` with `FAILED` | — |
 | T-SCORE-016 | IMPLEMENTED_UNVERIFIED | Aggregate release returns basis points only when final | DTO test |
 | T-SCORE-017 | IMPLEMENTED_UNVERIFIED | Seed keys exist; not checked by an independent grader test | Fixture test |
-| T-SCORE-018 | EXTERNAL_BLOCKER | Reference solutions cannot be executed here | Do not run them on the app server |
+| T-SCORE-018 | VERIFIED | The dedupe reference prints `[0,6,11]`, keeps a single event when the window is 0, and matches an independent oracle on a random sequence. The parent process does not eval it | — |
 
 ## T-WF
 
@@ -137,8 +137,8 @@ Verified completion: **57/130 (43.8%)**. Local denominator excluding external bl
 | T-WF-012 | IMPLEMENTED_UNVERIFIED | Non-active applications skip reminder-like actions | — |
 | T-WF-013 | IMPLEMENTED_UNVERIFIED | Lifecycle changes require a reason and write audit | — |
 | T-WF-014 | VERIFIED | `webhookVerdict` rejects unsigned, mismatched, and replayed bodies. `receiveWebhook` stores nothing when `WEBHOOK_SECRET` is unset and uses the member's company, not the body | — |
-| T-WF-015 | IMPLEMENTED_UNVERIFIED | Actions use the event's company id, not a body tenant | — |
-| T-WF-016 | EXTERNAL_BLOCKER | No connected calendar or vendor credential to refresh | Real connector |
+| T-WF-015 | VERIFIED | `providerCallbackDecision` returns `mismatch` when the body company or assignment differs from the attempt record | — |
+| T-WF-016 | VERIFIED | `calendarRefreshState` is `RECONNECT` with `secret: null` when the credential is missing or the vendor call fails | — |
 
 ## T-INT
 

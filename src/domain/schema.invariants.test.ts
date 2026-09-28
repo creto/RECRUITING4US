@@ -6,24 +6,40 @@ import { PGlite } from "@electric-sql/pglite";
 async function fresh() {
   const pg = new PGlite();
   await pg.waitReady;
+  const auth = await readFile(new URL("../../migrations/0001_auth.sql", import.meta.url), "utf8");
   const base = await readFile(new URL("../../migrations/0002_talentflow.sql", import.meta.url), "utf8");
   const extra = await readFile(new URL("../../migrations/0003_outbox_and_question_types.sql", import.meta.url), "utf8");
   const more = await readFile(new URL("../../migrations/0004_completion.sql", import.meta.url), "utf8");
+  const rls = await readFile(new URL("../../migrations/0005_rls_runner_calendar.sql", import.meta.url), "utf8");
+  const policies = await readFile(new URL("../../migrations/0006_rls_policies.sql", import.meta.url), "utf8");
+  const judgements = await readFile(new URL("../../migrations/0007_code_judgements.sql", import.meta.url), "utf8");
+  await pg.exec(auth);
   await pg.exec(base);
   await pg.exec(extra);
   await pg.exec(more);
+  await pg.exec(rls);
+  await pg.exec(policies);
+  await pg.exec(judgements);
+  await pg.query("select set_config('app.company_id', 'co-a', false)");
   await pg.exec(`
     insert into companies (id, name, slug, created_by) values
-      ('co-a', 'Northstar', 'northstar', 'owner-a'),
-      ('co-b', 'Harbor', 'harbor', 'owner-b');
+      ('co-a', 'Northstar', 'northstar', 'owner-a');
     insert into jobs (id, company_id, title, slug, work_arrangement, employment_type, status)
       values ('job-a', 'co-a', 'Platform', 'platform', 'REMOTE', 'FULL_TIME', 'PUBLISHED');
     insert into pipeline_stages (id, company_id, job_id, name, category, position)
       values ('stage-a', 'co-a', 'job-a', 'Applied', 'APPLIED', 0);
     insert into candidates (id, company_id, name, email, email_normalized) values
-      ('cand-a', 'co-a', 'Ada', 'ada@northstar.example', 'ada@northstar.example'),
+      ('cand-a', 'co-a', 'Ada', 'ada@northstar.example', 'ada@northstar.example');
+  `);
+  await pg.query("select set_config('app.company_id', 'co-b', false)");
+  await pg.exec(`
+    insert into companies (id, name, slug, created_by) values
+      ('co-b', 'Harbor', 'harbor', 'owner-b');
+    insert into candidates (id, company_id, name, email, email_normalized) values
       ('cand-b', 'co-b', 'Ada', 'ada@harbor.example', 'ada@harbor.example');
   `);
+  await pg.exec("set role app_user");
+  await pg.query("select set_config('app.company_id', 'co-a', false)");
   return pg;
 }
 
@@ -140,16 +156,25 @@ describe("database invariants", () => {
         ('ev-1', 'co-a', 'app-1', 'stage-a', 'one'),
         ('ev-2', 'co-a', 'app-1', 'stage-a', 'two');
       insert into file_objects (id, company_id, owner_scope, owner_id, display_name, mime, size_bytes, content, scan_state) values
-        ('file-a', 'co-a', 'application', 'app-1', 'a.txt', 'text/plain', 1, 'aa', 'CLEAN'),
+        ('file-a', 'co-a', 'application', 'app-1', 'a.txt', 'text/plain', 1, 'aa', 'CLEAN');
+    `);
+    await pg.query("select set_config('app.company_id', 'co-b', false)");
+    await pg.exec(`
+      insert into file_objects (id, company_id, owner_scope, owner_id, display_name, mime, size_bytes, content, scan_state) values
         ('file-b', 'co-b', 'application', 'app-1', 'b.txt', 'text/plain', 1, 'bb', 'CLEAN');
     `);
+    await pg.query("select set_config('app.company_id', 'co-a', false)");
     const cohort = await pg.query<{ n: number | string }>(`
       select count(distinct application_id) as n from stage_events where company_id = 'co-a'
     `);
     assert.equal(Number(cohort.rows[0].n), 1);
     await pg.query(`delete from file_objects where company_id = 'co-a'`);
+    const hidden = await pg.query<{ id: string }>(`select id from file_objects`);
+    assert.deepEqual(hidden.rows, []);
+    await pg.query("select set_config('app.company_id', 'co-b', false)");
     const left = await pg.query<{ id: string }>(`select id from file_objects`);
     assert.deepEqual(left.rows.map((row) => row.id), ["file-b"]);
+    await pg.query("select set_config('app.company_id', 'co-a', false)");
     await pg.exec(`
       insert into questions (id, company_id, logical_key, type) values ('q1', 'co-a', 'q1', 'text');
       insert into question_versions (id, company_id, question_id, version_number, prompt, payload, points)
@@ -174,5 +199,69 @@ describe("database invariants", () => {
       returning id
     `);
     assert.equal(extended.rows.length, 0);
+  });
+
+  it("hides every employer row when the tenant setting is missing", async () => {
+    const pg = await fresh();
+    await pg.query(`
+      select set_config('app.company_id', '', false),
+             set_config('app.user_id', '', false),
+             set_config('app.public_slug', '', false)
+    `);
+    const companies = await pg.query("select id from companies");
+    const jobs = await pg.query("select id from jobs");
+    assert.equal(companies.rows.length, 0);
+    assert.equal(jobs.rows.length, 0);
+    await assert.rejects(() => pg.exec(`
+      insert into jobs (id, company_id, title, slug, work_arrangement, employment_type, status)
+      values ('job-x', 'co-a', 'Leak', 'leak', 'REMOTE', 'FULL_TIME', 'DRAFT')
+    `));
+    await pg.query("select set_config('app.company_id', 'co-b', false)");
+    const foreign = await pg.query("select id from jobs");
+    assert.equal(foreign.rows.length, 0);
+    await pg.query("select set_config('app.company_id', 'co-a', false)");
+    const own = await pg.query<{ id: string }>("select id from jobs");
+    assert.deepEqual(own.rows.map((row) => row.id), ["job-a"]);
+    await pg.exec(`
+      insert into calendar_connections (id, company_id, provider, status, secret_ref, last_error)
+      values ('cal-a', 'co-a', 'external', 'RECONNECT', 'env:CALENDAR_REFRESH_TOKEN', 'No calendar credential is configured.')
+    `);
+    await pg.query("select set_config('app.company_id', 'co-b', false)");
+    const otherCalendar = await pg.query("select id from calendar_connections");
+    assert.equal(otherCalendar.rows.length, 0);
+  });
+
+  it("drops a transaction-local tenant when the connection is reused", async () => {
+    const pg = await fresh();
+    await pg.query(`
+      select set_config('app.company_id', '', false),
+             set_config('app.user_id', '', false),
+             set_config('app.public_slug', '', false)
+    `);
+    await pg.exec("reset role");
+    await pg.exec("begin");
+    await pg.exec("set local role app_user");
+    await pg.query("select set_config('app.company_id', 'co-a', true)");
+    const scoped = await pg.query<{ id: string }>("select id from companies order by id");
+    assert.deepEqual(scoped.rows.map((row) => row.id), ["co-a"]);
+    await pg.exec("commit");
+    await pg.exec("begin");
+    await pg.exec("set local role app_user");
+    const leaked = await pg.query("select id from companies");
+    const setting = await pg.query<{ company: string | null; current_user: string }>(
+      "select current_setting('app.company_id', true) as company, current_user",
+    );
+    assert.equal(leaked.rows.length, 0);
+    assert.equal(setting.rows[0]?.company ?? "", "");
+    assert.equal(setting.rows[0]?.current_user, "app_user");
+    await pg.query("select set_config('app.public_slug', 'northstar', true)");
+    const published = await pg.query<{ id: string }>("select id from jobs");
+    assert.deepEqual(published.rows.map((row) => row.id), ["job-a"]);
+    await pg.query("select set_config('app.public_slug', 'harbor', true)");
+    const foreignJobs = await pg.query("select id from jobs");
+    assert.equal(foreignJobs.rows.length, 0);
+    await pg.exec("commit");
+    const restored = await pg.query<{ u: string }>("select current_user as u");
+    assert.equal(restored.rows[0]?.u, "postgres");
   });
 });

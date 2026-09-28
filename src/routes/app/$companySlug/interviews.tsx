@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { cancelInterview, createSlot, feedbackFor, interviewIcs, listInterviews, listSlots, submitFeedback } from "@/server/talent.functions";
+import { cancelInterview, createSlot, feedbackFor, interviewIcs, listInterviews, listSlots, refreshCalendar, submitFeedback } from "@/server/talent.functions";
 import { Alert, Button, Empty, Field, inputClass, Loading, PageTitle, refreshPage, useAuthed, when } from "@/components/talent/kit";
 
 export const Route = createFileRoute("/app/$companySlug/interviews")({ component: Interviews });
@@ -10,11 +10,35 @@ function Interviews() {
   const state = useAuthed(() => listInterviews({ data: { slug: companySlug } }), [companySlug]);
   const slots = useAuthed(() => listSlots({ data: { slug: companySlug } }), [companySlug]);
   const [error, setError] = useState<string | null>(null);
+  const [calendar, setCalendar] = useState<{ status: string; error: string } | null>(null);
+  useEffect(() => {
+    let stopped = false;
+    const pull = () => {
+      refreshCalendar({ data: { slug: companySlug } })
+        .then((result) => {
+          if (!stopped) setCalendar({ status: result.status, error: result.error });
+        })
+        .catch(() => {
+          if (!stopped) setCalendar({ status: "RECONNECT", error: "Calendar refresh did not complete." });
+        });
+    };
+    pull();
+    const timer = window.setInterval(pull, 20000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [companySlug]);
   if (state.loading || state.isPending) return <Loading />;
   if (state.error) return <Alert>{state.error}</Alert>;
   return (
     <div>
-      <PageTitle title="Interviews" lede="Times are stored in UTC and shown in the interview timezone. External calendar availability is unknown." />
+      <PageTitle title="Interviews" lede="Times are stored in UTC and shown in the interview timezone. Calendar refresh runs here. Without a vendor credential the state stays reconnect, and no token is stored." />
+      <p className="mb-4 text-sm text-muted">
+        {calendar
+          ? `External calendar: ${calendar.status}.${calendar.error ? ` ${calendar.error}` : ""}`
+          : "Checking the calendar connection."}
+      </p>
       {(state.data ?? []).length === 0 ? <Empty title="No interviews" body="Schedule one from an application." /> : null}
       <ul className="space-y-3">
         {(state.data ?? []).map((item: any) => (

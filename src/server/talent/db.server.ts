@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { getSql, withTransaction, type Sql } from "@/lib/db";
+import { enterTenant } from "@/lib/tenant";
 import {
   isRole,
   normalizeEmail,
@@ -89,6 +90,7 @@ export async function requireUser(userId: string): Promise<UserRow & { emailNorm
   `;
   const user = rows[0];
   if (!user?.email) throw new Error("You need to sign in again.");
+  enterTenant({ userId: user.id });
   return { ...user, emailNormalized: normalizeEmail(user.email) };
 }
 
@@ -98,7 +100,10 @@ const actorPending = new Map<string, Promise<Actor>>();
 export function requireActor(userId: string, slug: string): Promise<Actor> {
   const key = `${userId}\n${slug}`;
   const hit = actorCache.get(key);
-  if (hit && Date.now() - hit.at < 2000) return Promise.resolve(hit.actor);
+  if (hit && Date.now() - hit.at < 2000) {
+    enterTenant({ userId: hit.actor.userId, companyId: hit.actor.companyId, publicSlug: "" });
+    return Promise.resolve(hit.actor);
+  }
   const pending = actorPending.get(key);
   if (pending) return pending;
   const promise = loadActor(userId, slug).then(
@@ -137,6 +142,7 @@ async function loadActor(userId: string, slug: string): Promise<Actor> {
   `;
   const row = rows[0];
   if (!row || !isRole(row.role)) throw new Error("You do not have access to this company.");
+  enterTenant({ userId: user.id, companyId: row.company_id, publicSlug: "" });
   return {
     userId: user.id,
     email: user.email,

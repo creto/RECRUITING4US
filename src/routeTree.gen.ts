@@ -18,6 +18,7 @@ import { Route as InviteTokenRouteImport } from './routes/invite/$token'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiHealthLiveRouteImport } from './routes/api/health/live'
 import { Route as ApiHealthReadyRouteImport } from './routes/api/health/ready'
+import { Route as ApiProviderCallbackRouteImport } from './routes/api/provider/callback'
 import { Route as AppCompanySlugIndexRouteImport } from './routes/app/$companySlug/index'
 import { Route as AppCompanySlugAssessmentsRouteImport } from './routes/app/$companySlug/assessments'
 import { Route as AppCompanySlugAutomationsRouteImport } from './routes/app/$companySlug/automations'
@@ -80,6 +81,11 @@ const ApiHealthLiveRoute = ApiHealthLiveRouteImport.update({
 const ApiHealthReadyRoute = ApiHealthReadyRouteImport.update({
   id: '/api/health/ready',
   path: '/api/health/ready',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiProviderCallbackRoute = ApiProviderCallbackRouteImport.update({
+  id: '/api/provider/callback',
+  path: '/api/provider/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppCompanySlugIndexRoute = AppCompanySlugIndexRouteImport.update({
@@ -192,6 +198,7 @@ export interface FileRoutesByFullPath {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/health/live': typeof ApiHealthLiveRoute
   '/api/health/ready': typeof ApiHealthReadyRoute
+  '/api/provider/callback': typeof ApiProviderCallbackRoute
   '/app/$companySlug/assessments': typeof AppCompanySlugAssessmentsRoute
   '/app/$companySlug/automations': typeof AppCompanySlugAutomationsRoute
   '/app/$companySlug/candidates': typeof AppCompanySlugCandidatesRoute
@@ -220,6 +227,7 @@ export interface FileRoutesByTo {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/health/live': typeof ApiHealthLiveRoute
   '/api/health/ready': typeof ApiHealthReadyRoute
+  '/api/provider/callback': typeof ApiProviderCallbackRoute
   '/app/$companySlug/assessments': typeof AppCompanySlugAssessmentsRoute
   '/app/$companySlug/automations': typeof AppCompanySlugAutomationsRoute
   '/app/$companySlug/candidates': typeof AppCompanySlugCandidatesRoute
@@ -250,6 +258,7 @@ export interface FileRoutesById {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/health/live': typeof ApiHealthLiveRoute
   '/api/health/ready': typeof ApiHealthReadyRoute
+  '/api/provider/callback': typeof ApiProviderCallbackRoute
   '/app/$companySlug/assessments': typeof AppCompanySlugAssessmentsRoute
   '/app/$companySlug/automations': typeof AppCompanySlugAutomationsRoute
   '/app/$companySlug/candidates': typeof AppCompanySlugCandidatesRoute
@@ -281,6 +290,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/health/live'
     | '/api/health/ready'
+    | '/api/provider/callback'
     | '/app/$companySlug/assessments'
     | '/app/$companySlug/automations'
     | '/app/$companySlug/candidates'
@@ -309,6 +319,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/health/live'
     | '/api/health/ready'
+    | '/api/provider/callback'
     | '/app/$companySlug/assessments'
     | '/app/$companySlug/automations'
     | '/app/$companySlug/candidates'
@@ -338,6 +349,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/health/live'
     | '/api/health/ready'
+    | '/api/provider/callback'
     | '/app/$companySlug/assessments'
     | '/app/$companySlug/automations'
     | '/app/$companySlug/candidates'
@@ -368,6 +380,7 @@ export interface RootRouteChildren {
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiHealthLiveRoute: typeof ApiHealthLiveRoute
   ApiHealthReadyRoute: typeof ApiHealthReadyRoute
+  ApiProviderCallbackRoute: typeof ApiProviderCallbackRoute
   CandidateApplicationsApplicationIdRoute: typeof CandidateApplicationsApplicationIdRoute
   CandidateAttemptsAttemptIdRoute: typeof CandidateAttemptsAttemptIdRoute
   CandidateOffersOfferIdRoute: typeof CandidateOffersOfferIdRoute
@@ -438,6 +451,13 @@ declare module '@tanstack/react-router' {
       path: '/api/health/ready'
       fullPath: '/api/health/ready'
       preLoaderRoute: typeof ApiHealthReadyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/provider/callback': {
+      id: '/api/provider/callback'
+      path: '/api/provider/callback'
+      fullPath: '/api/provider/callback'
+      preLoaderRoute: typeof ApiProviderCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/app/$companySlug/': {
@@ -627,6 +647,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiHealthLiveRoute: ApiHealthLiveRoute,
   ApiHealthReadyRoute: ApiHealthReadyRoute,
+  ApiProviderCallbackRoute: ApiProviderCallbackRoute,
   CandidateApplicationsApplicationIdRoute:
     CandidateApplicationsApplicationIdRoute,
   CandidateAttemptsAttemptIdRoute: CandidateAttemptsAttemptIdRoute,

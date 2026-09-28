@@ -13,10 +13,10 @@ The 48,000-line planning baseline is not a target. This repository is a TanStack
 
 ## Still open
 
-1. Sixty implemented behaviors have no automated assertion yet (auth calls, invite reuse, attempt save races, offer send).
-2. Seven partial items: no shared cache, no separate worker tenant, concurrent save/submit not proven on two connections, outbox crash recovery not restarted as a second process, and guest entry stays available because preview has no identity provider.
-3. External blockers stay blocked until credentials and a shared Postgres exist: row-level security, isolated code execution, provider callbacks, calendar credential refresh. Do not invent a passing score.
+1. Fifty-nine implemented behaviors have no automated assertion yet (auth calls, invite reuse, attempt save races, offer send).
+2. Eight partial items: no shared cache, no separate worker tenant, concurrent save/submit not proven on two connections, outbox crash recovery not restarted as a second process, guest entry stays available because preview has no identity provider, and sample runs execute locally because no remote judge key exists.
+3. Webhooks and provider callbacks stay refused, and store nothing, until their secrets are set. Mail stays captured. Do not invent a passing score.
 
 ## Weight
 
-Verified 57/130 (43.8%). Excluding six external blockers, 57/124 (46.0%). The product is not complete.
+Verified 63/130 (48.5%). The product is not complete.

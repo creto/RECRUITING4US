@@ -6,11 +6,11 @@ This workspace is a TanStack Start app with Better Auth and a SQL migration runn
 
 Consequences:
 
-- Tenant isolation is application membership checks plus composite foreign keys. There is no `SET LOCAL` tenant variable and no restricted `BYPASSRLS` role. A pooled Neon connection must not keep session state.
+- Employer tables force row-level security. Preview sets `app_user` for the transaction only, because the embedded database's owner bypasses policies. Tenant settings are transaction-local and do not remain on the connection used for sign-in.
 - Durable events live in `outbox_events`. They are drained in the web process when a workspace loads and after domain writes. There is no Redis queue and no separate worker.
 - Mail is inserted into `mail_messages` with status `CAPTURED`. Nothing is sent to the public internet.
 - Files are stored in `file_objects` and scanned by a local demo policy, not a commercial antivirus and not MinIO.
-- Code execution returns an explicit unavailable result. Submissions are never run with `eval`, `vm`, or a shell.
+- A sample program runs in a separate process with filesystem permission denied, a short timeout, and truncated output. The application process does not eval it. There is no remote runner key, and the output is not a score.
 - Answer keys stay in `question_versions.key_payload` and are read only on the server during grading.
 
 The product name is RECRUIT4US. The original specification used TalentFlow; the name change was requested and kept.

@@ -24,7 +24,7 @@ type AttemptView = {
   serverNow: string;
   assessmentName: string;
   instructions: string;
-  runner: { available: false; reason: string };
+  runner: { available: boolean; reason: string; mode?: string };
   attempt: { id: string; status: string; deadline: string; startedAt: string; reason: string | null };
   items: Item[];
   receipt: { id: string; submittedAt: string; reason: string; answered: number; score: number | null } | null;
@@ -285,13 +285,17 @@ function Taker({ view }: { view: AttemptView }) {
               variant="secondary"
               onClick={() => {
                 requestSampleRun({ data: { attemptId: view.attempt.id } })
-                  .then((result) => setRunnerNote(result.reason))
+                  .then((result) => setRunnerNote(
+                    result.outputExcerpt
+                      ? `${result.reason}\n${result.outputExcerpt}`
+                      : result.reason,
+                  ))
                   .catch((err) => setRunnerNote(err.message));
               }}
             >
               Request a sample run
             </Button>
-            <p className="text-sm text-muted">{runnerNote ?? view.runner.reason}</p>
+            <p className="whitespace-pre-wrap text-sm text-muted">{runnerNote ?? view.runner.reason}</p>
           </div>
         ) : null}
       </article>

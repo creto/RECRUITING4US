@@ -4,11 +4,14 @@ Environment: Node 22, TanStack Start, embedded PGLite (no `DATABASE_URL`). 2026-
 
 ## Passed
 
-- `node --experimental-strip-types --test src/domain/rules.test.ts src/domain/schema.invariants.test.ts src/domain/completion.test.ts` — 33 passed, 0 failed.
+- `node --experimental-strip-types --test src/domain/rules.test.ts src/domain/schema.invariants.test.ts src/domain/completion.test.ts src/domain/edge.test.ts src/server/talent/runner.test.ts` — domain, schema, completion, callback, and runner tests passed on this pass.
   - Deadlines, exclusive boundary, exact choice, numeric tolerance, weighted scores (8750 and the 40/30/20/10 case at 6750), threshold 1599/1600, publish rules including a missing rubric and an oversized pool, CSV escaping, saved filters, tri-state workflow, DST, ICS uid and sequence, idempotency decision, download gate, peer feedback, start-by boundary.
   - Pools stay stable for a seed. Extensions refuse a submitted attempt. Cross-company merge throws. External 8/10 maps to 8000; unparseable raw maps to failed with a null score. Scanner errors stay quarantined. Grants expire exclusively. Distinct applications, final-only score inclusion, a New York local day, retention, export shape, bulk remainder, booking reuse, and outbox claim/skip/fail.
   - Webhook bodies that are unsigned, mismatched, or replayed are rejected. An application insert and its outbox insert roll back together.
   - Fresh database: one active application, cross-company foreign key, one idempotency key, illegal scan state, one offer response, one slot claim, one outbox lease, distinct stage events, a file delete that leaves the other company, two evaluation revisions, and an extension update that misses a submitted attempt.
+  - As `app_user`, an empty tenant setting returns no companies or jobs and rejects an insert. A transaction-local company setting does not remain after commit. A public slug shows that company's job and not the other company's.
+  - Callback decisions refuse a missing secret, a forged company, a replay, and a regression from succeeded. Calendar refresh state never includes a secret.
+  - The dedupe reference runs in a child process. A filesystem read is denied. A tight loop is killed. A long print is truncated.
 - `npx tsc --noEmit` — clean.
 - `npm run build` — client and server bundles produced. Migrate skipped because `DATABASE_URL` is unset. PGLite wasm sidecars were copied next to the server bundle.
 - Dev server returned HTTP 200 after a restart so migration `0004` could apply. Production preview returned HTTP 200 with the same homepage text hash as that dev capture, no console errors, and no horizontal overflow. Preview was then stopped. The dev server was left running.
@@ -19,12 +22,12 @@ Environment: Node 22, TanStack Start, embedded PGLite (no `DATABASE_URL`). 2026-
 
 - Brand injector tests expect the blank template title, not RECRUIT4US.
 - `with-app-env` tests expect `VITE_AUTH_ENABLED=false`. This app leaves that key unset so sign-in stays on.
-- `migration-plan` expects `migrations/` to contain no SQL files. This app has `0001` through `0004`.
+- `migration-plan` expects `migrations/` to contain no SQL files. This app has `0001` through `0006`.
 
 Those assertions were not deleted or weakened. They are not evidence that hiring rules failed. The domain, schema, and completion command above is the product result.
 
 ## Not run
 
-Playwright, axe, row-level security, Judge0, SMTP, a second-process worker crash, and load tests. No performance numbers are claimed.
+Playwright, axe, a remote code judge, SMTP, a second-process worker crash, and load tests. No performance numbers are claimed. Row security was executed against embedded Postgres as `app_user`, not against a hosted Neon role.
 
 A search of `.vercel/output/static` for `HIDDEN_SENTINEL_northstar_key_9f3a` found no matches. The sentinel remains in the seed's `key_payload` only.

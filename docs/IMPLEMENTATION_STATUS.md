@@ -9,17 +9,20 @@
 - On an application: merge preview, an external score with its scale, five extra minutes, and reopening a withdrawal. Hired stays hired.
 - The candidate portal can download that person's applications as JSON.
 - Settings → Privacy can delete this company's files that are past retention.
-- Objective scoring, autosave, a server deadline, and a receipt. Written and code answers wait for review.
+- Reviews rank submitted code by cases passed, then estimated time class, then space, then measured time. The class is a heuristic. A timeout is not stored as zero. The human rubric is still required.
 - Reviews, interviews with an ICS file, exclusive slots, offer approval (approvers can open the list), and candidate accept or decline.
+- The interviews page refreshes calendar state. Without a vendor token the state stays reconnect and the token is never shown.
+- A code sample runs in a separate process. It is not a score. Provider callbacks are refused until a secret is set.
 - Rules with a dry run, captured mail, audit, and anonymize. Withdrawn applications can be reopened by staff. Hired applications cannot.
 - Outbox rows are leased so a second drain skips a row that is still held.
 
 ## Not done, and not pretended
 
-- PostgreSQL row-level security.
-- Redis, a separate worker that executes rules, object storage, real SMTP, Judge0, or a live calendar vendor.
-- A webhook is accepted only when `WEBHOOK_SECRET` is set. It is not set in this preview.
-- The full browser, security, and load suites. Verified acceptance coverage is 57 of 130. See `docs/COMPLETION_MATRIX.md`.
+- Redis, a separate worker that executes rules, object storage, real SMTP, or a remote code judge.
+- A webhook is accepted only when `WEBHOOK_SECRET` is set. It is not set in this preview, and the event is not stored.
+- A provider callback is accepted only when `PROVIDER_CALLBACK_SECRET` is set. It is not set in this preview, and nothing is stored.
+- Calendar refresh does not call a vendor until both a token and an https vendor URL exist.
+- The full browser, security, and load suites. Verified acceptance coverage is 63 of 130. See `docs/COMPLETION_MATRIX.md`.
 
 ## Resume
 

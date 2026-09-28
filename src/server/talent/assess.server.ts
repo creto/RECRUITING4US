@@ -6,7 +6,6 @@ import {
   canStartAttempt,
   choosePool,
   candidateExportPayload,
-  executionUnavailable,
   gradeExactMultipleChoice,
   gradeNumeric,
   gradingMethod,
@@ -19,6 +18,21 @@ import {
   seededShuffle,
   validateAssessmentPublish,
 } from "@/domain/rules";
+import { runnerAvailability } from "@/domain/edge";
+import {
+  answersMatch,
+  casesForQuestion,
+  codeEntry,
+  codeJudgeScore,
+  estimateComplexity,
+  rankCodeResponses,
+  SPACE_CLASSES,
+  TIME_CLASSES,
+  type RankRow,
+  type SpaceClass,
+  type TimeClass,
+} from "@/domain/judge";
+import { enterTenant } from "@/lib/tenant";
 import { allow, audit, canonical, db, dbNow, json, mapDbError, nid, requireActor, requireUser, sha256, withTransaction } from "./db.server";
 import { ensureReview, rememberEvent } from "./workflows.server";
 
@@ -443,7 +457,7 @@ export async function getMyApplication(userId: string, applicationId: string) {
     assignments,
     offers,
     interviews,
-    runner: executionUnavailable(),
+    runner: runnerAvailability(),
   };
 }
 
@@ -481,6 +495,7 @@ export async function requestDeletion(userId: string, applicationId: string) {
 
 export async function startAttempt(userId: string, assignmentId: string) {
   assertSameSiteRequest();
+  await requireUser(userId);
   const sql = await db();
   const rows = await sql<{
     id: string;
@@ -658,7 +673,7 @@ export async function getAttempt(userId: string, attemptId: string) {
     },
     assessmentName: release[0]?.name ?? "Assessment",
     instructions: release[0]?.instructions ?? "",
-    runner: executionUnavailable(),
+    runner: runnerAvailability(),
     items: items.map((item) => ({
       id: item.id,
       position: item.position,
@@ -695,6 +710,7 @@ function presentOptions(item: AttemptItem) {
 }
 
 async function loadOwnedAttempt(userId: string, attemptId: string) {
+  await requireUser(userId);
   const sql = await db();
   const rows = await sql<{
     id: string;
@@ -840,6 +856,7 @@ export async function submitAttempt(
 }
 
 export async function sweepCompany(companyId: string) {
+  enterTenant({ companyId, publicSlug: "" });
   const sql = await db();
   const due = await sql<{ id: string }>`
     select id from attempts
@@ -1247,7 +1264,368 @@ export async function archiveAssessment(userId: string, input: { slug: string; a
   return { ok: true };
 }
 
-export async function sampleRun() {
-  const failure = operationalFailure();
-  return { ...executionUnavailable(), failure };
+export async function sampleRun(userId: string, attemptId: string) {
+  const { attempt } = await loadOwnedAttempt(userId, attemptId);
+  enterTenant({ companyId: attempt.company_id, userId, publicSlug: "" });
+  const sql = await db();
+  const rows = await sql<{ answer: { text?: string } | null }>`
+    select r.answer
+    from attempt_items i
+    join question_versions v on v.id = i.question_version_id
+    join questions q on q.id = v.question_id
+    left join responses r on r.attempt_item_id = i.id
+    where i.attempt_id = ${attemptId} and i.company_id = ${attempt.company_id} and q.type = 'code'
+    order by i.position
+    limit 1
+  `;
+  const { runIsolated } = await import("./runner.server");
+  const result = await runIsolated(rows[0]?.answer?.text ?? "");
+  await sql`
+    insert into code_runs (id, company_id, attempt_id, status, truncated, timed_out, output_excerpt)
+    values (
+      ${nid()}, ${attempt.company_id}, ${attemptId}, ${result.status},
+      ${result.truncated}, ${result.timedOut}, ${result.outputExcerpt.slice(0, 4000)}
+    )
+  `;
+  return result;
+}
+
+const DEMO_CODE = [
+  {
+    label: "linear",
+    source: `function deduplicateEvents(events, windowMs) {
+  const last = new Map();
+  const kept = [];
+  for (const event of events) {
+    const previous = last.get(event.id);
+    if (previous !== undefined && event.timestampMs - previous <= windowMs) continue;
+    last.set(event.id, event.timestampMs);
+    kept.push(event);
+  }
+  return kept;
+}`,
+  },
+  {
+    label: "quadratic",
+    source: `function deduplicateEvents(events, windowMs) {
+  const kept = [];
+  for (const event of events) {
+    let drop = false;
+    for (let i = 0; i < kept.length; i++) {
+      const prev = kept[i];
+      if (prev.id === event.id && event.timestampMs - prev.timestampMs <= windowMs) drop = true;
+    }
+    if (!drop) kept.push(event);
+  }
+  return kept;
+}`,
+  },
+  {
+    label: "constant",
+    source: "function deduplicateEvents(events) { return events; }",
+  },
+] as const;
+
+type CodeRow = {
+  attempt_item_id: string;
+  attempt_id: string;
+  application_id: string;
+  candidate_name: string;
+  logical_key: string;
+  prompt: string;
+  key_payload: unknown;
+  answer: { text?: string } | null;
+  judge_status: string | null;
+  passed: number | null;
+  total: number | null;
+  time_class: string | null;
+  space_class: string | null;
+  measured_ms: number | null;
+  basis_points: number | null;
+  reasons: unknown;
+};
+
+function answerText(answer: { text?: string } | null): string {
+  return typeof answer?.text === "string" ? answer.text : "";
+}
+
+function entryHint(key: unknown): string | null {
+  if (!key || typeof key !== "object") return null;
+  const entry = (key as { entry?: unknown }).entry;
+  return typeof entry === "string" ? entry : null;
+}
+
+function asTime(value: string | null | undefined): TimeClass {
+  return (TIME_CLASSES as readonly string[]).includes(value ?? "") ? (value as TimeClass) : "unknown";
+}
+
+function asSpace(value: string | null | undefined): SpaceClass {
+  return (SPACE_CLASSES as readonly string[]).includes(value ?? "") ? (value as SpaceClass) : "unknown";
+}
+
+function reasonList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string").slice(0, 4);
+}
+
+async function loadCodeRows(companyId: string): Promise<CodeRow[]> {
+  const sql = await db();
+  return sql<CodeRow>`
+    select i.id as attempt_item_id, t.id as attempt_id, a.id as application_id, c.name as candidate_name,
+      q.logical_key, v.prompt, v.key_payload, r.answer,
+      j.status as judge_status, j.passed, j.total, j.time_class, j.space_class,
+      j.measured_ms, j.basis_points, j.reasons
+    from attempt_items i
+    join attempts t on t.id = i.attempt_id and t.company_id = i.company_id
+    join assignments g on g.id = t.assignment_id and g.company_id = t.company_id
+    join applications a on a.id = g.application_id and a.company_id = g.company_id
+    join candidates c on c.id = a.candidate_id and c.company_id = a.company_id
+    join question_versions v on v.id = i.question_version_id and v.company_id = i.company_id
+    join questions q on q.id = v.question_id and q.company_id = v.company_id
+    left join responses r on r.attempt_item_id = i.id and r.company_id = i.company_id
+    left join code_judgements j on j.attempt_item_id = i.id and j.company_id = i.company_id
+    where i.company_id = ${companyId}
+      and q.type = 'code'
+      and t.status in ('SUBMITTED', 'AWAITING_REVIEW', 'COMPLETED', 'GRADING')
+    order by c.name
+    limit 80
+  `;
+}
+
+async function ensureDemoSamples(companyId: string) {
+  const sql = await db();
+  const found = await sql<{ version_id: string; section_id: string; question_version_id: string }>`
+    select s.version_id, i.section_id, v.id as question_version_id
+    from questions q
+    join question_versions v on v.question_id = q.id and v.company_id = q.company_id
+    join assessment_items i on i.question_version_id = v.id and i.company_id = v.company_id
+    join assessment_sections s on s.id = i.section_id and s.company_id = i.company_id
+    where q.company_id = ${companyId} and q.logical_key = 'dedupe' and q.type = 'code'
+    limit 1
+  `;
+  const question = found[0];
+  if (!question) return;
+  const apps = await sql<{ id: string }>`
+    select id from applications
+    where company_id = ${companyId} and lifecycle = 'ACTIVE'
+    order by submitted_at
+    limit 3
+  `;
+  for (let index = 0; index < apps.length && index < DEMO_CODE.length; index += 1) {
+    const sample = DEMO_CODE[index]!;
+    const app = apps[index]!;
+    const assignmentId = sha256(`${companyId}:code-rank:${sample.label}:assignment`).slice(0, 24);
+    const attemptId = sha256(`${companyId}:code-rank:${sample.label}:attempt`).slice(0, 24);
+    const itemId = sha256(`${companyId}:code-rank:${sample.label}:item`).slice(0, 24);
+    const responseId = sha256(`${companyId}:code-rank:${sample.label}:response`).slice(0, 24);
+    const reviewId = sha256(`${companyId}:code-rank:${sample.label}:review`).slice(0, 24);
+    await sql`
+      insert into assignments (
+        id, company_id, application_id, assessment_version_id, status, start_by, duration_seconds
+      ) values (
+        ${assignmentId}, ${companyId}, ${app.id}, ${question.version_id}, 'COMPLETED',
+        '2026-06-01T15:00:00.000Z', 5400
+      )
+      on conflict (id) do nothing
+    `;
+    await sql`
+      insert into attempts (
+        id, company_id, assignment_id, ordinal, status, started_at, deadline, submitted_at, submission_reason
+      ) values (
+        ${attemptId}, ${companyId}, ${assignmentId}, 1, 'AWAITING_REVIEW',
+        '2026-06-10T15:00:00.000Z', '2026-06-10T16:30:00.000Z', '2026-06-10T15:20:00.000Z', 'MANUAL'
+      )
+      on conflict (id) do nothing
+    `;
+    await sql`
+      insert into attempt_items (
+        id, company_id, attempt_id, question_version_id, section_id, position, points, option_order
+      ) values (
+        ${itemId}, ${companyId}, ${attemptId}, ${question.question_version_id}, ${question.section_id},
+        0, 1, '[]'::jsonb
+      )
+      on conflict (id) do nothing
+    `;
+    await sql`
+      insert into responses (id, company_id, attempt_item_id, answer, revision)
+      values (${responseId}, ${companyId}, ${itemId}, ${json({ text: sample.source })}::jsonb, 1)
+      on conflict (id) do nothing
+    `;
+    await sql`
+      insert into review_tasks (id, company_id, attempt_id, application_id, status)
+      values (${reviewId}, ${companyId}, ${attemptId}, ${app.id}, 'OPEN')
+      on conflict (id) do nothing
+    `;
+  }
+}
+
+async function saveJudgement(input: {
+  companyId: string;
+  attemptId: string;
+  attemptItemId: string;
+  status: "JUDGED" | "TIMED_OUT" | "FAILED" | "REFUSED";
+  passed: number | null;
+  total: number | null;
+  timeClass: TimeClass;
+  spaceClass: SpaceClass;
+  measuredMs: number | null;
+  basisPoints: number | null;
+  reasons: string[];
+}) {
+  const sql = await db();
+  await sql`
+    insert into code_judgements (
+      id, company_id, attempt_id, attempt_item_id, status, passed, total,
+      time_class, space_class, measured_ms, basis_points, reasons
+    ) values (
+      ${nid()}, ${input.companyId}, ${input.attemptId}, ${input.attemptItemId}, ${input.status},
+      ${input.passed}, ${input.total}, ${input.timeClass}, ${input.spaceClass}, ${input.measuredMs},
+      ${input.basisPoints}, ${json(input.reasons)}::jsonb
+    )
+    on conflict (company_id, attempt_item_id) do update set
+      status = excluded.status,
+      passed = excluded.passed,
+      total = excluded.total,
+      time_class = excluded.time_class,
+      space_class = excluded.space_class,
+      measured_ms = excluded.measured_ms,
+      basis_points = excluded.basis_points,
+      reasons = excluded.reasons,
+      created_at = now()
+  `;
+}
+
+async function judgeOne(companyId: string, row: CodeRow) {
+  const source = answerText(row.answer);
+  const estimate = estimateComplexity(source);
+  const entry = codeEntry(source, entryHint(row.key_payload));
+  const cases = casesForQuestion({ logicalKey: row.logical_key, prompt: row.prompt, entry });
+  const blank = {
+    companyId,
+    attemptId: row.attempt_id,
+    attemptItemId: row.attempt_item_id,
+    timeClass: estimate.timeClass,
+    spaceClass: estimate.spaceClass,
+    reasons: estimate.reasons,
+    measuredMs: null,
+    basisPoints: null,
+    passed: null as number | null,
+    total: cases.length > 0 ? cases.length : null,
+  };
+  if (!source.trim() || !entry) {
+    await saveJudgement({ ...blank, status: "REFUSED" });
+    return;
+  }
+  if (cases.length === 0) {
+    await saveJudgement({ ...blank, status: "JUDGED", total: null });
+    return;
+  }
+  const { judgeIsolated } = await import("./runner.server");
+  const run = await judgeIsolated(source, entry, cases.map((item) => item.args));
+  if (run.status !== "JUDGED" || run.results.length !== cases.length) {
+    await saveJudgement({ ...blank, status: run.status === "JUDGED" ? "FAILED" : run.status });
+    return;
+  }
+  let passed = 0;
+  for (let index = 0; index < cases.length; index += 1) {
+    const result = run.results[index];
+    if (result && !result.error && answersMatch(result.value, cases[index]?.expected)) passed += 1;
+  }
+  const last = run.results[run.results.length - 1]?.ms;
+  const measuredMs = typeof last === "number" && last >= 0 ? Math.min(60_000, Math.round(last)) : null;
+  const score = codeJudgeScore({
+    passed,
+    total: cases.length,
+    timeClass: estimate.timeClass,
+    measuredMs,
+  });
+  await saveJudgement({
+    ...blank,
+    status: "JUDGED",
+    passed,
+    total: cases.length,
+    measuredMs,
+    basisPoints: score.basisPoints,
+    reasons: [...estimate.reasons, score.reason].slice(0, 4),
+  });
+}
+
+function boardFrom(rows: CodeRow[]) {
+  const groups = new Map<string, CodeRow[]>();
+  for (const row of rows) {
+    const list = groups.get(row.logical_key) ?? [];
+    list.push(row);
+    groups.set(row.logical_key, list);
+  }
+  return [...groups.entries()].map(([questionKey, list]) => {
+    const facts: (RankRow & { row: CodeRow; reasons: string[] })[] = list.map((row) => {
+      const source = answerText(row.answer);
+      const estimate = estimateComplexity(source);
+      const judged = row.judge_status === "JUDGED" || row.judge_status === "TIMED_OUT" || row.judge_status === "FAILED" || row.judge_status === "REFUSED";
+      return {
+        row,
+        id: row.attempt_item_id,
+        status: judged ? (row.judge_status as RankRow["status"]) : "ESTIMATE",
+        passed: judged ? row.passed : null,
+        total: judged ? row.total : null,
+        timeClass: judged ? asTime(row.time_class) : estimate.timeClass,
+        spaceClass: judged ? asSpace(row.space_class) : estimate.spaceClass,
+        measuredMs: judged ? row.measured_ms : null,
+        basisPoints: judged ? row.basis_points : null,
+        reasons: judged ? reasonList(row.reasons) : estimate.reasons,
+      };
+    });
+    const ranked = rankCodeResponses(facts);
+    const title = (list[0]?.prompt ?? "Code").split("\n")[0]?.slice(0, 90) ?? "Code";
+    return {
+      questionKey,
+      title,
+      rows: ranked.map((item) => ({
+        rank: item.rank,
+        candidateName: item.row.candidate_name,
+        timeClass: item.timeClass,
+        spaceClass: item.spaceClass,
+        reasons: item.reasons,
+        passed: item.passed,
+        total: item.total,
+        measuredMs: item.measuredMs,
+        basisPoints: item.basisPoints,
+        status: item.status,
+        excerpt: answerText(item.row.answer).slice(0, 220),
+      })),
+    };
+  });
+}
+
+export async function listCodeBoard(userId: string, slug: string) {
+  const actor = await requireActor(userId, slug);
+  allow(actor, "evaluation.grade");
+  let rows = await loadCodeRows(actor.companyId);
+  if (rows.length === 0 && actor.demo) {
+    await ensureDemoSamples(actor.companyId);
+    rows = await loadCodeRows(actor.companyId);
+  }
+  const pending = rows.filter((row) => !row.judge_status);
+  if (actor.demo && rows.length > 0 && rows.length <= 3 && pending.length === rows.length) {
+    for (const row of pending) await judgeOne(actor.companyId, row);
+    rows = await loadCodeRows(actor.companyId);
+  }
+  return {
+    note: "Correct answers are ordered by estimated time class, then space class, then measured time on the largest case. The class is read from the source. It is not a proof. A wrong answer does not outrank a correct one. A timeout is not scored as zero. The human rubric is separate.",
+    groups: boardFrom(rows),
+  };
+}
+
+export async function judgeCodeBoard(userId: string, slug: string) {
+  assertSameSiteRequest();
+  const actor = await requireActor(userId, slug);
+  allow(actor, "evaluation.grade");
+  const rows = await loadCodeRows(actor.companyId);
+  const pending = rows.filter((row) => !row.judge_status).slice(0, 8);
+  for (const row of pending) await judgeOne(actor.companyId, row);
+  await audit(actor, "evaluation.grade", "code_judgement", actor.companyId, "Judged code submissions.");
+  return {
+    judged: pending.length,
+    remaining: Math.max(0, rows.filter((row) => !row.judge_status).length - pending.length),
+  };
 }

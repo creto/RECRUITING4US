@@ -636,7 +636,7 @@ export function executionUnavailable(): {
   return {
     available: false,
     reason:
-      "No isolated code runner is configured. Submissions are kept for human review and are never executed on the application server.",
+      "No remote code runner is configured. This result does not execute a program and does not include hidden tests.",
   };
 }
 
@@ -914,12 +914,25 @@ export function gradingGuide(type: string): { method: "exact" | "numeric" | "rub
       ],
     };
   }
+  if (type === "code") {
+    return {
+      method: "rubric",
+      title: "Code ranking",
+      steps: [
+        "Saved source is judged in a separate process when the question has cases. The application process does not eval it.",
+        "Fully correct answers rank by estimated time class, then space class, then measured time. The class is a heuristic, not a proof.",
+        "A wrong or partial answer does not outrank a correct one, even if it looks faster.",
+        "Complexity credit is withheld until every case passes. A timeout stores no score. It is not zero.",
+        "A person still scores the rubric from 0 to 4. That review stays pending until every dimension is scored.",
+      ],
+    };
+  }
   if (method === "rubric") {
     return {
       method,
       title: "Human rubric",
       steps: [
-        "The answer is stored. Code, SQL, spreadsheets, and recordings are not executed.",
+        "The answer is stored. SQL, spreadsheets, and recordings are not executed.",
         "Each required dimension is an integer from 0 to 4.",
         "The review stays pending until every required dimension is scored. Pending is not zero.",
         "Earned points are the sum of the dimension scores. Possible points are 4 times the number of dimensions.",
@@ -1004,6 +1017,17 @@ export function explainAuthorQuestion(input: {
     return {
       ...guide,
       keySummary: `Full credit (${points} pt) when the answer is within the larger of absolute tolerance ${abs} and relative tolerance ${rel} × |${expected}|. A miss is 0.`,
+    };
+  }
+  if (input.type === "code") {
+    const dimensions = rubricDimensions(input.rubric);
+    if (dimensions.length === 0) {
+      return { ...guide, keySummary: "This question has no rubric, so it cannot be published or finalized." };
+    }
+    const names = dimensions.map((dimension) => dimension.label).join(" and ");
+    return {
+      ...guide,
+      keySummary: `Judge cases are worth up to 7000 basis points. A fully correct answer also earns up to 2000 for a better estimated time class and up to 1000 for measured time. The class is a heuristic, not a proof. ${names} is still scored by a person from 0 to 4. A timeout is not stored as zero.`,
     };
   }
   const dimensions = rubricDimensions(input.rubric);

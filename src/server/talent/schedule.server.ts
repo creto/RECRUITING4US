@@ -1,6 +1,7 @@
 import { assertSameSiteRequest } from "@/lib/auth/isolation.server";
-import { buildIcs, canSeeCompensation, canSeePeerFeedback, reportDayWindow, roleHas, zonedLocalToUtc } from "@/domain/rules";
-import { allow, audit, db, json, nid, requireActor } from "./db.server";
+import { buildIcs, canSeeCompensation, canSeePeerFeedback, reportDayWindow, roleHas, zonedLocalToUtc, assertSafeOutboundUrl } from "@/domain/rules";
+import { calendarRefreshState } from "@/domain/edge";
+import { allow, audit, db, json, nid, requireActor, requireUser } from "./db.server";
 import { rememberEvent } from "./workflows.server";
 
 const SCORECARD = [
@@ -8,6 +9,36 @@ const SCORECARD = [
   { id: "collaboration", label: "Collaboration" },
   { id: "communication", label: "Communication" },
 ];
+
+export async function refreshCalendar(userId: string, slug: string) {
+  const actor = await requireActor(userId, slug);
+  allow(actor, "interview.feedback");
+  const token = process.env.CALENDAR_REFRESH_TOKEN?.trim() ?? "";
+  const vendor = process.env.CALENDAR_VENDOR_URL?.trim() ?? "";
+  let providerError: string | null = null;
+  const hasCredential = Boolean(token && vendor);
+  if (hasCredential) {
+    try {
+      const url = assertSafeOutboundUrl(vendor, false);
+      const response = await fetch(url, {
+        headers: { authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(4000),
+      });
+      if (!response.ok) providerError = "Calendar vendor rejected the refresh.";
+    } catch {
+      providerError = "Calendar vendor could not be reached.";
+    }
+  }
+  const state = calendarRefreshState({ hasCredential, providerError });
+  const sql = await db();
+  await sql`
+    insert into calendar_connections (id, company_id, provider, status, secret_ref, last_error, refreshed_at)
+    values (${nid()}, ${actor.companyId}, 'external', ${state.status}, 'env:CALENDAR_REFRESH_TOKEN', ${state.error.slice(0, 300)}, now())
+    on conflict (company_id, provider) do update
+      set status = excluded.status, last_error = excluded.last_error, refreshed_at = now()
+  `;
+  return { provider: "external", status: state.status, error: state.error, secret: state.secret };
+}
 
 export async function listInterviews(userId: string, slug: string) {
   const actor = await requireActor(userId, slug);
@@ -221,6 +252,7 @@ export async function listSlots(userId: string, slug: string) {
 
 export async function claimSlot(userId: string, slotId: string, applicationId: string) {
   assertSameSiteRequest();
+  await requireUser(userId);
   const sql = await db();
   const apps = await sql<{ company_id: string }>`
     select a.company_id from applications a
@@ -371,6 +403,7 @@ export async function sendOffer(userId: string, input: { slug: string; offerId: 
 }
 
 export async function getMyOffer(userId: string, offerId: string) {
+  await requireUser(userId);
   const sql = await db();
   const rows = await sql<{
     id: string;
@@ -412,6 +445,7 @@ export async function respondToOffer(
   input: { offerId: string; revision: number; decision: "ACCEPTED" | "DECLINED"; comment: string },
 ) {
   assertSameSiteRequest();
+  await requireUser(userId);
   const sql = await db();
   const offers = await sql<{
     company_id: string;

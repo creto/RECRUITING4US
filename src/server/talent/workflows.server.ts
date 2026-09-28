@@ -1,5 +1,7 @@
 import { outboxDisposition, triAnd, triEq, triScoreAtLeast, type Tri } from "@/domain/rules";
 import { signBody, webhookVerdict } from "@/domain/completion";
+import { providerCallbackDecision } from "@/domain/edge";
+import { enterTenant } from "@/lib/tenant";
 import { allow, audit, db, enqueue, nid, requireActor } from "./db.server";
 import { assertSameSiteRequest } from "@/lib/auth/isolation.server";
 
@@ -23,6 +25,7 @@ type RuleRow = {
 };
 
 export async function drain(companyId: string) {
+  enterTenant({ companyId, publicSlug: "" });
   const sql = await db();
   if (outboxDisposition(5, false) === "fail") {
     await sql`
@@ -311,4 +314,58 @@ export async function receiveWebhook(
     values (${nid()}, ${actor.companyId}, ${input.provider.slice(0, 40)}, ${input.eventKey.slice(0, 120)})
   `;
   return { accepted: true, companyId: actor.companyId };
+}
+
+/** Provider completion. Without a secret, nothing is stored. The company comes from the attempt, not the body. */
+export async function receiveProviderCallback(input: {
+  attemptId: string;
+  eventKey: string;
+  body: string;
+  signature: string | null;
+  bodyCompanyId: string;
+  bodyAssignmentId: string;
+  incoming: "RUNNING" | "SUCCEEDED" | "FAILED";
+}) {
+  const secret = process.env.PROVIDER_CALLBACK_SECRET;
+  if (!secret) return { accepted: false, stored: false, reason: "No provider callback secret is configured. Nothing was stored." };
+  const sql = await db();
+  const owners = await sql<{ company_id: string; assignment_id: string; status: string }>`
+    select company_id, assignment_id, status from app_attempt_owner(${input.attemptId})
+  `;
+  const owner = owners[0];
+  if (!owner) return { accepted: false, stored: false, reason: "That attempt is not on record." };
+  enterTenant({ companyId: owner.company_id, publicSlug: "" });
+  const seenRows = await sql<{ id: string }>`
+    select id from provider_callbacks
+    where company_id = ${owner.company_id} and event_key = ${input.eventKey}
+  `;
+  const latest = await sql<{ status: string }>`
+    select status from provider_callbacks
+    where company_id = ${owner.company_id} and attempt_id = ${input.attemptId}
+    order by created_at desc limit 1
+  `;
+  const current = latest[0]?.status === "RUNNING" || latest[0]?.status === "SUCCEEDED" || latest[0]?.status === "FAILED"
+    ? latest[0].status
+    : null;
+  const decision = providerCallbackDecision({
+    secretConfigured: true,
+    signatureOk: webhookVerdict({
+      signature: input.signature,
+      expected: signBody(secret, input.body),
+      seen: false,
+    }) === "accept",
+    bodyCompanyId: input.bodyCompanyId,
+    recordCompanyId: owner.company_id,
+    bodyAssignmentId: input.bodyAssignmentId,
+    recordAssignmentId: owner.assignment_id,
+    seen: Boolean(seenRows[0]),
+    current,
+    incoming: input.incoming,
+  });
+  if (decision !== "accept") return { accepted: false, stored: false, reason: decision };
+  await sql`
+    insert into provider_callbacks (id, company_id, attempt_id, event_key, status)
+    values (${nid()}, ${owner.company_id}, ${input.attemptId}, ${input.eventKey.slice(0, 120)}, ${input.incoming})
+  `;
+  return { accepted: true, stored: true, companyId: owner.company_id };
 }

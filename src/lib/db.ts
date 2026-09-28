@@ -1,5 +1,6 @@
 import { pendingMigrations } from "../../scripts/migration-plan.mjs";
 import { bindQuery, currentQuery, runExclusive, type QueryFn } from "@/domain/exclusive";
+import { currentTenant } from "@/lib/tenant";
 
 /** Which database backend is active. */
 export type DbSource = "neon" | "pglite";
@@ -72,6 +73,66 @@ const identity = (v: string) => v;
 
 type Run = <T>(text: string, params: unknown[]) => Promise<T[]>;
 
+function tenantScope() {
+  const tenant = currentTenant();
+  return {
+    companyId: tenant?.companyId ?? "",
+    userId: tenant?.userId ?? "",
+    publicSlug: tenant?.publicSlug ?? "",
+  };
+}
+
+async function writeTenant(run: Run, local: boolean, scope: { companyId: string; userId: string; publicSlug: string }) {
+  await run(
+    "select set_config('app.company_id', $1, $4), set_config('app.user_id', $2, $4), set_config('app.public_slug', $3, $4)",
+    [scope.companyId, scope.userId, scope.publicSlug, local],
+  );
+}
+
+type Session = { query: Run; release: () => void };
+
+let assumeAppRole: boolean | null = null;
+
+/** Superusers bypass row security. Only they need to assume the restricted role. */
+async function shouldAssumeAppRole(run: Run): Promise<boolean> {
+  if (assumeAppRole !== null) return assumeAppRole;
+  const rows = await run(
+    `select
+       coalesce((select rolsuper or rolbypassrls from pg_roles where rolname = current_user), false) as bypass,
+       exists (select 1 from pg_roles where rolname = 'app_user') as has_role`,
+    [],
+  );
+  const row = rows[0] as { bypass?: boolean; has_role?: boolean } | undefined;
+  assumeAppRole = row?.bypass === true && row?.has_role === true;
+  return assumeAppRole;
+}
+
+function gateRun(open: () => Promise<Session>): Run {
+  return async <T>(text: string, params: unknown[]) => {
+    const bound = currentQuery();
+    if (bound) return bound(text, params) as Promise<T[]>;
+    return runExclusive(async () => {
+      const session = await open();
+      try {
+        await session.query("begin", []);
+        if (await shouldAssumeAppRole(session.query)) await session.query("set local role app_user", []);
+        await writeTenant(session.query, true, tenantScope());
+        const rows = await session.query<T>(text, params);
+        await session.query("commit", []);
+        return rows;
+      } catch (error) {
+        try {
+          await session.query("rollback", []);
+        } catch {
+          // The transaction may already be closed.
+        }
+        throw error;
+      } finally {
+        session.release();
+      }
+    });
+  };
+}
 function toSql(run: Run): Sql {
   const sql = (async <T = Record<string, unknown>>(
     strings: TemplateStringsArray,
@@ -85,14 +146,6 @@ function toSql(run: Run): Sql {
   sql.query = <T = Record<string, unknown>>(text: string, params: unknown[] = []) =>
     run<T>(text, params);
   return sql;
-}
-
-function gateRun(run: Run): Run {
-  return async <T>(text: string, params: unknown[]) => {
-    const bound = currentQuery();
-    if (bound) return bound(text, params) as Promise<T[]>;
-    return runExclusive(() => run<T>(text, params));
-  };
 }
 
 /**
@@ -112,6 +165,8 @@ export async function withTransaction<T>(fn: () => Promise<T>): Promise<T> {
       };
       try {
         await raw("BEGIN");
+        if (await shouldAssumeAppRole(raw as Run)) await raw("set local role app_user");
+        await writeTenant(raw as Run, true, tenantScope());
         const result = await bindQuery(raw, fn);
         await raw("COMMIT");
         return result;
@@ -126,6 +181,8 @@ export async function withTransaction<T>(fn: () => Promise<T>): Promise<T> {
     if (!raw) throw new Error("Database is not ready.");
     await raw("BEGIN");
     try {
+      if (await shouldAssumeAppRole(raw as Run)) await raw("set local role app_user");
+      await writeTenant(raw as Run, true, tenantScope());
       const result = await bindQuery(raw, fn);
       await raw("COMMIT");
       return result;
@@ -146,9 +203,15 @@ function createNeonSql(): Promise<Sql> {
     types.setTypeParser(OID_INTERVAL, identity);
     const pool = new Pool({ connectionString: databaseUrl });
     globalRef.__pgPool = pool;
-    return toSql(gateRun(async <T>(text: string, params: unknown[]) => {
-      const res = await pool.query(text, params);
-      return res.rows as T[];
+    return toSql(gateRun(async () => {
+      const client = await pool.connect();
+      return {
+        query: async <T>(text: string, params: unknown[]) => {
+          const res = await client.query(text, params);
+          return res.rows as T[];
+        },
+        release: () => client.release(),
+      };
     }));
   })().catch((err) => {
     globalRef.__pgSqlPromise__ = undefined;
@@ -218,10 +281,13 @@ async function createPgliteSql(): Promise<Sql> {
     return result.rows;
   };
 
-  return toSql(gateRun(async <T>(text: string, params: unknown[]) => {
-    const result = await pg.query<T>(text, params);
-    return result.rows;
-  }));
+  return toSql(gateRun(async () => ({
+    query: async <T>(text: string, params: unknown[]) => {
+      const result = await pg.query<T>(text, params);
+      return result.rows;
+    },
+    release: () => undefined,
+  })));
 }
 
 let sqlPromise: Promise<Sql> | null = null;

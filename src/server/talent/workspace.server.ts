@@ -20,6 +20,7 @@ import {
   grantAllows,
   retentionDue,
 } from "@/domain/rules";
+import { enterTenant } from "@/lib/tenant";
 import { allow, audit, canonical, db, json, mapDbError, nid, requireActor, requireUser, sha256, withTransaction, type Actor } from "./db.server";
 import { rememberEvent } from "./workflows.server";
 
@@ -69,9 +70,10 @@ export async function createCompany(userId: string, input: { name: string; timez
   const user = await requireUser(userId);
   const sql = await db();
   const companyId = nid();
+  enterTenant({ userId: user.id, companyId, publicSlug: "" });
   let slug = slugify(input.name);
-  const taken = await sql`select id from companies where slug = ${slug}`;
-  if (taken[0]) slug = `${slug}-${companyId.slice(0, 6)}`;
+  const taken = await sql<{ taken: boolean }>`select app_slug_taken(${slug}) as taken`;
+  if (taken[0]?.taken) slug = `${slug}-${companyId.slice(0, 6)}`;
   try {
     await sql`
       insert into companies (id, name, slug, timezone, created_by)
@@ -252,10 +254,9 @@ export async function acceptInvite(userId: string, token: string) {
     revoked_at: string | null;
     slug: string;
   }>`
-    select i.id, i.company_id, i.email, i.role, i.expires_at::text as expires_at,
-           i.accepted_at::text as accepted_at, i.revoked_at::text as revoked_at, c.slug
-    from invitations i join companies c on c.id = i.company_id
-    where i.token_hash = ${sha256(token)}
+    select id, company_id, email, role, expires_at::text as expires_at,
+      accepted_at::text as accepted_at, revoked_at::text as revoked_at, slug
+    from app_invite(${sha256(token)})
   `;
   const invite = rows[0];
   if (!invite) throw new Error("This invitation is not valid.");
@@ -265,6 +266,7 @@ export async function acceptInvite(userId: string, token: string) {
     throw new Error("Sign in with the invited email address.");
   }
   if (!isRole(invite.role)) throw new Error("This invitation is not valid.");
+  enterTenant({ userId: user.id, companyId: invite.company_id, publicSlug: "" });
   const owners = await sql<{ n: number }>`
     select count(*) as n from memberships
     where company_id = ${invite.company_id} and role = 'OWNER' and status = 'ACTIVE'
@@ -1031,6 +1033,7 @@ export async function listViews(userId: string, slug: string) {
 }
 
 export async function listPublicJobs(input: { companySlug: string; q?: string; department?: string; workArrangement?: string }) {
+  enterTenant({ publicSlug: input.companySlug, companyId: "", userId: "" });
   const sql = await db();
   const q = `%${(input.q ?? "").trim().toLowerCase()}%`;
   const companies = await sql<{ id: string; name: string; timezone: string }>`
@@ -1071,6 +1074,7 @@ export async function listPublicJobs(input: { companySlug: string; q?: string; d
 }
 
 export async function getPublicJob(companySlug: string, jobSlug: string) {
+  enterTenant({ publicSlug: companySlug, companyId: "", userId: "" });
   const sql = await db();
   const rows = await sql<{
     company_name: string;
@@ -1119,6 +1123,7 @@ type ApplyInput = {
 
 export async function submitApplication(input: ApplyInput) {
   assertSameSiteRequest();
+  enterTenant({ publicSlug: input.companySlug, companyId: "", userId: "" });
   const sql = await db();
   const jobs = await sql<{
     company_id: string;
@@ -1325,6 +1330,7 @@ export async function readFile(userId: string, slug: string, fileId: string) {
 }
 
 export async function readGrantedFile(userId: string, grantId: string) {
+  await requireUser(userId);
   const sql = await db();
   const rows = await sql<{
     company_id: string;
@@ -1491,8 +1497,10 @@ export async function integrationStatus(userId: string, slug: string) {
     items: [
       { name: "Email", state: "Configured", detail: "Messages are captured in this workspace. Nothing is sent to the public internet." },
       { name: "Files", state: "Configured", detail: "Uploads stay in the database, quarantined until the local demo scanner marks them clean. This is not a commercial antivirus." },
-      { name: "Code execution", state: "Unavailable", detail: "No isolated runner is configured. Code answers are stored for human review and are never executed here." },
-      { name: "Calendar", state: "Manual", detail: "Scheduling, exclusive slots, and calendar files work without a connected calendar. External availability is unknown." },
+      { name: "Code execution", state: "Local sandbox", detail: "No remote runner key is configured. A sample run uses a separate process with filesystem access denied, a 1.5 second timeout, and truncated output. It is not a virtual machine and it is not a score." },
+      { name: "Calendar", state: "Reconnect until a credential exists", detail: "Refresh records a reconnect state and does not store a token. A vendor URL and refresh token are the only missing connector." },
+      { name: "Provider callbacks", state: "Refused", detail: "Callbacks are refused and nothing is stored until PROVIDER_CALLBACK_SECRET is set. The body cannot choose the company." },
+      { name: "Webhooks", state: "Refused", detail: "Webhook events are refused and nothing is stored until WEBHOOK_SECRET is set." },
       { name: "External assessments", state: "Manual", detail: "Import a result with its original scale. There is no live vendor connector." },
     ],
   };

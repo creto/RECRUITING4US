@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { calculateWeightedScore } from "@/domain/rules";
+import { enterTenant } from "@/lib/tenant";
 import { audit, db, json, requireUser } from "./db.server";
 
 const PLATFORM_DESCRIPTION = `Build reliable product infrastructure for a growing hiring and assessment platform. You will own backend and full-stack features from design through production, collaborate with product and design, review technical proposals, and improve the team's ability to deliver dependable software.
@@ -86,11 +87,12 @@ export async function seedDemo(userId: string) {
   const seed = user.id.replace(/[^a-z0-9]/gi, "").slice(0, 10).toLowerCase() || "demo";
   const sql = await db();
   const northSlug = `northstar-${seed}`;
-  const existing = await sql<{ slug: string }>`select slug from companies where slug = ${northSlug}`;
-  if (existing[0]) return { slug: northSlug, created: false };
+  const existing = await sql<{ id: string | null }>`select app_company_id_for_slug(${northSlug}) as id`;
+  if (existing[0]?.id) return { slug: northSlug, created: false };
 
   const companyId = did(seed, "northstar");
   const harborId = did(seed, "harbor");
+  enterTenant({ userId: user.id, companyId, publicSlug: "" });
   await sql`
     insert into companies (id, name, slug, timezone, demo, created_by)
     values (${companyId}, 'Northstar Labs', ${northSlug}, 'America/New_York', true, ${user.id})
@@ -99,6 +101,7 @@ export async function seedDemo(userId: string) {
     insert into memberships (id, company_id, user_id, role)
     values (${did(seed, "owner-membership")}, ${companyId}, ${user.id}, 'OWNER')
   `;
+  enterTenant({ userId: user.id, companyId: harborId, publicSlug: "" });
   await sql`
     insert into companies (id, name, slug, timezone, demo, created_by)
     values (${harborId}, 'Harbor Analytics', ${"harbor-" + seed}, 'America/Chicago', true, ${"seed-harbor-" + seed})
@@ -136,6 +139,7 @@ export async function seedDemo(userId: string) {
     description: string,
     stages: string[][],
   ) {
+    enterTenant({ userId: user.id, companyId: company, publicSlug: "" });
     const jobId = did(seed, `${company}:${name}`);
     await sql`
       insert into jobs (
@@ -220,12 +224,14 @@ export async function seedDemo(userId: string) {
   for (let i = 0; i < NAMES.length; i += 1) {
     const id = did(seed, `cand:${i}`);
     const email = `${NAMES[i]!.toLowerCase().replace(/[^a-z]+/g, ".")}@northstar.example`;
+    enterTenant({ userId: user.id, companyId, publicSlug: "" });
     await sql`
       insert into candidates (id, company_id, name, email, email_normalized, source)
       values (${id}, ${companyId}, ${NAMES[i]}, ${email}, ${email}, ${i % 5 === 0 ? "REFERRAL" : "CAREERS"})
     `;
     candidateIds.push(id);
     const harborEmail = `${NAMES[i]!.toLowerCase().replace(/[^a-z]+/g, ".")}@harbor.example`;
+    enterTenant({ userId: user.id, companyId: harborId, publicSlug: "" });
     await sql`
       insert into candidates (id, company_id, name, email, email_normalized, source)
       values (${did(seed, `hcand:${i}`)}, ${harborId}, ${NAMES[i]}, ${harborEmail}, ${harborEmail}, 'CAREERS')
@@ -234,6 +240,7 @@ export async function seedDemo(userId: string) {
 
   const pairs = new Set<string>();
   const applicationIds: string[] = [];
+  enterTenant({ userId: user.id, companyId, publicSlug: "" });
   for (let i = 0; i < 40; i += 1) {
     const candidateId = candidateIds[i % candidateIds.length]!;
     const job = jobs[(i + Math.floor(i / candidateIds.length)) % jobs.length]!;
@@ -268,6 +275,7 @@ export async function seedDemo(userId: string) {
   };
 
   async function question(logical: string, type: string, prompt: string, payload: unknown, key: unknown, points: number) {
+    enterTenant({ userId: user.id, companyId, publicSlug: "" });
     const qid = did(seed, `q:${logical}`);
     const vid = did(seed, `qv:${logical}`);
     await sql`
@@ -309,7 +317,7 @@ export async function seedDemo(userId: string) {
   const codingId = await question(
     "dedupe",
     "code",
-    "Implement deduplicateEvents(events, windowMs). Keep the first event for an id. Drop a later event for that id when its timestamp is within windowMs, inclusive, of the last retained event. A dropped event must not extend the window. Do not run this on the application server — the isolated runner is unavailable, so submit your source for human review.\n\nSample: [{id:a,timestampMs:0},{id:a,timestampMs:5},{id:b,timestampMs:6},{id:a,timestampMs:10},{id:a,timestampMs:11}] with a 10ms window retains the events at 0, 6, and 11.",
+    "Implement deduplicateEvents(events, windowMs). Keep the first event for an id. Drop a later event for that id when its timestamp is within windowMs, inclusive, of the last retained event. A dropped event must not extend the window. Submitted answers are judged in a separate process and ranked by estimated time class, then space, then measured time. A wrong answer does not rank above a correct one. A sample run is not that score.\n\nSample: [{id:a,timestampMs:0},{id:a,timestampMs:5},{id:b,timestampMs:6},{id:a,timestampMs:10},{id:a,timestampMs:11}] with a 10ms window retains the events at 0, 6, and 11.",
     { mode: "code", languages: ["typescript"] },
     {},
     1,
@@ -338,6 +346,7 @@ export async function seedDemo(userId: string) {
     release: string,
     sections: { title: string; weight: number; items: string[] }[],
   ) {
+    enterTenant({ userId: user.id, companyId, publicSlug: "" });
     const aid = did(seed, `asmt:${name}`);
     const vid = did(seed, `asmtv:${name}`);
     await sql`

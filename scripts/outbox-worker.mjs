@@ -18,9 +18,7 @@ if (!url) {
 const { default: pg } = await import("pg");
 const pool = new pg.Pool({ connectionString: url });
 try {
-  const pending = await pool.query(
-    "select count(*)::int as n from outbox_events where status = 'PENDING'",
-  );
+  const pending = await pool.query("select app_pending_outbox_count() as n");
   console.log(
     `[outbox-worker] Shared database has ${pending.rows[0]?.n ?? 0} pending outbox rows. Rule execution stays in the web process so a second process cannot apply an action without the application receipts. Nothing was marked processed.`,
   );

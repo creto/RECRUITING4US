@@ -10,11 +10,11 @@ Implemented:
 - Upload policy checks extension, MIME, and size before a row is marked clean by the local demo scanner. This is not a commercial malware product.
 - Outbound integration URLs reject embedded credentials and obvious metadata hosts.
 - The client production bundle does not contain the demo answer-key sentinel.
+- Employer tables use Postgres row-level security forced for a non-superuser role. A query with no company, user, or public slug sees no employer rows and cannot insert one. The preview connection sets that role only inside a transaction, so it does not stick for sign-in queries.
+- Composite foreign keys still reject a link that points at another company's row.
 
 Limitations, stated plainly:
 
-- No PostgreSQL row-level security. A bug in a query that forgets `company_id` would leak data. Composite foreign keys stop cross-company links, not a missing filter.
-- No separate database role for the application versus migrations.
 - Email/password sessions use the auth library's cookies. Preview sign-in with Google or X uses the platform popup. There is no production demo password and no user-switching control.
 - Rate limits are not shared across instances. There is no Redis.
 - The product is not claimed to be GDPR, EEOC, or SOC 2 compliant.

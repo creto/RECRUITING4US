@@ -663,13 +663,37 @@ export const submitReview = createServerFn({ method: "POST" })
     return api.submitReview(userId, data);
   });
 
+export const listCodeBoard = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ slug: Slug }))
+  .handler(async ({ context, data }) => {
+    const api = await import("./talent/assess.server");
+    return api.listCodeBoard(context.userId, data.slug);
+  });
+
+export const judgeCodeBoard = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ slug: Slug }))
+  .handler(async ({ context, data }) => {
+    const api = await import("./talent/assess.server");
+    return api.judgeCodeBoard(context.userId, data.slug);
+  });
+
 export const requestSampleRun = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ attemptId: z.string().min(8).max(80) }))
   .handler(async ({ context, data }) => {
     const userId = context.userId;
     const api = await import("./talent/assess.server");
-  return api.sampleRun();
+    return api.sampleRun(userId, data.attemptId);
+  });
+
+export const refreshCalendar = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ slug: Slug }))
+  .handler(async ({ context, data }) => {
+    const api = await import("./talent/schedule.server");
+    return api.refreshCalendar(context.userId, data.slug);
   });
 
 export const listInterviews = createServerFn({ method: "POST" })
