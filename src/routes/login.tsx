@@ -62,7 +62,7 @@ function Login() {
         </Link>
         <div className="hidden max-w-md lg:block">
           <img src="/mark.png" alt="" width={96} height={56} className="h-12 w-auto max-w-28" />
-          <p className="font-brand mt-4 text-4xl uppercase leading-none text-lime">RECRUIT4US</p>
+          <p className="font-brand mt-4 text-4xl uppercase leading-none text-ink">RECRUIT4US</p>
           <p className="mt-4 text-base text-muted">
             Each employer keeps its own candidates, scores, and notes. A score is evidence for a person to read, not an automatic hire or reject.
           </p>
@@ -137,7 +137,7 @@ function Login() {
           </form>
           <button
             type="button"
-            className="mt-4 min-h-11 text-sm text-lime"
+            className="mt-4 min-h-11 text-sm text-link"
             onClick={() => {
               setMode(signingUp ? "in" : "up");
               setError(null);

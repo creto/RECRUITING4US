@@ -1,7 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { DEFAULT_TEXT_RUBRIC, explainAuthorQuestion, gradingGuide } from "@/domain/rules";
-import { archiveAssessment, createAssessment, createQuestion, listAssessments, listQuestions, publishAssessment } from "@/server/talent.functions";
+import { archiveAssessment, createAssessment, createQuestion, listAssessments, listQuestions, previewAssessment, publishAssessment, sendAssessmentToFits, updateAssessmentDelivery } from "@/server/talent.functions";
+import { ExamPreview, type AssessmentPreview } from "@/components/talent/exam-preview";
+import { examPaper } from "@/components/talent/exam-shell";
 import { Alert, Button, Empty, Field, inputClass, Loading, PageTitle, refreshPage, useAuthed } from "@/components/talent/kit";
 
 export const Route = createFileRoute("/app/$companySlug/assessments")({ component: Assessments });
@@ -35,8 +37,18 @@ function Assessments() {
   const [points, setPoints] = useState(1);
   const [picked, setPicked] = useState<string[]>([]);
   const [name, setName] = useState("");
-  const [minutes, setMinutes] = useState(20);
+  const [minutes, setMinutes] = useState(45);
   const [poolPick, setPoolPick] = useState("");
+  const [proctored, setProctored] = useState(false);
+  const [autoSend, setAutoSend] = useState(true);
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [bankFilter, setBankFilter] = useState<"all" | "bank" | "other">("all");
+  const preview = useAuthed(
+    () => previewAssessment({ data: { slug: companySlug, assessmentId: previewId ?? "" } }) as Promise<AssessmentPreview>,
+    [companySlug, previewId],
+    Boolean(previewId),
+  );
 
   if (tests.loading || tests.isPending) return <Loading />;
 
@@ -97,7 +109,11 @@ function Assessments() {
           description: "Draft assembled in the workspace.",
           durationSeconds: Math.max(1, minutes) * 60,
           scoreRelease: "AGGREGATE",
-          instructions: "The timer starts only after you choose Start. Refreshing this page does not start it.",
+          instructions: proctored
+            ? `Time limit: ${minutes} minutes. The timer starts only after you choose Start. This version is proctored: the camera must stay on, and leaving the tab or fullscreen is noted. Video is not uploaded.`
+            : "The timer starts only after you choose Start. Refreshing this page does not start it.",
+          proctored,
+          autoSend,
           sections: [{
             title: "Questions",
             weightBasisPoints: 10000,
@@ -114,16 +130,43 @@ function Assessments() {
 
   return (
     <div>
-      <PageTitle title="Assessments" lede="Published versions stay fixed for people already assigned. Code, SQL, and spreadsheets are stored for a person to grade. Nothing is executed here." />
+      <PageTitle title="Assessments" lede="Open Preview to take the paper with its time limit. Automatic send assigns a published exam when a CV is a fit. The coding bank is 50 original medium and hard problems, not items copied from another site. Code is stored for a person to grade." />
       {tests.error ? <Alert>{tests.error}</Alert> : null}
+      {note ? <p className="mb-3 text-sm text-ok">{note}</p> : null}
+      {previewId ? (
+        <div className="mb-6">
+          {preview.loading || preview.isPending ? <Loading /> : null}
+          {preview.error ? <Alert>{preview.error}</Alert> : null}
+          {preview.data ? <ExamPreview exam={preview.data} onClose={() => setPreviewId(null)} /> : null}
+        </div>
+      ) : null}
+      <h2 className="mb-3 text-xl">Exams</h2>
       {(tests.data ?? []).length === 0 ? <Empty title="No assessments" body="Create a draft below, or open the Northstar demo." /> : null}
-      <ul className="space-y-2">
+      <ul className="grid gap-4 md:grid-cols-2">
         {(tests.data ?? []).map((test: any) => (
-          <li key={String(test.id)} className="rounded-md border border-line bg-surface p-4 text-sm">
-            <span className="text-xl">{String(test.name)}</span>
-            <span className="mt-1 block text-muted">{String(test.published)} published · {String(test.assignments)} assignments</span>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button variant="secondary" type="button" onClick={() => publishAssessment({ data: { slug: companySlug, assessmentId: String(test.id) } }).then(() => refreshPage()).catch((err) => setError(err.message))}>Publish latest draft</Button>
+          <li key={String(test.id)} className={`${examPaper} flex flex-col rounded-[28px] border border-[#d7e1da] p-5`}>
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="text-2xl leading-tight text-[#17211c]">{String(test.name)}</h2>
+              <span className="shrink-0 rounded-full bg-[#cefa90] px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide text-[#14221b]">{Number(test.published) > 0 ? `${String(test.published)} live` : "Draft"}</span>
+            </div>
+            <p className="mt-3 text-sm text-[#44574e]">
+              {String(test.assignments)} assignments
+              {Number(test.duration_seconds) > 0 ? ` · ${Math.round(Number(test.duration_seconds) / 60)} min` : ""}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.14em] text-[#17211c]">
+              <span className="rounded-full border border-[#d7e1da] bg-[#f7fbe9] px-2.5 py-1 text-[#4c6b16]">{test.proctored ? "Proctored" : "Open book"}</span>
+              <span className="rounded-full border border-[#d7e1da] px-2.5 py-1">{test.auto_send ? "Auto-send" : "Manual send"}</span>
+            </div>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Button type="button" onClick={() => { setNote(null); setPreviewId(String(test.id)); }}>Preview</Button>
+              <Button variant="secondary" type="button" onClick={() => publishAssessment({ data: { slug: companySlug, assessmentId: String(test.id) } }).then(() => refreshPage()).catch((err) => setError(err.message))}>Publish</Button>
+              <Button variant="ghost" type="button" onClick={() => updateAssessmentDelivery({ data: { slug: companySlug, assessmentId: String(test.id), autoSend: !test.auto_send } }).then(() => refreshPage()).catch((err) => setError(err.message))}>
+                {test.auto_send ? "Auto-send off" : "Auto-send on"}
+              </Button>
+              <Button variant="ghost" type="button" onClick={() => updateAssessmentDelivery({ data: { slug: companySlug, assessmentId: String(test.id), proctored: !test.proctored } }).then(() => refreshPage()).catch((err) => setError(err.message))}>
+                {test.proctored ? "Proctoring off" : "Proctoring on"}
+              </Button>
+              <Button variant="ghost" type="button" onClick={() => sendAssessmentToFits({ data: { slug: companySlug, assessmentId: String(test.id) } }).then((result) => { setNote(`Sent to ${result.sent} ${result.sent === 1 ? "person" : "people"} whose CV was a fit.`); refreshPage(); }).catch((err) => setError(err.message))}>Send to fits</Button>
               <Button variant="ghost" type="button" onClick={() => archiveAssessment({ data: { slug: companySlug, assessmentId: String(test.id) } }).then(() => refreshPage()).catch((err) => setError(err.message))}>Archive</Button>
             </div>
           </li>
@@ -136,7 +179,7 @@ function Assessments() {
           {(["single", "numeric", "text"] as const).map((kind) => {
             const guide = gradingGuide(kind);
             return (
-              <article key={kind} className="rounded-md border border-line bg-surface p-4 text-sm">
+              <article key={kind} className="rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4 text-sm">
                 <h3 className="text-xl">{guide.title}</h3>
                 <ol className="mt-2 list-decimal space-y-1 pl-4 text-muted">
                   {guide.steps.map((step) => <li key={step}>{step}</li>)}
@@ -146,25 +189,48 @@ function Assessments() {
           })}
         </div>
         <h2 className="mt-8 text-2xl">Question bank</h2>
+        <p className="mt-1 text-sm text-muted">The coding bank is 50 original problems, 25 medium and 25 hard. A timed exam draws one of each. They are not copied from LeetCode or any other site.</p>
         {questions.loading ? <Loading /> : null}
         {questions.error ? <p className="text-sm text-muted">Question authoring is limited to assessment authors. {questions.error}</p> : null}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {(["all", "bank", "other"] as const).map((value) => (
+            <Button key={value} type="button" variant={bankFilter === value ? "secondary" : "ghost"} onClick={() => setBankFilter(value)}>
+              {value === "all" ? "All" : value === "bank" ? "Coding bank" : "Other questions"}
+            </Button>
+          ))}
+        </div>
         <ul className="mt-3 space-y-2">
-          {(questions.data ?? []).map((question: any) => (
-            <li key={String(question.version_id)} className="rounded-md border border-line bg-surface p-3 text-sm">
+          {(questions.data ?? []).filter((question: any) => {
+            const tagged = String(question.tags).startsWith("coding-bank");
+            if (bankFilter === "bank") return tagged;
+            if (bankFilter === "other") return !tagged;
+            return true;
+          }).map((question: any) => (
+            <li key={String(question.version_id)} className={`${examPaper} rounded-[24px] border border-[#d7e1da] p-4 text-sm`}>
               <label className="flex items-start gap-3">
                 <input
                   type="checkbox"
-                  className="mt-1"
+                  className="mt-1 size-4 accent-[var(--color-accent)]"
                   checked={picked.includes(String(question.version_id))}
                   onChange={(event) => {
                     const id = String(question.version_id);
                     setPicked((current) => event.target.checked ? [...current, id] : current.filter((item) => item !== id));
                   }}
                 />
-                <span>
-                  <span className="text-xs uppercase text-muted">{String(question.type)} · v{String(question.version_number)} · {String(question.points)} pt · {String(question.grading?.title ?? "Ungraded")}</span>
-                  <p className="mt-1 whitespace-pre-wrap">{String(question.prompt).slice(0, 280)}</p>
-                  {question.grading?.keySummary ? <p className="mt-2 text-muted">{String(question.grading.keySummary)}</p> : null}
+                <span className="min-w-0 flex-1">
+                  <span className="text-[11px] uppercase tracking-[0.16em] text-[#4c6b16]">{String(question.type)} · v{String(question.version_number)} · {String(question.points)} pt{question.difficulty ? ` · ${String(question.difficulty)}` : ""}</span>
+                  <p className="mt-2 whitespace-pre-wrap text-base leading-relaxed text-[#17211c]">{String(question.prompt).slice(0, 320)}</p>
+                  {Array.isArray(question.options) && question.options.length > 0 ? (
+                    <ul className="mt-3 grid gap-2">
+                      {question.options.map((option: { id: string; label: string }, position: number) => (
+                        <li key={option.id} className="flex items-start gap-3 rounded-2xl border border-[#d7e1da] bg-[#f7faf8] px-3 py-2 text-[#17211c]">
+                          <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-white font-brand text-xs text-[#4c6b16]">{String.fromCharCode(65 + position)}</span>
+                          <span>{option.label}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {question.grading?.keySummary ? <p className="mt-3 text-xs text-[#44574e]">{String(question.grading.keySummary)}</p> : null}
                 </span>
               </label>
             </li>
@@ -185,8 +251,8 @@ function Assessments() {
             <textarea className={`${inputClass} min-h-24 py-2`} value={prompt} onChange={(event) => setPrompt(event.target.value)} required minLength={3} />
           </Field>
           {choice ? (
-            <fieldset className="space-y-2">
-              <legend className="text-sm">Choices and the answer key</legend>
+            <fieldset className={`${examPaper} space-y-2 rounded-[24px] border border-[#d7e1da] p-4`}>
+              <legend className="px-1 text-[11px] uppercase tracking-[0.16em] text-[#4c6b16]">Choices · mark the correct ones</legend>
               {options.map((option, index) => (
                 <div key={option.id} className="flex items-center gap-2">
                   <input
@@ -235,9 +301,17 @@ function Assessments() {
           <h3 className="text-xl">New draft assessment</h3>
           <p className="text-sm text-muted">Check the questions above. Publishing pins those versions. Later edits do not change an assignment that already exists.</p>
           <Field label="Name"><input className={inputClass} value={name} onChange={(event) => setName(event.target.value)} required minLength={2} /></Field>
-          <Field label="Minutes">
+          <Field label="Time limit (minutes)">
             <input className={inputClass} type="number" min={1} max={240} value={minutes} onChange={(event) => setMinutes(Number(event.target.value))} />
           </Field>
+          <label className="flex min-h-11 items-center gap-2 text-sm">
+            <input type="checkbox" checked={proctored} onChange={(event) => setProctored(event.target.checked)} />
+            Proctor the exam (camera on, focus and clipboard noted, no video stored)
+          </label>
+          <label className="flex min-h-11 items-center gap-2 text-sm">
+            <input type="checkbox" checked={autoSend} onChange={(event) => setAutoSend(event.target.checked)} />
+            Send automatically when a CV is a fit
+          </label>
           <Field label="Draw this many questions (blank uses all)">
             <input className={inputClass} type="number" min={1} value={poolPick} onChange={(event) => setPoolPick(event.target.value)} />
           </Field>
@@ -276,7 +350,7 @@ function GradingPreview({
     key: choice ? { correct: correctIds } : type === "numeric" ? { expected } : {},
   });
   return (
-    <aside className="rounded-md border border-line bg-surface p-4 text-sm">
+    <aside className="rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4 text-sm">
       <p className="text-xs uppercase text-muted">How this question will be graded</p>
       <p className="mt-1 text-xl">{preview.title}</p>
       <p className="mt-2">{preview.keySummary}</p>

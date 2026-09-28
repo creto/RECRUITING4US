@@ -40,11 +40,21 @@ function Jobs() {
   return (
     <div>
       <PageTitle title="Jobs" lede="Drafts stay private. Public applications open only after you publish." />
+      <form className="mb-8 flex flex-col gap-3 rounded-[24px] border border-line bg-white p-4 shadow-[0_8px_24px_rgba(20,34,27,0.04)] sm:flex-row sm:items-end" onSubmit={onCreate}>
+        <div className="flex-1">
+          <Field label="New job title">
+            <input className={inputClass} value={title} onChange={(event) => setTitle(event.target.value)} required />
+          </Field>
+        </div>
+        <Button type="submit">Create draft</Button>
+      </form>
+      {error ? <div className="mb-3"><Alert>{error}</Alert></div> : null}
+      <h2 className="mb-3 text-xl">Roles</h2>
       {jobs.length === 0 ? <Empty title="No jobs yet" body="Create a draft, then publish it when the description is ready." /> : null}
       <ul className="space-y-3">
         {jobs.map((job) => (
           <li key={job.id}>
-            <AppLink className="block rounded-md border border-line bg-surface p-4" href={`/app/${companySlug}/jobs/${job.id}`}>
+            <AppLink className="block rounded-[24px] border border-line bg-white p-4 shadow-[0_8px_24px_rgba(20,34,27,0.04)]" href={`/app/${companySlug}/jobs/${job.id}`}>
               <span className="flex items-baseline justify-between gap-3">
                 <span className="text-xl">{job.title}</span>
                 <span className="text-xs uppercase text-muted">{job.status}</span>
@@ -56,15 +66,6 @@ function Jobs() {
           </li>
         ))}
       </ul>
-      <form className="mt-8 flex flex-col gap-3 rounded-md border border-line bg-surface p-4 sm:flex-row sm:items-end" onSubmit={onCreate}>
-        <div className="flex-1">
-          <Field label="New job title">
-            <input className={inputClass} value={title} onChange={(event) => setTitle(event.target.value)} required />
-          </Field>
-        </div>
-        <Button type="submit">Create draft</Button>
-      </form>
-      {error ? <div className="mt-3"><Alert>{error}</Alert></div> : null}
     </div>
   );
 }

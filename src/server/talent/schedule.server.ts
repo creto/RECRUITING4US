@@ -1,14 +1,18 @@
+import { normalizeRuleDraft } from "@/domain/ops";
 import { assertSameSiteRequest } from "@/lib/auth/isolation.server";
 import { buildIcs, canSeeCompensation, canSeePeerFeedback, reportDayWindow, roleHas, zonedLocalToUtc, assertSafeOutboundUrl } from "@/domain/rules";
+import {
+  attributesOrDefault,
+  focusAttributes,
+  rankScoreboard,
+  ratingById,
+  SCOREBOARD_NOTE,
+  submissionError,
+  type ScoreAttribute,
+} from "@/domain/scorecard";
 import { calendarRefreshState } from "@/domain/edge";
 import { allow, audit, db, json, nid, requireActor, requireUser } from "./db.server";
 import { rememberEvent } from "./workflows.server";
-
-const SCORECARD = [
-  { id: "evidence", label: "Evidence for the role" },
-  { id: "collaboration", label: "Collaboration" },
-  { id: "communication", label: "Communication" },
-];
 
 export async function refreshCalendar(userId: string, slug: string) {
   const actor = await requireActor(userId, slug);
@@ -69,6 +73,7 @@ export async function scheduleInterview(
     timezone: string;
     location: string;
     meetingUrl: string;
+    focusIds: string[];
   },
 ) {
   assertSameSiteRequest();
@@ -82,6 +87,14 @@ export async function scheduleInterview(
     select id from applications where id = ${input.applicationId} and company_id = ${actor.companyId} and lifecycle = 'ACTIVE'
   `;
   if (!apps[0]) throw new Error("Not found.");
+  const jobs = await sql<{ scorecard_attributes: unknown }>`
+    select j.scorecard_attributes
+    from applications a
+    join jobs j on j.id = a.job_id and j.company_id = a.company_id
+    where a.id = ${input.applicationId} and a.company_id = ${actor.companyId}
+  `;
+  const focus = focusAttributes(attributesOrDefault(jobs[0]?.scorecard_attributes), input.focusIds);
+  if ("error" in focus) throw new Error(focus.error);
   const clash = await sql<{ id: string }>`
     select id from interviews
     where company_id = ${actor.companyId} and status = 'SCHEDULED'
@@ -92,10 +105,11 @@ export async function scheduleInterview(
   const uid = `${id}@talentflow.example`;
   await sql`
     insert into interviews (
-      id, company_id, application_id, title, starts_at, ends_at, timezone, location, meeting_url, ics_uid
+      id, company_id, application_id, title, starts_at, ends_at, timezone, location, meeting_url, ics_uid, focus_attributes
     ) values (
       ${id}, ${actor.companyId}, ${input.applicationId}, ${input.title.trim()}, ${start.toISOString()},
-      ${end.toISOString()}, ${input.timezone}, ${input.location}, ${input.meetingUrl}, ${uid}
+      ${end.toISOString()}, ${input.timezone}, ${input.location}, ${input.meetingUrl}, ${uid},
+      ${json(focus.attributes)}::jsonb
     )
   `;
   await sql`
@@ -110,12 +124,26 @@ export async function scheduleInterview(
       insert into mail_messages (id, company_id, to_email, subject, body, status, related_id)
       values (
         ${nid()}, ${actor.companyId}, ${people[0].email}, ${"Interview: " + input.title.trim()},
-        ${"A time has been scheduled. Download the calendar file from your portal. External calendars are not connected."},
+        ${"A time was saved in this product. An outside email is queued separately and is not delivered unless a mail provider is configured."},
         'CAPTURED', ${id}
       )
     `;
   }
   await audit(actor, "interview.schedule", "interview", id, "Interview scheduled.");
+  try {
+    const { queueMail } = await import("./platform.server");
+    await queueMail(userId, input.slug, {
+      applicationId: input.applicationId,
+      kind: "INTERVIEW",
+      subject: "Interview for {{job_title}}",
+      body: `Hello {{candidate_name}},\n\n${input.title.trim()} is on the schedule. Open your candidate home for the time. A calendar file is available. An outside calendar is updated only when one is connected.\n\n{{recruiter_name}}`,
+      cc: "",
+      bcc: "",
+      idempotencyKey: `interview:${id}`,
+    });
+  } catch {
+    // The interview is already stored. Mail failure is visible in the delivery log.
+  }
   return { id };
 }
 
@@ -167,13 +195,15 @@ export async function cancelInterview(userId: string, input: { slug: string; int
 
 export async function submitFeedback(
   userId: string,
-  input: { slug: string; interviewId: string; ratings: Record<string, number>; recommendation: string; notes: string; submit: boolean },
+  input: { slug: string; interviewId: string; ratings: Record<string, string>; recommendation: string; notes: string; submit: boolean },
 ) {
   assertSameSiteRequest();
   const actor = await requireActor(userId, input.slug);
   allow(actor, "interview.feedback");
   const sql = await db();
-  const interviews = await sql`select id from interviews where id = ${input.interviewId} and company_id = ${actor.companyId}`;
+  const interviews = await sql<{ focus_attributes: unknown }>`
+    select focus_attributes from interviews where id = ${input.interviewId} and company_id = ${actor.companyId}
+  `;
   if (!interviews[0]) throw new Error("Not found.");
   if (actor.role === "INTERVIEWER") {
     const part = await sql`
@@ -182,11 +212,20 @@ export async function submitFeedback(
     `;
     if (!part[0]) throw new Error("Not found.");
   }
-  for (const dimension of SCORECARD) {
-    const value = input.ratings[dimension.id];
-    if (input.submit && (typeof value !== "number" || value < 0 || value > 4)) {
-      throw new Error("Complete every scorecard dimension before submitting.");
-    }
+  const existing = await sql<{ status: string }>`
+    select status from interview_feedback
+    where interview_id = ${input.interviewId} and company_id = ${actor.companyId} and reviewer_user_id = ${actor.userId}
+  `;
+  if (existing[0]?.status === "SUBMITTED") throw new Error("This scorecard is already submitted.");
+  const attributes = attributesOrDefault(interviews[0].focus_attributes);
+  if (input.submit) {
+    const problem = submissionError({
+      attributes,
+      ratings: input.ratings,
+      recommendation: input.recommendation,
+      notes: input.notes,
+    });
+    if (problem) throw new Error(problem);
   }
   const status = input.submit ? "SUBMITTED" : "DRAFT";
   await sql`
@@ -202,24 +241,150 @@ export async function submitFeedback(
         notes = excluded.notes, submitted_at = excluded.submitted_at
     where interview_feedback.status = 'DRAFT'
   `;
-  return { ok: true, scorecard: SCORECARD };
+  if (input.submit) await audit(actor, "interview.feedback", "interview", input.interviewId, "Scorecard submitted.");
+  return { ok: true };
 }
 
 export async function feedbackFor(userId: string, slug: string, interviewId: string) {
   const actor = await requireActor(userId, slug);
   const sql = await db();
-  const mine = await sql<{ status: string; ratings: Record<string, number>; notes: string; recommendation: string | null }>`
+  const interviews = await sql<{ focus_attributes: unknown }>`
+    select focus_attributes from interviews where id = ${interviewId} and company_id = ${actor.companyId}
+  `;
+  if (!interviews[0]) throw new Error("Not found.");
+  const attributes = attributesOrDefault(interviews[0].focus_attributes);
+  const mine = await sql<{ status: string; ratings: Record<string, string>; notes: string; recommendation: string | null }>`
     select status, ratings, notes, recommendation from interview_feedback
     where interview_id = ${interviewId} and company_id = ${actor.companyId} and reviewer_user_id = ${actor.userId}
   `;
   const released = canSeePeerFeedback(actor.role, mine[0]?.status === "SUBMITTED");
   const all = released
-    ? await sql`
-        select reviewer_user_id, status, ratings, notes, recommendation
-        from interview_feedback where interview_id = ${interviewId} and company_id = ${actor.companyId}
+    ? await sql<{
+      reviewer_user_id: string;
+      status: string;
+      ratings: Record<string, string>;
+      notes: string;
+      recommendation: string | null;
+      reviewer_name: string | null;
+    }>`
+        select f.reviewer_user_id, f.status, f.ratings, f.notes, f.recommendation, u.name as reviewer_name
+        from interview_feedback f
+        left join lateral app_user_identity(f.reviewer_user_id) u on true
+        where f.interview_id = ${interviewId} and f.company_id = ${actor.companyId} and f.status = 'SUBMITTED'
       `
-    : mine;
-  return { mine: mine[0] ?? null, feedback: all, scorecard: SCORECARD, released };
+    : [];
+  return {
+    mine: mine[0] ?? null,
+    feedback: all.filter((row) => row.reviewer_user_id !== actor.userId).map((row) => presentCard(attributes, row)),
+    attributes,
+    released,
+  };
+}
+
+function presentCard(
+  attributes: ScoreAttribute[],
+  row: { reviewer_user_id: string; reviewer_name?: string | null; ratings: Record<string, string> | null; notes: string; recommendation: string | null; interview_title?: string; interview_id?: string },
+) {
+  const ratings = row.ratings && typeof row.ratings === "object" ? row.ratings : {};
+  return {
+    interviewId: row.interview_id ?? "",
+    reviewerId: row.reviewer_user_id,
+    reviewerName: row.reviewer_name || "Interviewer",
+    interviewTitle: row.interview_title ?? "",
+    recommendation: row.recommendation ?? "",
+    recommendationLabel: ratingById(row.recommendation ?? "")?.label ?? "Not rated",
+    notes: row.notes,
+    attributes: attributes.map((attribute) => ({
+      id: attribute.id,
+      label: attribute.label,
+      rating: ratings[attribute.id] ?? "",
+      ratingLabel: ratingById(ratings[attribute.id] ?? "")?.label ?? "Not rated",
+    })),
+  };
+}
+
+export async function listScoreboard(userId: string, slug: string) {
+  const actor = await requireActor(userId, slug);
+  allow(actor, "interview.feedback");
+  const staff = canSeePeerFeedback(actor.role, true);
+  const sql = await db();
+  const rows = await sql<{
+    application_id: string;
+    candidate_name: string;
+    job_title: string;
+    interview_id: string;
+    interview_title: string;
+    focus_attributes: unknown;
+    recommendation: string | null;
+    ratings: Record<string, string> | null;
+    notes: string | null;
+    reviewer_user_id: string | null;
+    reviewer_name: string | null;
+  }>`
+    select a.id as application_id, c.name as candidate_name, j.title as job_title,
+      i.id as interview_id, i.title as interview_title, i.focus_attributes,
+      f.recommendation, f.ratings, f.notes, f.reviewer_user_id, u.name as reviewer_name
+    from interviews i
+    join applications a on a.id = i.application_id and a.company_id = i.company_id
+    join candidates c on c.id = a.candidate_id and c.company_id = a.company_id
+    join jobs j on j.id = a.job_id and j.company_id = a.company_id
+    left join interview_feedback f
+      on f.interview_id = i.id and f.company_id = i.company_id and f.status = 'SUBMITTED'
+    left join lateral app_user_identity(f.reviewer_user_id) u on f.reviewer_user_id is not null
+    where i.company_id = ${actor.companyId} and i.status <> 'CANCELLED'
+      and (
+        ${staff} = true
+        or exists (
+          select 1 from interview_participants p
+          where p.interview_id = i.id and p.company_id = i.company_id and p.user_id = ${actor.userId}
+        )
+      )
+    order by c.name, i.starts_at
+  `;
+  const submittedInterviews = new Set(
+    rows.filter((row) => row.reviewer_user_id === actor.userId).map((row) => row.interview_id),
+  );
+  const grouped = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const list = grouped.get(row.application_id) ?? [];
+    list.push(row);
+    grouped.set(row.application_id, list);
+  }
+  const prepared = [...grouped.entries()].map(([applicationId, list]) => {
+    const visible = list.filter((row) => row.reviewer_user_id && (staff || submittedInterviews.has(row.interview_id)));
+    const waiting = !staff && list.some((row) => !submittedInterviews.has(row.interview_id));
+    return {
+      applicationId,
+      name: list[0]?.candidate_name ?? "Candidate",
+      jobTitle: list[0]?.job_title ?? "",
+      waiting,
+      recommendations: waiting ? [] : visible.map((row) => row.recommendation ?? "").filter((id) => ratingById(id)),
+      cards: visible.map((row) => presentCard(attributesOrDefault(row.focus_attributes), {
+        reviewer_user_id: row.reviewer_user_id ?? "",
+        reviewer_name: row.reviewer_name,
+        ratings: row.ratings,
+        notes: row.notes ?? "",
+        recommendation: row.recommendation,
+        interview_title: row.interview_title,
+        interview_id: row.interview_id,
+      })),
+    };
+  });
+  const ranked = rankScoreboard(prepared);
+  return {
+    note: SCOREBOARD_NOTE,
+    rows: ranked.map((row) => ({
+      applicationId: row.applicationId,
+      name: row.name,
+      jobTitle: row.jobTitle,
+      rank: row.rank,
+      tied: row.tied,
+      average: row.average,
+      submitted: row.submitted,
+      waiting: row.waiting,
+      cards: row.cards,
+    })),
+  };
 }
 
 export async function createSlot(userId: string, input: { slug: string; localStart: string; localEnd: string; timezone: string }) {
@@ -393,12 +558,26 @@ export async function sendOffer(userId: string, input: { slug: string; offerId: 
       insert into mail_messages (id, company_id, to_email, subject, body, status, related_id)
       values (
         ${nid()}, ${actor.companyId}, ${people[0].email}, 'An offer is ready for your review',
-        'Open the candidate portal to read the exact revision. This message was captured locally.',
+        'Open the candidate portal to read the exact revision. This copy stays in the product. Outside delivery is a separate queued message.',
         'CAPTURED', ${input.offerId}
       )
     `;
   }
   await rememberEvent(actor.companyId, "OFFER_SENT", input.offerId, { applicationId: offer.application_id });
+  try {
+    const { queueMail } = await import("./platform.server");
+    await queueMail(userId, input.slug, {
+      applicationId: offer.application_id,
+      kind: "OFFER",
+      subject: "An offer is ready, {{candidate_name}}",
+      body: "Hello {{candidate_name}},\n\nAn offer for {{job_title}} is ready in your candidate home. Read that revision before you respond.\n\n{{company_name}}",
+      cc: "",
+      bcc: "",
+      idempotencyKey: `offer:${input.offerId}:${offer.current_revision}`,
+    });
+  } catch {
+    // The offer is already marked sent. Delivery state is on the mail queue.
+  }
   return { ok: true };
 }
 
@@ -553,6 +732,12 @@ export async function getReports(userId: string, slug: string, from?: string) {
 export async function listRules(userId: string, slug: string) {
   const actor = await requireActor(userId, slug);
   allow(actor, "workflow.manage");
+  try {
+    const { ensureOpsDefaults } = await import("./ops.server");
+    await ensureOpsDefaults(actor.companyId);
+  } catch {
+    // Existing rules still list if the operations tables are not ready yet.
+  }
   const sql = await db();
   return sql`
     select id, name, enabled, trigger_name, conditions, actions, version
@@ -575,22 +760,13 @@ export async function upsertRule(
   assertSameSiteRequest();
   const actor = await requireActor(userId, input.slug);
   allow(actor, "workflow.manage");
-  const allowedTriggers = new Set([
-    "APPLICATION_SUBMITTED",
-    "STAGE_CHANGED",
-    "ASSESSMENT_ASSIGNED",
-    "ASSESSMENT_COMPLETED",
-    "REVIEW_COMPLETED",
-    "OFFER_SENT",
-    "OFFER_RESPONDED",
-    "LIFECYCLE_CHANGED",
-  ]);
-  if (!allowedTriggers.has(input.trigger)) throw new Error("That trigger is not supported.");
+  const draft = normalizeRuleDraft({ trigger: input.trigger, conditions: input.conditions, actions: input.actions });
+  if ("error" in draft) throw new Error(draft.error);
   const sql = await db();
   if (input.id) {
     await sql`
-      update workflow_rules set name = ${input.name}, enabled = ${input.enabled}, trigger_name = ${input.trigger},
-        conditions = ${JSON.stringify(input.conditions)}::jsonb, actions = ${JSON.stringify(input.actions)}::jsonb,
+      update workflow_rules set name = ${input.name}, enabled = ${input.enabled}, trigger_name = ${draft.trigger},
+        conditions = ${JSON.stringify(draft.conditions)}::jsonb, actions = ${JSON.stringify(draft.actions)}::jsonb,
         version = version + 1
       where id = ${input.id} and company_id = ${actor.companyId}
     `;
@@ -600,8 +776,8 @@ export async function upsertRule(
   await sql`
     insert into workflow_rules (id, company_id, name, enabled, trigger_name, conditions, actions)
     values (
-      ${id}, ${actor.companyId}, ${input.name}, ${input.enabled}, ${input.trigger},
-      ${JSON.stringify(input.conditions)}::jsonb, ${JSON.stringify(input.actions)}::jsonb
+      ${id}, ${actor.companyId}, ${input.name}, ${input.enabled}, ${draft.trigger},
+      ${JSON.stringify(draft.conditions)}::jsonb, ${JSON.stringify(draft.actions)}::jsonb
     )
   `;
   return { id };

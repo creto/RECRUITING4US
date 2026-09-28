@@ -33,10 +33,18 @@ describe("isolated runner", () => {
     assert.match(result.outputExcerpt, /\[0,6,11\]/);
   });
 
-  it("does not let the program read the filesystem", async () => {
+  it("does not let the program read the filesystem, open a socket, spawn, or see secrets", async () => {
     const result = await runIsolated(`require("fs").readFileSync("/etc/passwd","utf8")`);
     assert.equal(result.status, "FAILED");
     assert.doesNotMatch(result.outputExcerpt, /root:/);
+    const net = await runIsolated(`require("net").connect(443,"1.1.1.1").on("connect",()=>console.log("NET_OK")).on("error",(e)=>{console.log("NET_ERR"); process.exit(1)});`);
+    assert.match(net.outputExcerpt, /NET_ERR/);
+    assert.doesNotMatch(net.outputExcerpt, /NET_OK/);
+    const child = await runIsolated(`console.log(require("child_process").execSync("id").toString())`);
+    assert.equal(child.status, "FAILED");
+    assert.doesNotMatch(child.outputExcerpt, /uid=/);
+    const secret = await runIsolated(`console.log(process.env.XAI_API_KEY || process.env.DATABASE_URL || "hidden")`);
+    assert.match(secret.outputExcerpt, /hidden/);
   });
 
   it("stops a runaway program and truncates huge output", { timeout: 10000 }, async () => {
@@ -121,5 +129,27 @@ describe("isolated runner", () => {
     assert.equal(wrong.status, "JUDGED");
     assert.equal(answersMatch(wrong.results[0]?.value, cases[0]?.expected), false);
     assert.equal(JSON.stringify(good).includes("HIDDEN_SENTINEL"), false);
+  });
+
+  it("keeps compile failures, memory pressure, and host files out of a score", async () => {
+    const previous = process.env.MAIL_SMTP_PASSWORD;
+    process.env.MAIL_SMTP_PASSWORD = "super-secret-mail";
+    const leaked = await runIsolated("console.log(process.env.MAIL_SMTP_PASSWORD || 'hidden')");
+    if (previous == null) delete process.env.MAIL_SMTP_PASSWORD;
+    else process.env.MAIL_SMTP_PASSWORD = previous;
+    assert.match(leaked.outputExcerpt, /hidden/);
+    assert.doesNotMatch(leaked.outputExcerpt, /super-secret-mail/);
+
+    const workspace = await runIsolated(`try { console.log(require("fs").readFileSync("/workspace/package.json","utf8").slice(0,12)); } catch (e) { console.log("NO_WS"); }`);
+    assert.match(workspace.outputExcerpt, /NO_WS/);
+    assert.doesNotMatch(workspace.outputExcerpt, /app-builder/);
+
+    const compiled = await judgeIsolated("function (", "solve", [[[1]]]);
+    assert.equal(compiled.status, "COMPILE");
+    assert.equal(JSON.stringify(compiled).includes("\"score\":0"), false);
+
+    const heavy = await judgeIsolated("function solve(){ const bag=[]; while(true) bag.push(bag); return 1; }", "solve", [[]]);
+    assert.notEqual(heavy.status, "JUDGED");
+    assert.ok(heavy.status === "INFRA" || heavy.status === "TIMED_OUT" || heavy.status === "OUTPUT");
   });
 });

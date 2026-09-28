@@ -152,6 +152,15 @@ async function perform(event: EventRow, action: RuleRow["actions"][number]): Pro
     if (!attemptId) return "No attempt on this event.";
     return ensureReview(event.company_id, attemptId, applicationId);
   }
+  if (action.type === "pipe_analytics") {
+    const { recordWorkflowFact } = await import("./ops.server");
+    return recordWorkflowFact(event.company_id, {
+      eventType: event.event_type,
+      applicationId,
+      basisPoints: event.payload.basisPoints,
+      scoreStatus: event.payload.scoreStatus,
+    });
+  }
   if (!applicationId) return "No application on this event.";
   const apps = await sql<{ lifecycle: string; candidate_id: string; job_id: string }>`
     select lifecycle, candidate_id, job_id from applications
@@ -216,6 +225,10 @@ async function perform(event: EventRow, action: RuleRow["actions"][number]): Pro
       )
     `;
     return "Email captured locally. It was not sent to the public internet.";
+  }
+  if (action.type === "send_text") {
+    const { captureTextForApplication } = await import("./ops.server");
+    return captureTextForApplication(event.company_id, applicationId, action.body ?? "");
   }
   return "Unsupported action skipped.";
 }

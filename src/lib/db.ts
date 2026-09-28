@@ -260,11 +260,11 @@ async function createPgliteSql(): Promise<Sql> {
   const pg = await globalRef.__pgliteInstance__;
 
   // Apply migrations/ (the single schema source) so preview matches production.
-  // SQL is inlined by the bundler via import.meta.glob (no runtime fs); applied
-  // files are tracked in _migrations. The glob does not descend, so the opt-in
-  // auth schema under migrations/auth/ stays out. A reload after a new SQL file
-  // applies that file to the existing database (including the embed color columns), and
-  // passes are serialized so concurrent callers never double-apply.
+  // SQL is inlined by the bundler via import.meta.glob (no runtime fs). A new
+  // file, including the gap-closure migration, is applied on the next reload.
+  // Applied files are tracked in _migrations. The glob does not descend, so the
+  // opt-in auth schema under migrations/auth/ stays out. Passes are serialized
+  // so concurrent callers never double-apply.
   const migrate = async (): Promise<void> => {
     const migrations = import.meta.glob("/migrations/*.sql", {
       query: "?raw",

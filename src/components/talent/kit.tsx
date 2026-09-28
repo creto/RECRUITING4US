@@ -144,7 +144,7 @@ export function Loading() {
 
 export function Empty({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-md border border-dashed border-line bg-surface p-6">
+    <div className="rounded-[24px] border border-dashed border-line bg-surface p-6">
       <h2 className="text-xl text-ink">{title}</h2>
       <p className="mt-2 text-sm text-muted">{body}</p>
     </div>
@@ -153,7 +153,7 @@ export function Empty({ title, body }: { title: string; body: string }) {
 
 export function Alert({ children }: { children: ReactNode }) {
   return (
-    <p role="alert" className="rounded-md border border-line bg-surface px-3 py-2 text-sm text-danger">
+    <p role="alert" className="rounded-2xl border border-[#f3c7c3] bg-[#fff6f5] px-4 py-3 text-sm text-danger">
       {children}
     </p>
   );
@@ -168,13 +168,13 @@ export function Button({
     variant === "primary"
       ? "bg-accent text-accent-ink"
       : variant === "danger"
-        ? "bg-danger text-accent-ink"
+        ? "bg-danger text-white"
         : variant === "ghost"
           ? "bg-transparent text-ink"
           : "border border-line bg-surface text-ink";
   return (
     <button
-      className={`inline-flex min-h-11 items-center justify-center rounded-md px-4 text-sm font-medium disabled:opacity-50 ${look} ${className}`}
+      className={`inline-flex min-h-11 items-center justify-center rounded-full px-5 text-sm font-medium disabled:opacity-50 ${look} ${className}`}
       {...props}
     />
   );
@@ -190,7 +190,7 @@ export function Field({ label, children }: { label: string; children: ReactNode 
 }
 
 export const inputClass =
-  "min-h-11 w-full rounded-md border border-line bg-bg px-3 text-sm text-ink outline-none focus-visible:border-leaf";
+  "min-h-11 w-full rounded-2xl border border-line bg-white px-3 text-sm text-ink outline-none focus-visible:border-accent";
 
 export function when(iso: string | null | undefined, timeZone = "UTC") {
   if (!iso) return "—";
@@ -232,35 +232,72 @@ export function money(minor: number | null, currency = "USD") {
 }
 
 const NAV = [
-  ["", "Dashboard"],
-  ["/jobs", "Jobs"],
-  ["/candidates", "Candidates"],
-  ["/assessments", "Assessments"],
-  ["/reviews", "Reviews"],
-  ["/interviews", "Interviews"],
-  ["/offers", "Offers"],
-  ["/reports", "Reports"],
-  ["/automations", "Automations"],
-  ["/settings", "Settings"],
+  {
+    label: "Hiring",
+    items: [
+      ["", "Dashboard"],
+      ["/jobs", "Jobs"],
+      ["/candidates", "Candidates"],
+    ],
+  },
+  {
+    label: "Evaluate",
+    items: [
+      ["/assessments", "Assessments"],
+      ["/questions", "Code bank"],
+      ["/reviews", "Reviews"],
+      ["/interviews", "Interviews"],
+      ["/sandboxes", "Sandboxes"],
+    ],
+  },
+  {
+    label: "Decide",
+    items: [
+      ["/offers", "Offers"],
+      ["/plans", "Hiring plans"],
+      ["/onboarding", "Onboarding"],
+    ],
+  },
+  {
+    label: "Reach",
+    items: [
+      ["/mail", "Mail"],
+      ["/inbox", "Delivery"],
+      ["/crm", "Sourcing"],
+      ["/calendar", "Scheduling"],
+    ],
+  },
+  {
+    label: "Operate",
+    items: [
+      ["/reports", "Reports"],
+      ["/automations", "Automations"],
+      ["/integrity", "Integrity"],
+      ["/connectors", "Connectors"],
+      ["/settings", "Settings"],
+    ],
+  },
 ] as const;
 
 export function Shell({
   slug,
   name,
   role,
+  theme,
   children,
 }: {
   slug: string;
   name: string;
   role: string;
+  theme?: Record<string, string>;
   children: ReactNode;
 }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   return (
-    <div className="min-h-screen bg-bg text-ink md:grid md:grid-cols-[220px_1fr]">
-      <a href="#workspace-main" className="absolute left-3 top-3 z-50 -translate-y-24 rounded-md bg-accent px-3 py-2 text-accent-ink focus:translate-y-0">Skip to content</a>
-      <aside className="bg-sidebar text-sidebar-fg md:min-h-screen">
-        <div className="flex items-center justify-between gap-3 px-4 py-4 md:block">
+    <div className="min-h-screen bg-bg text-ink md:grid md:grid-cols-[240px_1fr]" style={theme}>
+      <a href="#workspace-main" className="absolute left-3 top-3 z-50 -translate-y-24 rounded-full bg-accent px-3 py-2 text-accent-ink focus:translate-y-0">Skip to content</a>
+      <aside className="border-b border-line bg-sidebar text-sidebar-fg md:sticky md:top-0 md:h-screen md:overflow-y-auto md:border-b-0 md:border-r">
+        <div className="flex items-center justify-between gap-3 px-4 py-5 md:block">
           <Link to="/app" className="block max-w-full overflow-hidden text-sidebar-fg">
             <Wordmark />
           </Link>
@@ -269,22 +306,29 @@ export function Shell({
           </div>
         </div>
         <p className="px-4 text-sm text-sidebar-muted">{name}</p>
-        <p className="px-4 pb-3 text-xs uppercase tracking-wide text-sidebar-muted">{role.replaceAll("_", " ")}</p>
-        <nav className="flex gap-1 overflow-x-auto px-2 pb-3 md:block md:space-y-1 md:overflow-visible" aria-label="Workspace">
-          {NAV.map(([path, label]) => {
-            const href = `/app/${slug}${path}`;
-            const active = path === "" ? pathname === href : pathname.startsWith(href);
-            return (
-              <AppLink
-                key={path}
-                href={href}
-                className={`block min-h-11 whitespace-nowrap rounded-md px-3 py-2 text-sm ${active ? "bg-accent text-accent-ink" : "text-sidebar-fg"}`}
-                aria-current={active ? "page" : undefined}
-              >
-                {label}
-              </AppLink>
-            );
-          })}
+        <p className="px-4 pb-3 text-[11px] uppercase tracking-[0.16em] text-sidebar-muted">{role.replaceAll("_", " ")}</p>
+        <nav className="flex gap-4 overflow-x-auto px-3 pb-3 md:block md:space-y-5 md:overflow-visible" aria-label="Workspace">
+          {NAV.map((group) => (
+            <div key={group.label}>
+              <p className="mb-1 hidden px-3 text-[11px] font-medium uppercase tracking-[0.16em] text-sidebar-muted md:block">{group.label}</p>
+              <div className="flex gap-1 md:block md:space-y-1">
+                {group.items.map(([path, label]) => {
+                  const href = `/app/${slug}${path}`;
+                  const active = path === "" ? pathname === href : pathname.startsWith(href);
+                  return (
+                    <AppLink
+                      key={path}
+                      href={href}
+                      className={`block min-h-10 whitespace-nowrap rounded-full px-3 py-2 text-sm ${active ? "bg-accent text-accent-ink" : "text-sidebar-fg"}`}
+                      aria-current={active ? "page" : undefined}
+                    >
+                      {label}
+                    </AppLink>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
         <div className="hidden space-y-2 px-4 py-4 text-sm md:block">
           <AppLink className="block text-sidebar-muted" href={`/careers/${slug}`}>Public careers</AppLink>
@@ -296,7 +340,7 @@ export function Shell({
           <AppLink href={`/careers/${slug}`}>Careers</AppLink>
           <AppLink href="/candidate">Portal</AppLink>
         </div>
-        <main id="workspace-main" className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+        <main id="workspace-main" className="mx-auto max-w-6xl px-4 py-8">{children}</main>
       </div>
     </div>
   );
@@ -306,7 +350,7 @@ export function Wordmark({ className = "" }: { className?: string }) {
   return (
     <span className={`flex max-w-full flex-col items-start gap-1 ${className}`}>
       <img src="/mark.png" alt="" width={72} height={40} className="h-6 w-auto max-w-16" />
-      <span className="font-brand max-w-full text-sm uppercase leading-none tracking-wide text-lime">RECRUIT4US</span>
+      <span className="font-brand max-w-full text-sm uppercase leading-none tracking-wide text-ink">RECRUIT4US</span>
     </span>
   );
 }
@@ -322,11 +366,21 @@ export function BrandBar() {
   );
 }
 
+export function Section({ title, lede, children }: { title: string; lede?: string; children: ReactNode }) {
+  return (
+    <section className="mt-8">
+      <h2 className="text-xl">{title}</h2>
+      {lede ? <p className="mt-1 max-w-2xl text-sm text-muted">{lede}</p> : null}
+      <div className="mt-3">{children}</div>
+    </section>
+  );
+}
+
 export function PageTitle({ title, lede }: { title: string; lede?: string }) {
   return (
     <header className="mb-6">
       <h1 className="text-3xl text-ink">{title}</h1>
-      {lede ? <p className="mt-2 max-w-2xl text-sm text-muted">{lede}</p> : null}
+      {lede ? <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">{lede}</p> : null}
     </header>
   );
 }

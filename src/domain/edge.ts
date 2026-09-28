@@ -55,11 +55,11 @@ export function calendarRefreshState(input: {
   return { status: "CONNECTED", secret: null, error: "" };
 }
 
-export function runnerAvailability(): { available: true; mode: "local-process"; reason: string } {
+export function runnerAvailability(): { available: true; mode: "network-namespace"; reason: string } {
   return {
     available: true,
-    mode: "local-process",
+    mode: "network-namespace",
     reason:
-      "Sample runs use a separate process with filesystem access denied, a short timeout, and truncated output. No remote runner key is configured, so this is not a virtual machine. Output is evidence, not a score.",
+      "JavaScript runs in a separate process inside a network namespace, with Node's permission model denying files, child processes, and workers. Memory and CPU are capped. This is not a hypervisor and not a remote judge. A timeout or infrastructure failure is not a score.",
   };
 }

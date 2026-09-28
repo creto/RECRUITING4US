@@ -8,8 +8,15 @@ export type EmbedTheme = {
 export const DEFAULT_EMBED_THEME: EmbedTheme = {
   background: "#ffffff",
   ink: "#14221b",
-  accent: "#036145",
-  accentInk: "#ffffff",
+  accent: "#cefa90",
+  accentInk: "#14221b",
+};
+
+export const PRODUCT_THEME: EmbedTheme = {
+  background: "#f4f7f5",
+  ink: "#14221b",
+  accent: "#cefa90",
+  accentInk: "#14221b",
 };
 
 export const EMBED_HEX = /^#[0-9a-fA-F]{6}$/;
@@ -66,4 +73,34 @@ export function embedCssVars(input?: Partial<EmbedTheme> | null): Record<string,
     "--color-accent": theme.accent,
     "--color-accent-ink": theme.accentInk,
   };
+}
+
+/** Careers page and the company workspace. The sign-in page stays the product colors. */
+export function companyCssVars(input?: Partial<EmbedTheme> | null): Record<string, string> {
+  const theme = embedTheme(input);
+  const light = luminance(theme.background) > 0.55;
+  return {
+    ...embedCssVars(theme),
+    "--color-bg": light ? "#f4f7f5" : theme.background,
+    "--color-surface": light ? "#ffffff" : mix(theme.ink, theme.background, 0.08),
+    "--color-sidebar": light ? "#ffffff" : mix(theme.ink, theme.background, 0.92),
+    "--color-sidebar-fg": light ? theme.ink : theme.background,
+    "--color-sidebar-muted": light ? theme.muted : mix(theme.background, theme.ink, 0.55),
+  };
+}
+
+/** WCAG contrast. Below 4.5, body text on that background is hard to read. */
+export function contrastRatio(a: string, b: string): number {
+  const left = luminance(normalizeHex(a, "#000000"));
+  const right = luminance(normalizeHex(b, "#ffffff"));
+  const [hi, lo] = left > right ? [left, right] : [right, left];
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+function luminance(hex: string): number {
+  const [r, g, b] = channels(hex).map((channel) => {
+    const value = channel / 255;
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }

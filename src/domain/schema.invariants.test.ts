@@ -17,6 +17,16 @@ async function fresh() {
   const rows = await readFile(new URL("../../migrations/0009_application_rows.sql", import.meta.url), "utf8");
   const identity = await readFile(new URL("../../migrations/0010_user_identity.sql", import.meta.url), "utf8");
   const embed = await readFile(new URL("../../migrations/0011_embed_theme.sql", import.meta.url), "utf8");
+  const proctor = await readFile(new URL("../../migrations/0012_proctor_bank.sql", import.meta.url), "utf8");
+  const ops = await readFile(new URL("../../migrations/0013_ops.sql", import.meta.url), "utf8");
+  const personality = await readFile(new URL("../../migrations/0014_personality.sql", import.meta.url), "utf8");
+  const ranks = await readFile(new URL("../../migrations/0015_pipeline_ranks.sql", import.meta.url), "utf8");
+  const page = await readFile(new URL("../../migrations/0016_company_page.sql", import.meta.url), "utf8");
+  const index = await readFile(new URL("../../migrations/0017_cv_index.sql", import.meta.url), "utf8");
+  const scorecards = await readFile(new URL("../../migrations/0018_scorecards.sql", import.meta.url), "utf8");
+  const mail = await readFile(new URL("../../migrations/0019_mail_suite.sql", import.meta.url), "utf8");
+  const expansion = await readFile(new URL("../../migrations/0020_platform_expansion.sql", import.meta.url), "utf8");
+  const gaps = await readFile(new URL("../../migrations/0021_gaps.sql", import.meta.url), "utf8");
   await pg.exec(auth);
   await pg.exec(base);
   await pg.exec(extra);
@@ -28,6 +38,16 @@ async function fresh() {
   await pg.exec(rows);
   await pg.exec(identity);
   await pg.exec(embed);
+  await pg.exec(proctor);
+  await pg.exec(ops);
+  await pg.exec(personality);
+  await pg.exec(ranks);
+  await pg.exec(page);
+  await pg.exec(index);
+  await pg.exec(scorecards);
+  await pg.exec(mail);
+  await pg.exec(expansion);
+  await pg.exec(gaps);
   await pg.query("select set_config('app.company_id', 'co-a', false)");
   await pg.exec(`
     insert into companies (id, name, slug, created_by) values

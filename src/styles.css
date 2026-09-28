@@ -5,19 +5,20 @@
 @theme {
   --font-sans: "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Oswald Variable", ui-sans-serif, system-ui, sans-serif;
-  --color-bg: #000000;
-  --color-surface: #07110c;
-  --color-ink: #f4f8ee;
-  --color-muted: #8eae8a;
-  --color-line: #143026;
-  --color-accent: #78dd55;
-  --color-accent-ink: #04140c;
-  --color-sidebar: #000000;
-  --color-sidebar-fg: #d0fa8e;
-  --color-sidebar-muted: #7dba86;
-  --color-danger: #ff8d86;
-  --color-warn: #f0c56a;
-  --color-ok: #78dd55;
+  --color-bg: #f4f7f5;
+  --color-surface: #ffffff;
+  --color-ink: #14221b;
+  --color-muted: #4d5f57;
+  --color-line: #d7e2db;
+  --color-accent: #cefa90;
+  --color-accent-ink: #14221b;
+  --color-link: #4c6b16;
+  --color-sidebar: #ffffff;
+  --color-sidebar-fg: #14221b;
+  --color-sidebar-muted: #5c6f67;
+  --color-danger: #b42318;
+  --color-warn: #8a5a00;
+  --color-ok: #cefa90;
   --color-forest: #036145;
   --color-leaf: #04a764;
   --color-spring: #78dd55;
@@ -42,7 +43,7 @@
   }
   button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
   :focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid #4c6b16;
     outline-offset: 2px;
   }
   @media (prefers-reduced-motion: reduce) {

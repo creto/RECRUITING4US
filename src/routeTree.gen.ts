@@ -13,20 +13,34 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AppCompanySlugRouteRouteImport } from './routes/app/$companySlug/route'
+import { Route as BookTokenRouteImport } from './routes/book/$token'
 import { Route as CandidateIndexRouteImport } from './routes/candidate/index'
+import { Route as CodeTokenRouteImport } from './routes/code/$token'
 import { Route as InviteTokenRouteImport } from './routes/invite/$token'
+import { Route as LiveTokenRouteImport } from './routes/live/$token'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiHealthLiveRouteImport } from './routes/api/health/live'
 import { Route as ApiHealthReadyRouteImport } from './routes/api/health/ready'
+import { Route as ApiMailEventsRouteImport } from './routes/api/mail/events'
 import { Route as ApiProviderCallbackRouteImport } from './routes/api/provider/callback'
 import { Route as AppCompanySlugIndexRouteImport } from './routes/app/$companySlug/index'
 import { Route as AppCompanySlugAssessmentsRouteImport } from './routes/app/$companySlug/assessments'
 import { Route as AppCompanySlugAutomationsRouteImport } from './routes/app/$companySlug/automations'
+import { Route as AppCompanySlugCalendarRouteImport } from './routes/app/$companySlug/calendar'
 import { Route as AppCompanySlugCandidatesRouteImport } from './routes/app/$companySlug/candidates'
+import { Route as AppCompanySlugConnectorsRouteImport } from './routes/app/$companySlug/connectors'
+import { Route as AppCompanySlugCrmRouteImport } from './routes/app/$companySlug/crm'
+import { Route as AppCompanySlugInboxRouteImport } from './routes/app/$companySlug/inbox'
+import { Route as AppCompanySlugIntegrityRouteImport } from './routes/app/$companySlug/integrity'
 import { Route as AppCompanySlugInterviewsRouteImport } from './routes/app/$companySlug/interviews'
+import { Route as AppCompanySlugMailRouteImport } from './routes/app/$companySlug/mail'
 import { Route as AppCompanySlugOffersRouteImport } from './routes/app/$companySlug/offers'
+import { Route as AppCompanySlugOnboardingRouteImport } from './routes/app/$companySlug/onboarding'
+import { Route as AppCompanySlugPlansRouteImport } from './routes/app/$companySlug/plans'
+import { Route as AppCompanySlugQuestionsRouteImport } from './routes/app/$companySlug/questions'
 import { Route as AppCompanySlugReportsRouteImport } from './routes/app/$companySlug/reports'
 import { Route as AppCompanySlugReviewsRouteImport } from './routes/app/$companySlug/reviews'
+import { Route as AppCompanySlugSandboxesRouteImport } from './routes/app/$companySlug/sandboxes'
 import { Route as AppCompanySlugSettingsRouteImport } from './routes/app/$companySlug/settings'
 import { Route as CandidateApplicationsApplicationIdRouteImport } from './routes/candidate/applications/$applicationId'
 import { Route as CandidateAttemptsAttemptIdRouteImport } from './routes/candidate/attempts/$attemptId'
@@ -59,14 +73,29 @@ const AppCompanySlugRouteRoute = AppCompanySlugRouteRouteImport.update({
   path: '/app/$companySlug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BookTokenRoute = BookTokenRouteImport.update({
+  id: '/book/$token',
+  path: '/book/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CandidateIndexRoute = CandidateIndexRouteImport.update({
   id: '/candidate/',
   path: '/candidate/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CodeTokenRoute = CodeTokenRouteImport.update({
+  id: '/code/$token',
+  path: '/code/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InviteTokenRoute = InviteTokenRouteImport.update({
   id: '/invite/$token',
   path: '/invite/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LiveTokenRoute = LiveTokenRouteImport.update({
+  id: '/live/$token',
+  path: '/live/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
@@ -82,6 +111,11 @@ const ApiHealthLiveRoute = ApiHealthLiveRouteImport.update({
 const ApiHealthReadyRoute = ApiHealthReadyRouteImport.update({
   id: '/api/health/ready',
   path: '/api/health/ready',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMailEventsRoute = ApiMailEventsRouteImport.update({
+  id: '/api/mail/events',
+  path: '/api/mail/events',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiProviderCallbackRoute = ApiProviderCallbackRouteImport.update({
@@ -106,21 +140,68 @@ const AppCompanySlugAutomationsRoute =
     path: '/automations',
     getParentRoute: () => AppCompanySlugRouteRoute,
   } as any)
+const AppCompanySlugCalendarRoute = AppCompanySlugCalendarRouteImport.update({
+  id: '/calendar',
+  path: '/calendar',
+  getParentRoute: () => AppCompanySlugRouteRoute,
+} as any)
 const AppCompanySlugCandidatesRoute =
   AppCompanySlugCandidatesRouteImport.update({
     id: '/candidates',
     path: '/candidates',
     getParentRoute: () => AppCompanySlugRouteRoute,
   } as any)
+const AppCompanySlugConnectorsRoute =
+  AppCompanySlugConnectorsRouteImport.update({
+    id: '/connectors',
+    path: '/connectors',
+    getParentRoute: () => AppCompanySlugRouteRoute,
+  } as any)
+const AppCompanySlugCrmRoute = AppCompanySlugCrmRouteImport.update({
+  id: '/crm',
+  path: '/crm',
+  getParentRoute: () => AppCompanySlugRouteRoute,
+} as any)
+const AppCompanySlugInboxRoute = AppCompanySlugInboxRouteImport.update({
+  id: '/inbox',
+  path: '/inbox',
+  getParentRoute: () => AppCompanySlugRouteRoute,
+} as any)
+const AppCompanySlugIntegrityRoute = AppCompanySlugIntegrityRouteImport.update({
+  id: '/integrity',
+  path: '/integrity',
+  getParentRoute: () => AppCompanySlugRouteRoute,
+} as any)
 const AppCompanySlugInterviewsRoute =
   AppCompanySlugInterviewsRouteImport.update({
     id: '/interviews',
     path: '/interviews',
     getParentRoute: () => AppCompanySlugRouteRoute,
   } as any)
+const AppCompanySlugMailRoute = AppCompanySlugMailRouteImport.update({
+  id: '/mail',
+  path: '/mail',
+  getParentRoute: () => AppCompanySlugRouteRoute,
+} as any)
 const AppCompanySlugOffersRoute = AppCompanySlugOffersRouteImport.update({
   id: '/offers',
   path: '/offers',
+  getParentRoute: () => AppCompanySlugRouteRoute,
+} as any)
+const AppCompanySlugOnboardingRoute =
+  AppCompanySlugOnboardingRouteImport.update({
+    id: '/onboarding',
+    path: '/onboarding',
+    getParentRoute: () => AppCompanySlugRouteRoute,
+  } as any)
+const AppCompanySlugPlansRoute = AppCompanySlugPlansRouteImport.update({
+  id: '/plans',
+  path: '/plans',
+  getParentRoute: () => AppCompanySlugRouteRoute,
+} as any)
+const AppCompanySlugQuestionsRoute = AppCompanySlugQuestionsRouteImport.update({
+  id: '/questions',
+  path: '/questions',
   getParentRoute: () => AppCompanySlugRouteRoute,
 } as any)
 const AppCompanySlugReportsRoute = AppCompanySlugReportsRouteImport.update({
@@ -131,6 +212,11 @@ const AppCompanySlugReportsRoute = AppCompanySlugReportsRouteImport.update({
 const AppCompanySlugReviewsRoute = AppCompanySlugReviewsRouteImport.update({
   id: '/reviews',
   path: '/reviews',
+  getParentRoute: () => AppCompanySlugRouteRoute,
+} as any)
+const AppCompanySlugSandboxesRoute = AppCompanySlugSandboxesRouteImport.update({
+  id: '/sandboxes',
+  path: '/sandboxes',
   getParentRoute: () => AppCompanySlugRouteRoute,
 } as any)
 const AppCompanySlugSettingsRoute = AppCompanySlugSettingsRouteImport.update({
@@ -198,20 +284,34 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/app/$companySlug': typeof AppCompanySlugRouteRouteWithChildren
+  '/book/$token': typeof BookTokenRoute
+  '/code/$token': typeof CodeTokenRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/live/$token': typeof LiveTokenRoute
   '/app/': typeof AppIndexRoute
   '/candidate/': typeof CandidateIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/health/live': typeof ApiHealthLiveRoute
   '/api/health/ready': typeof ApiHealthReadyRoute
+  '/api/mail/events': typeof ApiMailEventsRoute
   '/api/provider/callback': typeof ApiProviderCallbackRoute
   '/app/$companySlug/assessments': typeof AppCompanySlugAssessmentsRoute
   '/app/$companySlug/automations': typeof AppCompanySlugAutomationsRoute
+  '/app/$companySlug/calendar': typeof AppCompanySlugCalendarRoute
   '/app/$companySlug/candidates': typeof AppCompanySlugCandidatesRoute
+  '/app/$companySlug/connectors': typeof AppCompanySlugConnectorsRoute
+  '/app/$companySlug/crm': typeof AppCompanySlugCrmRoute
+  '/app/$companySlug/inbox': typeof AppCompanySlugInboxRoute
+  '/app/$companySlug/integrity': typeof AppCompanySlugIntegrityRoute
   '/app/$companySlug/interviews': typeof AppCompanySlugInterviewsRoute
+  '/app/$companySlug/mail': typeof AppCompanySlugMailRoute
   '/app/$companySlug/offers': typeof AppCompanySlugOffersRoute
+  '/app/$companySlug/onboarding': typeof AppCompanySlugOnboardingRoute
+  '/app/$companySlug/plans': typeof AppCompanySlugPlansRoute
+  '/app/$companySlug/questions': typeof AppCompanySlugQuestionsRoute
   '/app/$companySlug/reports': typeof AppCompanySlugReportsRoute
   '/app/$companySlug/reviews': typeof AppCompanySlugReviewsRoute
+  '/app/$companySlug/sandboxes': typeof AppCompanySlugSandboxesRoute
   '/app/$companySlug/settings': typeof AppCompanySlugSettingsRoute
   '/candidate/applications/$applicationId': typeof CandidateApplicationsApplicationIdRoute
   '/candidate/attempts/$attemptId': typeof CandidateAttemptsAttemptIdRoute
@@ -228,20 +328,34 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/book/$token': typeof BookTokenRoute
+  '/code/$token': typeof CodeTokenRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/live/$token': typeof LiveTokenRoute
   '/app': typeof AppIndexRoute
   '/candidate': typeof CandidateIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/health/live': typeof ApiHealthLiveRoute
   '/api/health/ready': typeof ApiHealthReadyRoute
+  '/api/mail/events': typeof ApiMailEventsRoute
   '/api/provider/callback': typeof ApiProviderCallbackRoute
   '/app/$companySlug/assessments': typeof AppCompanySlugAssessmentsRoute
   '/app/$companySlug/automations': typeof AppCompanySlugAutomationsRoute
+  '/app/$companySlug/calendar': typeof AppCompanySlugCalendarRoute
   '/app/$companySlug/candidates': typeof AppCompanySlugCandidatesRoute
+  '/app/$companySlug/connectors': typeof AppCompanySlugConnectorsRoute
+  '/app/$companySlug/crm': typeof AppCompanySlugCrmRoute
+  '/app/$companySlug/inbox': typeof AppCompanySlugInboxRoute
+  '/app/$companySlug/integrity': typeof AppCompanySlugIntegrityRoute
   '/app/$companySlug/interviews': typeof AppCompanySlugInterviewsRoute
+  '/app/$companySlug/mail': typeof AppCompanySlugMailRoute
   '/app/$companySlug/offers': typeof AppCompanySlugOffersRoute
+  '/app/$companySlug/onboarding': typeof AppCompanySlugOnboardingRoute
+  '/app/$companySlug/plans': typeof AppCompanySlugPlansRoute
+  '/app/$companySlug/questions': typeof AppCompanySlugQuestionsRoute
   '/app/$companySlug/reports': typeof AppCompanySlugReportsRoute
   '/app/$companySlug/reviews': typeof AppCompanySlugReviewsRoute
+  '/app/$companySlug/sandboxes': typeof AppCompanySlugSandboxesRoute
   '/app/$companySlug/settings': typeof AppCompanySlugSettingsRoute
   '/candidate/applications/$applicationId': typeof CandidateApplicationsApplicationIdRoute
   '/candidate/attempts/$attemptId': typeof CandidateAttemptsAttemptIdRoute
@@ -260,20 +374,34 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/app/$companySlug': typeof AppCompanySlugRouteRouteWithChildren
+  '/book/$token': typeof BookTokenRoute
+  '/code/$token': typeof CodeTokenRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/live/$token': typeof LiveTokenRoute
   '/app/': typeof AppIndexRoute
   '/candidate/': typeof CandidateIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/health/live': typeof ApiHealthLiveRoute
   '/api/health/ready': typeof ApiHealthReadyRoute
+  '/api/mail/events': typeof ApiMailEventsRoute
   '/api/provider/callback': typeof ApiProviderCallbackRoute
   '/app/$companySlug/assessments': typeof AppCompanySlugAssessmentsRoute
   '/app/$companySlug/automations': typeof AppCompanySlugAutomationsRoute
+  '/app/$companySlug/calendar': typeof AppCompanySlugCalendarRoute
   '/app/$companySlug/candidates': typeof AppCompanySlugCandidatesRoute
+  '/app/$companySlug/connectors': typeof AppCompanySlugConnectorsRoute
+  '/app/$companySlug/crm': typeof AppCompanySlugCrmRoute
+  '/app/$companySlug/inbox': typeof AppCompanySlugInboxRoute
+  '/app/$companySlug/integrity': typeof AppCompanySlugIntegrityRoute
   '/app/$companySlug/interviews': typeof AppCompanySlugInterviewsRoute
+  '/app/$companySlug/mail': typeof AppCompanySlugMailRoute
   '/app/$companySlug/offers': typeof AppCompanySlugOffersRoute
+  '/app/$companySlug/onboarding': typeof AppCompanySlugOnboardingRoute
+  '/app/$companySlug/plans': typeof AppCompanySlugPlansRoute
+  '/app/$companySlug/questions': typeof AppCompanySlugQuestionsRoute
   '/app/$companySlug/reports': typeof AppCompanySlugReportsRoute
   '/app/$companySlug/reviews': typeof AppCompanySlugReviewsRoute
+  '/app/$companySlug/sandboxes': typeof AppCompanySlugSandboxesRoute
   '/app/$companySlug/settings': typeof AppCompanySlugSettingsRoute
   '/candidate/applications/$applicationId': typeof CandidateApplicationsApplicationIdRoute
   '/candidate/attempts/$attemptId': typeof CandidateAttemptsAttemptIdRoute
@@ -293,20 +421,34 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/app/$companySlug'
+    | '/book/$token'
+    | '/code/$token'
     | '/invite/$token'
+    | '/live/$token'
     | '/app/'
     | '/candidate/'
     | '/api/auth/$'
     | '/api/health/live'
     | '/api/health/ready'
+    | '/api/mail/events'
     | '/api/provider/callback'
     | '/app/$companySlug/assessments'
     | '/app/$companySlug/automations'
+    | '/app/$companySlug/calendar'
     | '/app/$companySlug/candidates'
+    | '/app/$companySlug/connectors'
+    | '/app/$companySlug/crm'
+    | '/app/$companySlug/inbox'
+    | '/app/$companySlug/integrity'
     | '/app/$companySlug/interviews'
+    | '/app/$companySlug/mail'
     | '/app/$companySlug/offers'
+    | '/app/$companySlug/onboarding'
+    | '/app/$companySlug/plans'
+    | '/app/$companySlug/questions'
     | '/app/$companySlug/reports'
     | '/app/$companySlug/reviews'
+    | '/app/$companySlug/sandboxes'
     | '/app/$companySlug/settings'
     | '/candidate/applications/$applicationId'
     | '/candidate/attempts/$attemptId'
@@ -323,20 +465,34 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/book/$token'
+    | '/code/$token'
     | '/invite/$token'
+    | '/live/$token'
     | '/app'
     | '/candidate'
     | '/api/auth/$'
     | '/api/health/live'
     | '/api/health/ready'
+    | '/api/mail/events'
     | '/api/provider/callback'
     | '/app/$companySlug/assessments'
     | '/app/$companySlug/automations'
+    | '/app/$companySlug/calendar'
     | '/app/$companySlug/candidates'
+    | '/app/$companySlug/connectors'
+    | '/app/$companySlug/crm'
+    | '/app/$companySlug/inbox'
+    | '/app/$companySlug/integrity'
     | '/app/$companySlug/interviews'
+    | '/app/$companySlug/mail'
     | '/app/$companySlug/offers'
+    | '/app/$companySlug/onboarding'
+    | '/app/$companySlug/plans'
+    | '/app/$companySlug/questions'
     | '/app/$companySlug/reports'
     | '/app/$companySlug/reviews'
+    | '/app/$companySlug/sandboxes'
     | '/app/$companySlug/settings'
     | '/candidate/applications/$applicationId'
     | '/candidate/attempts/$attemptId'
@@ -354,20 +510,34 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/app/$companySlug'
+    | '/book/$token'
+    | '/code/$token'
     | '/invite/$token'
+    | '/live/$token'
     | '/app/'
     | '/candidate/'
     | '/api/auth/$'
     | '/api/health/live'
     | '/api/health/ready'
+    | '/api/mail/events'
     | '/api/provider/callback'
     | '/app/$companySlug/assessments'
     | '/app/$companySlug/automations'
+    | '/app/$companySlug/calendar'
     | '/app/$companySlug/candidates'
+    | '/app/$companySlug/connectors'
+    | '/app/$companySlug/crm'
+    | '/app/$companySlug/inbox'
+    | '/app/$companySlug/integrity'
     | '/app/$companySlug/interviews'
+    | '/app/$companySlug/mail'
     | '/app/$companySlug/offers'
+    | '/app/$companySlug/onboarding'
+    | '/app/$companySlug/plans'
+    | '/app/$companySlug/questions'
     | '/app/$companySlug/reports'
     | '/app/$companySlug/reviews'
+    | '/app/$companySlug/sandboxes'
     | '/app/$companySlug/settings'
     | '/candidate/applications/$applicationId'
     | '/candidate/attempts/$attemptId'
@@ -386,12 +556,16 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
   AppCompanySlugRouteRoute: typeof AppCompanySlugRouteRouteWithChildren
+  BookTokenRoute: typeof BookTokenRoute
+  CodeTokenRoute: typeof CodeTokenRoute
   InviteTokenRoute: typeof InviteTokenRoute
+  LiveTokenRoute: typeof LiveTokenRoute
   AppIndexRoute: typeof AppIndexRoute
   CandidateIndexRoute: typeof CandidateIndexRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiHealthLiveRoute: typeof ApiHealthLiveRoute
   ApiHealthReadyRoute: typeof ApiHealthReadyRoute
+  ApiMailEventsRoute: typeof ApiMailEventsRoute
   ApiProviderCallbackRoute: typeof ApiProviderCallbackRoute
   CandidateApplicationsApplicationIdRoute: typeof CandidateApplicationsApplicationIdRoute
   CandidateAttemptsAttemptIdRoute: typeof CandidateAttemptsAttemptIdRoute
@@ -431,6 +605,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCompanySlugRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/book/$token': {
+      id: '/book/$token'
+      path: '/book/$token'
+      fullPath: '/book/$token'
+      preLoaderRoute: typeof BookTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/candidate/': {
       id: '/candidate/'
       path: '/candidate'
@@ -438,11 +619,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CandidateIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/code/$token': {
+      id: '/code/$token'
+      path: '/code/$token'
+      fullPath: '/code/$token'
+      preLoaderRoute: typeof CodeTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/invite/$token': {
       id: '/invite/$token'
       path: '/invite/$token'
       fullPath: '/invite/$token'
       preLoaderRoute: typeof InviteTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/live/$token': {
+      id: '/live/$token'
+      path: '/live/$token'
+      fullPath: '/live/$token'
+      preLoaderRoute: typeof LiveTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/$': {
@@ -464,6 +659,13 @@ declare module '@tanstack/react-router' {
       path: '/api/health/ready'
       fullPath: '/api/health/ready'
       preLoaderRoute: typeof ApiHealthReadyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mail/events': {
+      id: '/api/mail/events'
+      path: '/api/mail/events'
+      fullPath: '/api/mail/events'
+      preLoaderRoute: typeof ApiMailEventsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/provider/callback': {
@@ -494,11 +696,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCompanySlugAutomationsRouteImport
       parentRoute: typeof AppCompanySlugRouteRoute
     }
+    '/app/$companySlug/calendar': {
+      id: '/app/$companySlug/calendar'
+      path: '/calendar'
+      fullPath: '/app/$companySlug/calendar'
+      preLoaderRoute: typeof AppCompanySlugCalendarRouteImport
+      parentRoute: typeof AppCompanySlugRouteRoute
+    }
     '/app/$companySlug/candidates': {
       id: '/app/$companySlug/candidates'
       path: '/candidates'
       fullPath: '/app/$companySlug/candidates'
       preLoaderRoute: typeof AppCompanySlugCandidatesRouteImport
+      parentRoute: typeof AppCompanySlugRouteRoute
+    }
+    '/app/$companySlug/connectors': {
+      id: '/app/$companySlug/connectors'
+      path: '/connectors'
+      fullPath: '/app/$companySlug/connectors'
+      preLoaderRoute: typeof AppCompanySlugConnectorsRouteImport
+      parentRoute: typeof AppCompanySlugRouteRoute
+    }
+    '/app/$companySlug/crm': {
+      id: '/app/$companySlug/crm'
+      path: '/crm'
+      fullPath: '/app/$companySlug/crm'
+      preLoaderRoute: typeof AppCompanySlugCrmRouteImport
+      parentRoute: typeof AppCompanySlugRouteRoute
+    }
+    '/app/$companySlug/inbox': {
+      id: '/app/$companySlug/inbox'
+      path: '/inbox'
+      fullPath: '/app/$companySlug/inbox'
+      preLoaderRoute: typeof AppCompanySlugInboxRouteImport
+      parentRoute: typeof AppCompanySlugRouteRoute
+    }
+    '/app/$companySlug/integrity': {
+      id: '/app/$companySlug/integrity'
+      path: '/integrity'
+      fullPath: '/app/$companySlug/integrity'
+      preLoaderRoute: typeof AppCompanySlugIntegrityRouteImport
       parentRoute: typeof AppCompanySlugRouteRoute
     }
     '/app/$companySlug/interviews': {
@@ -508,11 +745,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCompanySlugInterviewsRouteImport
       parentRoute: typeof AppCompanySlugRouteRoute
     }
+    '/app/$companySlug/mail': {
+      id: '/app/$companySlug/mail'
+      path: '/mail'
+      fullPath: '/app/$companySlug/mail'
+      preLoaderRoute: typeof AppCompanySlugMailRouteImport
+      parentRoute: typeof AppCompanySlugRouteRoute
+    }
     '/app/$companySlug/offers': {
       id: '/app/$companySlug/offers'
       path: '/offers'
       fullPath: '/app/$companySlug/offers'
       preLoaderRoute: typeof AppCompanySlugOffersRouteImport
+      parentRoute: typeof AppCompanySlugRouteRoute
+    }
+    '/app/$companySlug/onboarding': {
+      id: '/app/$companySlug/onboarding'
+      path: '/onboarding'
+      fullPath: '/app/$companySlug/onboarding'
+      preLoaderRoute: typeof AppCompanySlugOnboardingRouteImport
+      parentRoute: typeof AppCompanySlugRouteRoute
+    }
+    '/app/$companySlug/plans': {
+      id: '/app/$companySlug/plans'
+      path: '/plans'
+      fullPath: '/app/$companySlug/plans'
+      preLoaderRoute: typeof AppCompanySlugPlansRouteImport
+      parentRoute: typeof AppCompanySlugRouteRoute
+    }
+    '/app/$companySlug/questions': {
+      id: '/app/$companySlug/questions'
+      path: '/questions'
+      fullPath: '/app/$companySlug/questions'
+      preLoaderRoute: typeof AppCompanySlugQuestionsRouteImport
       parentRoute: typeof AppCompanySlugRouteRoute
     }
     '/app/$companySlug/reports': {
@@ -527,6 +792,13 @@ declare module '@tanstack/react-router' {
       path: '/reviews'
       fullPath: '/app/$companySlug/reviews'
       preLoaderRoute: typeof AppCompanySlugReviewsRouteImport
+      parentRoute: typeof AppCompanySlugRouteRoute
+    }
+    '/app/$companySlug/sandboxes': {
+      id: '/app/$companySlug/sandboxes'
+      path: '/sandboxes'
+      fullPath: '/app/$companySlug/sandboxes'
+      preLoaderRoute: typeof AppCompanySlugSandboxesRouteImport
       parentRoute: typeof AppCompanySlugRouteRoute
     }
     '/app/$companySlug/settings': {
@@ -626,11 +898,21 @@ const AppCompanySlugJobsJobIdRouteWithChildren =
 interface AppCompanySlugRouteRouteChildren {
   AppCompanySlugAssessmentsRoute: typeof AppCompanySlugAssessmentsRoute
   AppCompanySlugAutomationsRoute: typeof AppCompanySlugAutomationsRoute
+  AppCompanySlugCalendarRoute: typeof AppCompanySlugCalendarRoute
   AppCompanySlugCandidatesRoute: typeof AppCompanySlugCandidatesRoute
+  AppCompanySlugConnectorsRoute: typeof AppCompanySlugConnectorsRoute
+  AppCompanySlugCrmRoute: typeof AppCompanySlugCrmRoute
+  AppCompanySlugInboxRoute: typeof AppCompanySlugInboxRoute
+  AppCompanySlugIntegrityRoute: typeof AppCompanySlugIntegrityRoute
   AppCompanySlugInterviewsRoute: typeof AppCompanySlugInterviewsRoute
+  AppCompanySlugMailRoute: typeof AppCompanySlugMailRoute
   AppCompanySlugOffersRoute: typeof AppCompanySlugOffersRoute
+  AppCompanySlugOnboardingRoute: typeof AppCompanySlugOnboardingRoute
+  AppCompanySlugPlansRoute: typeof AppCompanySlugPlansRoute
+  AppCompanySlugQuestionsRoute: typeof AppCompanySlugQuestionsRoute
   AppCompanySlugReportsRoute: typeof AppCompanySlugReportsRoute
   AppCompanySlugReviewsRoute: typeof AppCompanySlugReviewsRoute
+  AppCompanySlugSandboxesRoute: typeof AppCompanySlugSandboxesRoute
   AppCompanySlugSettingsRoute: typeof AppCompanySlugSettingsRoute
   AppCompanySlugIndexRoute: typeof AppCompanySlugIndexRoute
   AppCompanySlugApplicationsApplicationIdRoute: typeof AppCompanySlugApplicationsApplicationIdRoute
@@ -641,11 +923,21 @@ interface AppCompanySlugRouteRouteChildren {
 const AppCompanySlugRouteRouteChildren: AppCompanySlugRouteRouteChildren = {
   AppCompanySlugAssessmentsRoute: AppCompanySlugAssessmentsRoute,
   AppCompanySlugAutomationsRoute: AppCompanySlugAutomationsRoute,
+  AppCompanySlugCalendarRoute: AppCompanySlugCalendarRoute,
   AppCompanySlugCandidatesRoute: AppCompanySlugCandidatesRoute,
+  AppCompanySlugConnectorsRoute: AppCompanySlugConnectorsRoute,
+  AppCompanySlugCrmRoute: AppCompanySlugCrmRoute,
+  AppCompanySlugInboxRoute: AppCompanySlugInboxRoute,
+  AppCompanySlugIntegrityRoute: AppCompanySlugIntegrityRoute,
   AppCompanySlugInterviewsRoute: AppCompanySlugInterviewsRoute,
+  AppCompanySlugMailRoute: AppCompanySlugMailRoute,
   AppCompanySlugOffersRoute: AppCompanySlugOffersRoute,
+  AppCompanySlugOnboardingRoute: AppCompanySlugOnboardingRoute,
+  AppCompanySlugPlansRoute: AppCompanySlugPlansRoute,
+  AppCompanySlugQuestionsRoute: AppCompanySlugQuestionsRoute,
   AppCompanySlugReportsRoute: AppCompanySlugReportsRoute,
   AppCompanySlugReviewsRoute: AppCompanySlugReviewsRoute,
+  AppCompanySlugSandboxesRoute: AppCompanySlugSandboxesRoute,
   AppCompanySlugSettingsRoute: AppCompanySlugSettingsRoute,
   AppCompanySlugIndexRoute: AppCompanySlugIndexRoute,
   AppCompanySlugApplicationsApplicationIdRoute:
@@ -661,12 +953,16 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
   AppCompanySlugRouteRoute: AppCompanySlugRouteRouteWithChildren,
+  BookTokenRoute: BookTokenRoute,
+  CodeTokenRoute: CodeTokenRoute,
   InviteTokenRoute: InviteTokenRoute,
+  LiveTokenRoute: LiveTokenRoute,
   AppIndexRoute: AppIndexRoute,
   CandidateIndexRoute: CandidateIndexRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiHealthLiveRoute: ApiHealthLiveRoute,
   ApiHealthReadyRoute: ApiHealthReadyRoute,
+  ApiMailEventsRoute: ApiMailEventsRoute,
   ApiProviderCallbackRoute: ApiProviderCallbackRoute,
   CandidateApplicationsApplicationIdRoute:
     CandidateApplicationsApplicationIdRoute,

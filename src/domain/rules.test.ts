@@ -327,7 +327,7 @@ describe("hiring rules", () => {
     assert.ok(rubric.some((issue) => issue.code === "rubric"));
     assert.throws(() => assertSafeOutboundUrl("http://169.254.169.254/latest", false));
     assert.throws(() => assertSafeOutboundUrl("https://metadata.google.internal/", false));
-    assert.equal(filePolicy({ name: "cv.exe", mime: "application/pdf", size: 20 }), "Upload a PDF, text, CSV, PNG, or JPEG file.");
+    assert.equal(filePolicy({ name: "cv.exe", mime: "application/pdf", size: 20 }), "Upload a PDF, text, CSV, PNG, JPEG, or DOCX file.");
     assert.equal(filePolicy({ name: "cv.pdf", mime: "text/plain", size: 20 })?.includes("does not match"), true);
     assert.equal(scanDecision({ name: "note.txt", textSample: "<script>alert(1)</script>" }), "INFECTED");
     assert.equal(scanDecision({ name: "note.txt", textSample: "hello" }), "CLEAN");

@@ -21,7 +21,7 @@ function OfferPage() {
         {offer ? (
           <>
             <PageTitle title={offer.title} lede={`${offer.company_name} · ${offer.job_title} · revision ${offer.current_revision}`} />
-            <section className="space-y-2 rounded-md border border-line bg-surface p-4 text-sm">
+            <section className="space-y-2 rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4 text-sm">
               <p>{money(offer.salary_minor, offer.currency)} per year</p>
               <p>Start date {offer.start_date ?? "not set"}</p>
               <p>Status {offer.status}</p>

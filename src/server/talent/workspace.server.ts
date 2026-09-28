@@ -21,7 +21,13 @@ import {
   retentionDue,
   roleHas,
 } from "@/domain/rules";
-import { stringList, termsFromJson } from "@/domain/screen";
+import { describeSavedAnswer, attemptWasSubmitted, responseResultLabel } from "@/domain/attempt-record";
+import { readPersonality } from "@/domain/personality";
+import { applicationForm, compileSearch, knockoutResult, parseResumeProfile } from "@/domain/cv-index";
+import { attributesFromJson, attributesOrDefault, parseAttributes } from "@/domain/scorecard";
+import { stringList, termPresent, termsFromJson } from "@/domain/screen";
+import { readResume } from "./resume-text";
+import { sniffResume } from "@/domain/platform/docx";
 import { applicationReceipt, applicationSheetCsv, cvResultLabel, storedAnswerText, type SheetField, type SheetRow } from "@/domain/sheet";
 import { enterTenant } from "@/lib/tenant";
 import { allow, audit, canonical, db, json, mapDbError, nid, requireActor, requireUser, sha256, withTransaction, type Actor } from "./db.server";
@@ -30,18 +36,61 @@ import { ensureDemoCvSamples, runCvScreen } from "./screen.server";
 
 const STAGES = [
   ["Applied", "APPLIED"],
-  ["Recruiter review", "SCREEN"],
-  ["Assessment", "ASSESSMENT"],
+  ["Expertise rank", "SCREEN"],
+  ["Coding screen", "ASSESSMENT"],
+  ["Math and personality", "ASSESSMENT"],
+  ["Final problems", "ASSESSMENT"],
   ["Interview", "INTERVIEW"],
   ["Offer", "OFFER"],
   ["Decision", "DECISION"],
 ] as const;
 
+function scaleName(dimension: string | undefined): string {
+  if (dimension === "mind") return "Mind";
+  if (dimension === "information") return "Information";
+  if (dimension === "decisions") return "Decisions";
+  if (dimension === "structure") return "Structure";
+  if (dimension === "identity") return "Identity";
+  return "";
+}
+
+function asJson<T>(value: unknown): T | null {
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value) as T;
+    } catch {
+      return null;
+    }
+  }
+  if (value && typeof value === "object") return value as T;
+  return null;
+}
+
 function defaultForm() {
-  return [
-    { id: "website", type: "url", label: "Portfolio or website", required: false, help: "Optional" },
-    { id: "why", type: "long_text", label: "Why this role?", required: false, help: "A short note is enough." },
-  ];
+  return applicationForm({ minYears: null, requireAuthorization: false });
+}
+
+function sanitizeForm(value: unknown) {
+  if (!Array.isArray(value)) return null;
+  return value.slice(0, 12).map((field) => {
+    const row = field && typeof field === "object" ? field as Record<string, unknown> : {};
+    const knockout = row.knockout && typeof row.knockout === "object" ? row.knockout as { min?: unknown; fail?: unknown } : null;
+    const min = typeof knockout?.min === "number" && Number.isInteger(knockout.min) && knockout.min >= 0 && knockout.min <= 40
+      ? knockout.min
+      : undefined;
+    const fail = Array.isArray(knockout?.fail)
+      ? knockout.fail.filter((item): item is string => typeof item === "string").slice(0, 4)
+      : undefined;
+    return {
+      id: String(row.id ?? "").slice(0, 40),
+      type: String(row.type ?? "text").slice(0, 20),
+      label: String(row.label ?? "").slice(0, 160),
+      required: Boolean(row.required),
+      help: typeof row.help === "string" ? row.help.slice(0, 240) : "",
+      options: Array.isArray(row.options) ? row.options.filter((item): item is string => typeof item === "string").slice(0, 8) : undefined,
+      knockout: min != null || fail?.length ? { min, fail } : undefined,
+    };
+  }).filter((field) => field.id && field.label);
 }
 
 async function assigned(actor: Actor, applicationId: string): Promise<boolean> {
@@ -148,6 +197,16 @@ export async function getWorkspace(userId: string, slug: string) {
     where a.company_id = ${actor.companyId} and a.status = 'IN_PROGRESS' and a.deadline < now()
     limit 6
   `;
+  const branding = await sql<{
+    embed_background: string;
+    embed_ink: string;
+    embed_accent: string;
+    embed_accent_ink: string;
+    careers_headline: string;
+  }>`
+    select embed_background, embed_ink, embed_accent, embed_accent_ink, careers_headline
+    from companies where id = ${actor.companyId}
+  `;
   return {
     company: {
       name: actor.companyName,
@@ -156,6 +215,13 @@ export async function getWorkspace(userId: string, slug: string) {
       role: actor.role,
       demo: actor.demo,
       retentionDays: actor.retentionDays,
+      headline: branding[0]?.careers_headline ?? "",
+      theme: {
+        background: branding[0]?.embed_background ?? "#ffffff",
+        ink: branding[0]?.embed_ink ?? "#14221b",
+        accent: branding[0]?.embed_accent ?? "#cefa90",
+        accentInk: branding[0]?.embed_accent_ink ?? "#14221b",
+      },
     },
     counts: counts[0],
     activity,
@@ -165,7 +231,7 @@ export async function getWorkspace(userId: string, slug: string) {
 
 export async function updateCompany(
   userId: string,
-  input: { slug: string; name: string; timezone: string; retentionDays: number; embedBackground: string; embedInk: string; embedAccent: string; embedAccentInk: string },
+  input: { slug: string; name: string; timezone: string; retentionDays: number; careersHeadline: string; embedBackground: string; embedInk: string; embedAccent: string; embedAccentInk: string },
 ) {
   assertSameSiteRequest();
   const actor = await requireActor(userId, input.slug);
@@ -173,10 +239,12 @@ export async function updateCompany(
   if (actor.role !== "OWNER" && actor.role !== "ADMIN") {
     throw new Error("You do not have permission to do that.");
   }
+  const headline = input.careersHeadline.trim().slice(0, 160);
   const sql = await db();
   await sql`
     update companies set name = ${input.name.trim()}, timezone = ${input.timezone},
       retention_days = ${input.retentionDays},
+      careers_headline = ${headline},
       embed_background = ${input.embedBackground.toLowerCase()},
       embed_ink = ${input.embedInk.toLowerCase()},
       embed_accent = ${input.embedAccent.toLowerCase()},
@@ -366,13 +434,14 @@ export async function getJob(userId: string, slug: string, jobId: string) {
   const rows = await sql`
     select id, title, slug as job_slug, department, locations, work_arrangement, employment_type,
       description, skills, salary_min, salary_max, salary_currency, salary_visible, openings, status,
-      form_schema, screen_required, screen_preferred, screen_assessment_id
+      form_schema, screen_required, screen_preferred, screen_assessment_id, scorecard_attributes
     from jobs where id = ${jobId} and company_id = ${actor.companyId}
   `;
   const job = rows[0] as Record<string, unknown> | undefined;
   if (!job) throw new Error("Not found.");
   job.screen_required = termsFromJson(job.screen_required).join(", ");
   job.screen_preferred = termsFromJson(job.screen_preferred).join(", ");
+  job.scorecard_attributes = attributesFromJson(job.scorecard_attributes).map((item) => item.label).join(", ");
   job.screen_assessment_id = job.screen_assessment_id ?? "";
   if (!canSeeCompensation(actor.role)) {
     job.salary_min = null;
@@ -469,10 +538,11 @@ export async function updateJob(userId: string, input: Record<string, unknown>) 
       salary_currency = ${String(input.salaryCurrency ?? "USD")},
       salary_visible = ${Boolean(input.salaryVisible)},
       openings = ${Number(input.openings) || 1},
-      form_schema = ${json(input.formSchema ?? defaultForm())}::jsonb,
+      form_schema = ${json(sanitizeForm(input.formSchema) ?? defaultForm())}::jsonb,
       screen_required = case when ${input.screenRequired === undefined} then screen_required else ${json(requiredTerms)}::jsonb end,
       screen_preferred = case when ${input.screenPreferred === undefined} then screen_preferred else ${json(preferredTerms)}::jsonb end,
       screen_assessment_id = case when ${input.screenAssessmentId === undefined} then screen_assessment_id else ${assessmentId} end,
+      scorecard_attributes = case when ${input.scorecardAttributes === undefined} then scorecard_attributes else ${json(parseAttributes(String(input.scorecardAttributes ?? "")))}::jsonb end,
       updated_at = now()
     where id = ${jobId} and company_id = ${actor.companyId}
   `;
@@ -563,8 +633,10 @@ export async function listPipeline(userId: string, slug: string, jobId: string) 
   const actor = await requireActor(userId, slug);
   try {
     await ensureDemoCvSamples(actor.companyId);
+    const { advanceJob } = await import("./ladder.server");
+    await advanceJob(actor.companyId, jobId);
   } catch {
-    // A demo sample that cannot be stored does not hide the pipeline.
+    // A ranking that cannot be stored does not hide the pipeline.
   }
   const sql = await db();
   const stages = await sql<{ id: string; name: string; category: string; position: number; archived: boolean }>`
@@ -583,12 +655,30 @@ export async function listPipeline(userId: string, slug: string, jobId: string) 
     source: string;
     fit: string | null;
     screen_action: string | null;
+    expertise_score: number | null;
+    expertise_rank: number | null;
+    expertise_pool: number | null;
+    expertise_advanced: boolean | null;
+    coding_score: number | null;
+    coding_rank: number | null;
+    coding_pool: number | null;
+    coding_advanced: boolean | null;
+    math_score: number | null;
+    math_rank: number | null;
+    math_pool: number | null;
+    math_advanced: boolean | null;
   }>`
     select a.id, a.version, a.lifecycle, a.current_stage_id as stage_id, c.name, c.email, a.source,
-      cv.fit, cv.action as screen_action
+      cv.fit, cv.action as screen_action,
+      ex.score as expertise_score, ex.rank as expertise_rank, ex.pool as expertise_pool, ex.advanced as expertise_advanced,
+      cd.score as coding_score, cd.rank as coding_rank, cd.pool as coding_pool, cd.advanced as coding_advanced,
+      mx.score as math_score, mx.rank as math_rank, mx.pool as math_pool, mx.advanced as math_advanced
     from applications a
     join candidates c on c.id = a.candidate_id and c.company_id = a.company_id
     left join cv_screens cv on cv.application_id = a.id and cv.company_id = a.company_id
+    left join pipeline_ranks ex on ex.application_id = a.id and ex.company_id = a.company_id and ex.gate = 'EXPERTISE'
+    left join pipeline_ranks cd on cd.application_id = a.id and cd.company_id = a.company_id and cd.gate = 'CODING'
+    left join pipeline_ranks mx on mx.application_id = a.id and mx.company_id = a.company_id and mx.gate = 'MATH'
     where a.company_id = ${actor.companyId} and a.job_id = ${jobId}
     order by a.submitted_at desc
   `;
@@ -601,7 +691,7 @@ export async function listPipeline(userId: string, slug: string, jobId: string) 
       email: actor.role === "INTERVIEWER" ? "" : card.email,
     });
   }
-  return { stages, cards: visible };
+  return { stages, cards: visible, canMove: roleHas(actor.role, "application.move") };
 }
 
 export async function moveApplication(
@@ -745,14 +835,23 @@ export async function bulkMove(
   };
 }
 
-export async function listCandidates(userId: string, input: { slug: string; query?: string; source?: string; tag?: string }) {
+export async function listCandidates(
+  userId: string,
+  input: { slug: string; query?: string; source?: string; tag?: string; location?: string; education?: string; criteria?: string },
+) {
   const actor = await requireActor(userId, input.slug);
   allow(actor, "application.read");
   if (actor.role === "INTERVIEWER" || actor.role === "ASSESSMENT_REVIEWER") {
     throw new Error("You do not have permission to do that.");
   }
+  const compiled = compileSearch(input.query ?? "");
+  if (compiled && "error" in compiled) throw new Error(compiled.error);
+  try {
+    await indexMissingProfiles(actor.companyId);
+  } catch {
+    // Search still runs on profiles that are already stored.
+  }
   const sql = await db();
-  const q = `%${(input.query ?? "").trim().toLowerCase()}%`;
   const rows = await sql<{
     id: string;
     name: string;
@@ -760,6 +859,15 @@ export async function listCandidates(userId: string, input: { slug: string; quer
     source: string;
     applications: number;
     tags: string | null;
+    titles: unknown;
+    skills: unknown;
+    education: unknown;
+    locations: unknown;
+    history: unknown;
+    years: number | null;
+    indexed_text: string | null;
+    answers_text: string | null;
+    knockout: string | null;
   }>`
     select c.id, c.name, c.email, c.source,
       (select count(*) from applications a where a.candidate_id = c.id and a.company_id = c.company_id) as applications,
@@ -768,10 +876,29 @@ export async function listCandidates(userId: string, input: { slug: string; quer
         from candidate_tags ct
         join tags t on t.id = ct.tag_id and t.company_id = ct.company_id
         where ct.candidate_id = c.id and ct.company_id = c.company_id
-      ) as tags
+      ) as tags,
+      profile.titles, profile.skills, profile.education, profile.locations, profile.history, profile.years, profile.indexed_text,
+      (
+        select string_agg(aa.value::text, ' ')
+        from application_answers aa
+        join applications ans_app on ans_app.id = aa.application_id and ans_app.company_id = aa.company_id
+        where ans_app.candidate_id = c.id and aa.company_id = c.company_id
+      ) as answers_text,
+      (
+        select a.rejection_reason from applications a
+        where a.candidate_id = c.id and a.company_id = c.company_id and a.rejection_reason like 'Knockout:%'
+        order by a.submitted_at desc limit 1
+      ) as knockout
     from candidates c
+    left join lateral (
+      select p.titles, p.skills, p.education, p.locations, p.history, p.years, p.indexed_text
+      from candidate_profiles p
+      join applications a on a.id = p.application_id and a.company_id = p.company_id
+      where a.candidate_id = c.id and p.company_id = c.company_id
+      order by p.created_at desc
+      limit 1
+    ) profile on true
     where c.company_id = ${actor.companyId}
-      and (${input.query ?? ""} = '' or lower(c.name) like ${q} or lower(c.email) like ${q})
       and (${input.source ?? ""} = '' or c.source = ${input.source ?? ""})
       and (
         ${input.tag ?? ""} = '' or exists (
@@ -781,9 +908,76 @@ export async function listCandidates(userId: string, input: { slug: string; quer
         )
       )
     order by c.created_at desc
-    limit 100
+    limit 200
   `;
-  return rows;
+  const location = (input.location ?? "").trim();
+  const education = (input.education ?? "").trim();
+  const criteria = (input.criteria ?? "").trim();
+  return rows.filter((row) => {
+    const haystack = `${row.name}\n${row.email}\n${row.indexed_text ?? ""}\n${row.answers_text ?? ""}`;
+    if (compiled && "match" in compiled && !compiled.match(haystack)) return false;
+    if (location && !termPresent(`${stringList(row.locations).join(" ")} ${haystack}`, location)) return false;
+    if (education && !termPresent(`${stringList(row.education).join(" ")} ${haystack}`, education)) return false;
+    if (criteria && !termPresent(haystack, criteria)) return false;
+    return true;
+  }).slice(0, 100).map((row) => ({
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    source: row.source,
+    applications: Number(row.applications),
+    tags: row.tags,
+    titles: stringList(row.titles),
+    skills: stringList(row.skills),
+    education: stringList(row.education),
+    locations: stringList(row.locations),
+    history: stringList(row.history),
+    years: row.years == null ? null : Number(row.years),
+    indexed: Boolean(row.indexed_text),
+    knockout: row.knockout,
+  }));
+}
+
+async function indexMissingProfiles(companyId: string) {
+  const sql = await db();
+  const rows = await sql<{ application_id: string; file_id: string; mime: string; content: string; scan_state: string; display_name: string }>`
+    select a.id as application_id, f.id as file_id, f.mime, f.content, f.scan_state, f.display_name
+    from applications a
+    join lateral (
+      select id, mime, content, scan_state from file_objects
+      where company_id = a.company_id and owner_id = a.id
+      order by created_at desc limit 1
+    ) f on true
+    where a.company_id = ${companyId}
+    order by a.submitted_at desc
+    limit 25
+  `;
+  for (const row of rows) {
+    const extracted = row.scan_state === "CLEAN"
+      ? await readResume(row.mime, Buffer.from(row.content, "base64"), row.display_name)
+      : { text: null, readable: false };
+    const profile = parseResumeProfile(extracted.readable ? extracted.text : null);
+    await sql`
+      insert into candidate_profiles (
+        id, company_id, application_id, file_id, titles, skills, education, locations, years, history, indexed_text, note
+      ) values (
+        ${nid()}, ${companyId}, ${row.application_id}, ${row.file_id},
+        ${json(profile.titles)}::jsonb, ${json(profile.skills)}::jsonb, ${json(profile.education)}::jsonb,
+        ${json(profile.locations)}::jsonb, ${profile.years}, ${json(profile.history)}::jsonb,
+        ${profile.indexedText}, ${profile.note}
+      )
+      on conflict (company_id, application_id) do update set
+        file_id = excluded.file_id,
+        titles = excluded.titles,
+        skills = excluded.skills,
+        education = excluded.education,
+        locations = excluded.locations,
+        years = excluded.years,
+        history = excluded.history,
+        indexed_text = excluded.indexed_text,
+        note = excluded.note
+    `;
+  }
 }
 
 export async function getApplication(userId: string, slug: string, applicationId: string) {
@@ -851,11 +1045,20 @@ export async function getApplication(userId: string, slug: string, applicationId
     order by position
   `;
   const assignments = await sql`
-    select g.id, g.status, s.name as assessment_name,
+    select g.id, s.id as assessment_id, g.status, s.name as assessment_name, s.auto_send,
+      v.duration_seconds, v.proctored,
       to_char(g.start_by at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as start_by,
       v.score_release,
       (select count(*) from attempts t where t.assignment_id = g.id) as attempts,
       (select t.id from attempts t where t.assignment_id = g.id order by t.ordinal desc limit 1) as attempt_id,
+      (select count(*) from proctor_events e
+        where e.company_id = g.company_id
+          and e.attempt_id = (select t.id from attempts t where t.assignment_id = g.id order by t.ordinal desc limit 1)
+      ) as proctor_events,
+      (select string_agg(distinct e.kind, ', ') from proctor_events e
+        where e.company_id = g.company_id
+          and e.attempt_id = (select t.id from attempts t where t.assignment_id = g.id order by t.ordinal desc limit 1)
+      ) as proctor_kinds,
       (select e.status from evaluations e
         where e.company_id = g.company_id
           and e.attempt_id = (select t.id from attempts t where t.assignment_id = g.id order by t.ordinal desc limit 1)
@@ -867,18 +1070,117 @@ export async function getApplication(userId: string, slug: string, applicationId
       (select e.basis_points from evaluations e
         where e.company_id = g.company_id
           and e.attempt_id = (select t.id from attempts t where t.assignment_id = g.id order by t.ordinal desc limit 1)
-        order by e.revision desc limit 1) as basis_points
+        order by e.revision desc limit 1) as basis_points,
+      (select e.raw from evaluations e
+        where e.company_id = g.company_id
+          and e.attempt_id = (select t.id from attempts t where t.assignment_id = g.id order by t.ordinal desc limit 1)
+        order by e.revision desc limit 1) as score_raw
     from assignments g
     join assessment_versions v on v.id = g.assessment_version_id
     join assessments s on s.id = v.assessment_id
     where g.application_id = ${applicationId} and g.company_id = ${actor.companyId}
   `;
-  const interviews = await sql`
-    select id, title, status, timezone, location, meeting_url, ics_uid, ics_sequence,
+  const work = await sql<{
+    assignment_id: string;
+    attempt_status: string;
+    item_id: string;
+    position: number;
+    points: number;
+    type: string;
+    prompt: string;
+    answer: unknown;
+    payload: { options?: { id: string; label: string }[]; absTolerance?: string; relTolerance?: string } | null;
+    key_payload: { correct?: string[]; expected?: string } | null;
+  }>`
+    select g.id as assignment_id, t.status as attempt_status, i.id as item_id, i.position, i.points,
+      q.type, v.prompt, r.answer, v.payload, v.key_payload
+    from assignments g
+    join attempts t on t.id = (
+      select t2.id from attempts t2
+      where t2.assignment_id = g.id and t2.company_id = g.company_id
+      order by t2.ordinal desc
+      limit 1
+    )
+    join attempt_items i on i.attempt_id = t.id and i.company_id = t.company_id
+    join question_versions v on v.id = i.question_version_id and v.company_id = i.company_id
+    join questions q on q.id = v.question_id and q.company_id = v.company_id
+    left join responses r on r.attempt_item_id = i.id and r.company_id = i.company_id
+    where g.application_id = ${applicationId} and g.company_id = ${actor.companyId}
+    order by g.id, i.position
+  `;
+  const responsesByAssignment = new Map<string, {
+    itemId: string;
+    position: number;
+    type: string;
+    prompt: string;
+    text: string;
+    result: string;
+    label: string;
+    earned: number | null;
+    possible: number;
+  }[]>();
+  for (const row of work) {
+    const payload = asJson<{ options?: { id: string; label: string }[]; absTolerance?: string; relTolerance?: string }>(row.payload);
+    const key = asJson<{ correct?: string[]; expected?: string; dimension?: string }>(row.key_payload);
+    const described = describeSavedAnswer({
+      type: row.type,
+      points: Number(row.points),
+      answer: asJson(row.answer) ?? row.answer,
+      options: payload?.options,
+      correct: key?.correct,
+      expected: key?.expected,
+      absTolerance: payload?.absTolerance,
+      relTolerance: payload?.relTolerance,
+      submitted: attemptWasSubmitted(row.attempt_status),
+    });
+    const scale = row.type === "likert" ? scaleName(key?.dimension) : "";
+    const label = scale ? `${scale}. ${responseResultLabel(described)}` : responseResultLabel(described);
+    const list = responsesByAssignment.get(row.assignment_id) ?? [];
+    list.push({
+      itemId: row.item_id,
+      position: Number(row.position),
+      type: row.type,
+      prompt: row.prompt.length > 420 ? `${row.prompt.slice(0, 420)}…` : row.prompt,
+      text: described.text.length > 8000 ? `${described.text.slice(0, 8000)}…` : described.text,
+      result: described.result,
+      label,
+      earned: described.earned,
+      possible: described.possible,
+    });
+    responsesByAssignment.set(row.assignment_id, list);
+  }
+  const assignmentViews = (assignments as { id: string; score_raw?: unknown }[]).map((row) => {
+    const { score_raw, ...rest } = row;
+    return {
+      ...rest,
+      responses: responsesByAssignment.get(row.id) ?? [],
+      personality: readPersonality(asJson(score_raw) ?? score_raw),
+    };
+  });
+  const interviews = await sql<{
+    id: string;
+    title: string;
+    status: string;
+    timezone: string;
+    location: string;
+    meeting_url: string;
+    ics_uid: string;
+    ics_sequence: number;
+    starts_at: string;
+    ends_at: string;
+    focus_attributes: unknown;
+  }>`
+    select id, title, status, timezone, location, meeting_url, ics_uid, ics_sequence, focus_attributes,
       to_char(starts_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as starts_at,
       to_char(ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as ends_at
     from interviews where application_id = ${applicationId} and company_id = ${actor.companyId}
     order by starts_at
+  `;
+  const attributeRows = await sql<{ scorecard_attributes: unknown }>`
+    select j.scorecard_attributes
+    from applications a
+    join jobs j on j.id = a.job_id and j.company_id = a.company_id
+    where a.id = ${applicationId} and a.company_id = ${actor.companyId}
   `;
   const offers = await sql<{
     id: string;
@@ -912,6 +1214,34 @@ export async function getApplication(userId: string, slug: string, applicationId
     select fit, action, matched_required, missing_required, matched_preferred, reasons, assignment_id
     from cv_screens where company_id = ${actor.companyId} and application_id = ${applicationId}
   `;
+  const profiles = await sql<{
+    titles: unknown;
+    skills: unknown;
+    education: unknown;
+    locations: unknown;
+    years: number | null;
+    history: unknown;
+    note: string;
+  }>`
+    select titles, skills, education, locations, years, history, note
+    from candidate_profiles
+    where company_id = ${actor.companyId} and application_id = ${applicationId}
+  `;
+  const profile = profiles[0];
+  const ranks = await sql<{
+    gate: string;
+    score: number | null;
+    rank: number;
+    pool: number;
+    cutoff: number | null;
+    advanced: boolean;
+    reasons: unknown;
+  }>`
+    select gate, score, rank, pool, cutoff, advanced, reasons
+    from pipeline_ranks
+    where company_id = ${actor.companyId} and application_id = ${applicationId}
+    order by case gate when 'EXPERTISE' then 1 when 'CODING' then 2 else 3 end
+  `;
   const showPay = canSeeCompensation(actor.role);
   return {
     application: limited ? { ...application, email: "", phone: null, rejection_reason: null } : application,
@@ -919,8 +1249,11 @@ export async function getApplication(userId: string, slug: string, applicationId
     events,
     notes,
     stages,
-    assignments,
-    interviews,
+    assignments: assignmentViews,
+    interviews: interviews.map((item) => ({
+      ...item,
+      focus: attributesOrDefault(item.focus_attributes),
+    })),
     offers: offers.map((offer) =>
       showPay ? offer : { ...offer, salary_minor: null, message: limited ? "" : offer.message },
     ),
@@ -936,9 +1269,32 @@ export async function getApplication(userId: string, slug: string, applicationId
           assignmentId: screens[0].assignment_id,
         }
       : null,
+    profile: profile
+      ? {
+          titles: stringList(profile.titles),
+          skills: stringList(profile.skills),
+          education: stringList(profile.education),
+          locations: stringList(profile.locations),
+          years: profile.years == null ? null : Number(profile.years),
+          history: stringList(profile.history),
+          note: profile.note,
+        }
+      : null,
+    ranks: ranks.map((row) => ({
+      gate: row.gate,
+      score: row.score == null ? null : Number(row.score),
+      rank: Number(row.rank),
+      pool: Number(row.pool),
+      cutoff: row.cutoff == null ? null : Number(row.cutoff),
+      advanced: row.advanced === true || (row.advanced as unknown) === "t",
+      reasons: stringList(row.reasons),
+    })),
     canMove: actor.role !== "INTERVIEWER" && actor.role !== "ASSESSMENT_REVIEWER",
     canAssign: roleHas(actor.role, "assessment.assign"),
+    canText: roleHas(actor.role, "workflow.manage"),
+    canEmail: roleHas(actor.role, "application.note"),
     canSeePay: showPay,
+    scorecardAttributes: attributesOrDefault(attributeRows[0]?.scorecard_attributes),
   };
 }
 
@@ -1174,8 +1530,18 @@ export async function listPublicJobs(input: { companySlug: string; q?: string; d
   enterTenant({ publicSlug: input.companySlug, companyId: "", userId: "" });
   const sql = await db();
   const q = `%${(input.q ?? "").trim().toLowerCase()}%`;
-  const companies = await sql<{ id: string; name: string; timezone: string }>`
-    select id, name, timezone from companies where slug = ${input.companySlug} and status = 'ACTIVE'
+  const companies = await sql<{
+    id: string;
+    name: string;
+    timezone: string;
+    careers_headline: string;
+    embed_background: string;
+    embed_ink: string;
+    embed_accent: string;
+    embed_accent_ink: string;
+  }>`
+    select id, name, timezone, careers_headline, embed_background, embed_ink, embed_accent, embed_accent_ink
+    from companies where slug = ${input.companySlug} and status = 'ACTIVE'
   `;
   const company = companies[0];
   if (!company) return { company: null, jobs: [] };
@@ -1202,7 +1568,18 @@ export async function listPublicJobs(input: { companySlug: string; q?: string; d
     order by title
   `;
   return {
-    company: { name: company.name, slug: input.companySlug, timezone: company.timezone },
+    company: {
+      name: company.name,
+      slug: input.companySlug,
+      timezone: company.timezone,
+      headline: company.careers_headline,
+      theme: {
+        background: company.embed_background,
+        ink: company.embed_ink,
+        accent: company.embed_accent,
+        accentInk: company.embed_accent_ink,
+      },
+    },
     jobs: jobs.map((job) => ({
       ...job,
       salary_min: job.salary_visible ? job.salary_min : null,
@@ -1233,11 +1610,12 @@ export async function getPublicJob(companySlug: string, jobSlug: string) {
     embed_ink: string;
     embed_accent: string;
     embed_accent_ink: string;
+    careers_headline: string;
   }>`
     select c.name as company_name, c.timezone, r.title, j.department, j.locations, j.work_arrangement,
       j.employment_type, r.description, r.form_schema, r.salary_visible, r.salary_min, r.salary_max,
       r.salary_currency, j.status,
-      c.embed_background, c.embed_ink, c.embed_accent, c.embed_accent_ink
+      c.embed_background, c.embed_ink, c.embed_accent, c.embed_accent_ink, c.careers_headline
     from jobs j
     join companies c on c.id = j.company_id
     join job_revisions r on r.id = j.published_revision_id and r.company_id = j.company_id
@@ -1537,6 +1915,18 @@ export async function submitApplication(input: ApplyInput) {
     source: input.source ?? "CAREERS",
   });
   await audit({ companyId: job.company_id, userId: input.sessionUserId ?? null }, "application.submit", "application", applicationId, "Public application stored.");
+  const knockout = knockoutResult(job.form_schema ?? [], input.answers);
+  if (knockout.closed && knockout.reason) {
+    await sql`
+      update applications
+      set lifecycle = 'REJECTED', rejection_reason = ${knockout.reason}, closed_at = now(), version = version + 1
+      where id = ${applicationId} and company_id = ${job.company_id} and lifecycle = 'ACTIVE'
+    `;
+    await sql`
+      insert into stage_events (id, company_id, application_id, from_lifecycle, to_lifecycle, reason)
+      values (${nid()}, ${job.company_id}, ${applicationId}, 'ACTIVE', 'REJECTED', ${knockout.reason})
+    `;
+  }
   try {
     await runCvScreen({ companyId: job.company_id, applicationId, actorUserId: input.sessionUserId ?? null });
   } catch {
@@ -1545,7 +1935,9 @@ export async function submitApplication(input: ApplyInput) {
   const screened = await sql<{ fit: string | null; action: string | null }>`
     select fit, action from cv_screens where company_id = ${job.company_id} and application_id = ${applicationId}
   `;
-  const cvResult = cvResultLabel(screened[0]?.fit ?? null, screened[0]?.action ?? null, Boolean(input.resume?.dataBase64));
+  const cvResult = knockout.closed && knockout.reason
+    ? knockout.reason
+    : cvResultLabel(screened[0]?.fit ?? null, screened[0]?.action ?? null, Boolean(input.resume?.dataBase64));
   const result = await ensureApplicationRow({
     companyId: job.company_id,
     jobId: job.job_id,
@@ -1576,6 +1968,8 @@ async function storeResume(
   const bytes = Buffer.from(resume.dataBase64, "base64");
   const problem = filePolicy({ name: resume.name, mime: resume.mime, size: bytes.length });
   if (problem) throw new Error(problem);
+  const sniffed = sniffResume(resume.name, bytes);
+  if (!sniffed.ok) throw new Error(sniffed.reason);
   const sample = bytes.subarray(0, 400).toString("utf8");
   const sql = await db();
   const fileId = nid();
@@ -1797,8 +2191,9 @@ export async function integrationStatus(userId: string, slug: string) {
     embed_ink: string;
     embed_accent: string;
     embed_accent_ink: string;
+    careers_headline: string;
   }>`
-    select embed_background, embed_ink, embed_accent, embed_accent_ink
+    select embed_background, embed_ink, embed_accent, embed_accent_ink, careers_headline
     from companies where id = ${actor.companyId}
   `;
   const colors = rows[0];
@@ -1806,16 +2201,19 @@ export async function integrationStatus(userId: string, slug: string) {
     companyName: actor.companyName,
     timezone: actor.timezone,
     retentionDays: actor.retentionDays,
+    headline: colors?.careers_headline ?? "",
     embed: {
       background: colors?.embed_background ?? "#ffffff",
       ink: colors?.embed_ink ?? "#14221b",
-      accent: colors?.embed_accent ?? "#036145",
-      accentInk: colors?.embed_accent_ink ?? "#ffffff",
+      accent: colors?.embed_accent ?? "#cefa90",
+      accentInk: colors?.embed_accent_ink ?? "#14221b",
     },
     items: [
       { name: "Email", state: "Configured", detail: "Messages are captured in this workspace. Nothing is sent to the public internet." },
       { name: "Files", state: "Configured", detail: "Uploads stay in the database, quarantined until the local demo scanner marks them clean. This is not a commercial antivirus." },
-      { name: "Code execution", state: "Local sandbox", detail: "No remote runner key is configured. A sample run uses a separate process with filesystem access denied, a 1.5 second timeout, and truncated output. It is not a virtual machine and it is not a score." },
+      { name: "Code execution", state: "Local sandbox", detail: "No remote runner key is configured. A sample run uses a separate process. A saved sandbox can change the time and output cap. Network and filesystem stay denied. It is not a virtual machine and it is not a score." },
+      { name: "Texting", state: "Captured", detail: "No carrier is connected. A text is stored on the application and in Connectors. It is not sent." },
+      { name: "Business intelligence", state: "Stored until a destination exists", detail: "Extracts stay in this workspace. They are posted only after an https destination is saved and that host answers. No API key is attached. Names are not included." },
       { name: "Calendar", state: "Reconnect until a credential exists", detail: "Refresh records a reconnect state and does not store a token. A vendor URL and refresh token are the only missing connector." },
       { name: "Provider callbacks", state: "Refused", detail: "Callbacks are refused and nothing is stored until PROVIDER_CALLBACK_SECRET is set. The body cannot choose the company." },
       { name: "Webhooks", state: "Refused", detail: "Webhook events are refused and nothing is stored until WEBHOOK_SECRET is set." },

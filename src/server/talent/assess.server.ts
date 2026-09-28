@@ -32,24 +32,65 @@ import {
   type SpaceClass,
   type TimeClass,
 } from "@/domain/judge";
+import { proctorKind } from "@/domain/proctor";
 import { enterTenant } from "@/lib/tenant";
 import { allow, audit, canonical, db, dbNow, json, mapDbError, nid, requireActor, requireUser, sha256, withTransaction } from "./db.server";
+import { ensureCodingBank, flag } from "./bank.server";
+import { candidateItem, answerComplete, coerceAnswer, orderedOptions } from "@/domain/candidate-view";
+import { readPersonality, scorePersonality, type PersonalityResult } from "@/domain/personality";
 import { ensureReview, rememberEvent } from "./workflows.server";
 
 const HUMAN_TYPES = new Set(["text", "code", "file", "sql", "spreadsheet", "recording"]);
 
 export async function listAssessments(userId: string, slug: string) {
   const actor = await requireActor(userId, slug);
+  await ensureCodingBank(actor.companyId);
+  const { ensurePersonalityAssessment } = await import("./personality.server");
+  await ensurePersonalityAssessment(actor.companyId);
+  const { ensureMentalMath } = await import("./mental.server");
+  await ensureMentalMath(actor.companyId);
+  try {
+    const { ensureOpsDefaults } = await import("./ops.server");
+    await ensureOpsDefaults(actor.companyId);
+  } catch {
+    // Assessments still list if the sandbox tables are not ready.
+  }
   const sql = await db();
-  return sql`
-    select a.id, a.name, a.description, a.archived,
+  const rows = await sql<{
+    id: string;
+    name: string;
+    description: string;
+    archived: boolean;
+    auto_send: unknown;
+    published: number;
+    assignments: number;
+    duration_seconds: number | null;
+    proctored: unknown;
+    latest_status: string | null;
+  }>`
+    select a.id, a.name, a.description, a.archived, a.auto_send,
       (select count(*) from assessment_versions v where v.assessment_id = a.id and v.status = 'PUBLISHED') as published,
       (select count(*) from assignments g
         join assessment_versions v on v.id = g.assessment_version_id
-        where v.assessment_id = a.id) as assignments
-    from assessments a where a.company_id = ${actor.companyId}
+        where v.assessment_id = a.id) as assignments,
+      latest.duration_seconds, latest.proctored, latest.status as latest_status
+    from assessments a
+    left join lateral (
+      select duration_seconds, proctored, status
+      from assessment_versions
+      where assessment_id = a.id and company_id = a.company_id
+      order by version_number desc
+      limit 1
+    ) latest on true
+    where a.company_id = ${actor.companyId}
     order by a.created_at desc
   `;
+  return rows.map((row) => ({
+    ...row,
+    auto_send: flag(row.auto_send),
+    proctored: flag(row.proctored),
+    duration_seconds: Number(row.duration_seconds ?? 0),
+  }));
 }
 
 export async function getAssessment(userId: string, slug: string, assessmentId: string) {
@@ -72,6 +113,7 @@ export async function getAssessment(userId: string, slug: string, assessmentId: 
 export async function listQuestions(userId: string, slug: string) {
   const actor = await requireActor(userId, slug);
   allow(actor, "assessment.author");
+  await ensureCodingBank(actor.companyId);
   const sql = await db();
   const rows = await sql<{
     id: string;
@@ -115,6 +157,10 @@ export async function listQuestions(userId: string, slug: string) {
       version_number: row.version_number,
       version_id: row.version_id,
       points: row.points,
+      difficulty: typeof (row.payload as { difficulty?: string } | null)?.difficulty === "string"
+        ? (row.payload as { difficulty: string }).difficulty
+        : null,
+      options: orderedOptions(row.payload, null),
       grading: grading
         ? { method: grading.method, title: grading.title, keySummary: grading.keySummary, steps: grading.steps }
         : null,
@@ -187,6 +233,8 @@ export async function createAssessment(
     durationSeconds: number;
     scoreRelease: string;
     instructions: string;
+    proctored?: boolean;
+    autoSend?: boolean;
     sections: { title: string; weightBasisPoints: number; questionVersionIds: string[]; poolPick?: number | null }[];
   },
 ) {
@@ -197,15 +245,15 @@ export async function createAssessment(
   const assessmentId = nid();
   const versionId = nid();
   await sql`
-    insert into assessments (id, company_id, name, description)
-    values (${assessmentId}, ${actor.companyId}, ${input.name.trim()}, ${input.description})
+    insert into assessments (id, company_id, name, description, auto_send)
+    values (${assessmentId}, ${actor.companyId}, ${input.name.trim()}, ${input.description}, ${input.autoSend !== false})
   `;
   await sql`
     insert into assessment_versions (
-      id, company_id, assessment_id, version_number, status, duration_seconds, instructions, score_release
+      id, company_id, assessment_id, version_number, status, duration_seconds, instructions, score_release, proctored
     ) values (
-      ${versionId}, ${actor.companyId}, ${assessmentId}, 1, 'DRAFT', ${Math.max(1, input.durationSeconds)},
-      ${input.instructions}, ${input.scoreRelease === "AGGREGATE" ? "AGGREGATE" : "NONE"}
+      ${versionId}, ${actor.companyId}, ${assessmentId}, 1, 'DRAFT', ${Math.max(60, input.durationSeconds)},
+      ${input.instructions}, ${input.scoreRelease === "AGGREGATE" ? "AGGREGATE" : "NONE"}, ${input.proctored === true}
     )
   `;
   let position = 0;
@@ -429,7 +477,7 @@ export async function getMyApplication(userId: string, applicationId: string) {
   const application = rows[0];
   if (!application) throw new Error("Not found.");
   const assignments = await sql`
-    select g.id, g.status, s.name, v.duration_seconds, v.instructions, g.multiplier_basis_points, g.extra_seconds,
+    select g.id, g.status, s.name, v.duration_seconds, v.instructions, v.proctored, g.multiplier_basis_points, g.extra_seconds,
       to_char(g.start_by at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as start_by,
       (select t.id from attempts t where t.assignment_id = g.id and t.status = 'IN_PROGRESS' limit 1) as active_attempt
     from assignments g
@@ -449,6 +497,8 @@ export async function getMyApplication(userId: string, applicationId: string) {
       to_char(ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as ends_at
     from interviews where application_id = ${applicationId} and status <> 'CANCELLED'
   `;
+  const { listMyMail } = await import("./mail.server");
+  const messages = await listMyMail(userId, applicationId);
   return {
     application: {
       ...application,
@@ -457,6 +507,7 @@ export async function getMyApplication(userId: string, applicationId: string) {
     assignments,
     offers,
     interviews,
+    messages,
     runner: runnerAvailability(),
   };
 }
@@ -644,8 +695,8 @@ export async function getAttempt(userId: string, attemptId: string) {
       to_char(submitted_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as submitted_at
     from submission_snapshots where attempt_id = ${attemptId}
   `;
-  const release = await sql<{ score_release: string; name: string; instructions: string }>`
-    select v.score_release, a.name, v.instructions
+  const release = await sql<{ score_release: string; name: string; instructions: string; proctored: unknown; duration_seconds: number }>`
+    select v.score_release, a.name, v.instructions, v.proctored, v.duration_seconds
     from attempts t
     join assignments g on g.id = t.assignment_id
     join assessment_versions v on v.id = g.assessment_version_id
@@ -673,8 +724,10 @@ export async function getAttempt(userId: string, attemptId: string) {
     },
     assessmentName: release[0]?.name ?? "Assessment",
     instructions: release[0]?.instructions ?? "",
+    proctored: flag(release[0]?.proctored),
+    durationSeconds: Number(release[0]?.duration_seconds ?? 0),
     runner: runnerAvailability(),
-    items: items.map((item) => ({
+    items: items.map((item) => candidateItem({
       id: item.id,
       position: item.position,
       points: item.points,
@@ -682,9 +735,8 @@ export async function getAttempt(userId: string, attemptId: string) {
       type: item.type,
       section: item.section_title,
       options: presentOptions(item),
-      numeric: item.type === "numeric"
-        ? { absTolerance: item.payload.absTolerance, relTolerance: item.payload.relTolerance }
-        : null,
+      absTolerance: item.payload?.absTolerance,
+      relTolerance: item.payload?.relTolerance,
       answer: item.answer ?? null,
       revision: item.revision ?? 0,
     })),
@@ -697,16 +749,46 @@ export async function getAttempt(userId: string, attemptId: string) {
           score,
         }
       : null,
+    personality: snapshot[0] ? await storedPersonality(attemptId) : null,
   };
 }
 
+export async function recordProctorEvent(
+  userId: string,
+  input: { attemptId: string; kind: string; detail: string },
+) {
+  assertSameSiteRequest();
+  const kind = proctorKind(input.kind);
+  if (!kind) throw new Error("That proctor note is not recognized.");
+  const ctx = await loadOwnedAttempt(userId, input.attemptId);
+  if (ctx.attempt.status !== "IN_PROGRESS") return { ok: true, stored: false };
+  const sql = await db();
+  const versions = await sql<{ proctored: unknown }>`
+    select v.proctored
+    from attempts t
+    join assignments g on g.id = t.assignment_id
+    join assessment_versions v on v.id = g.assessment_version_id
+    where t.id = ${input.attemptId} and t.company_id = ${ctx.attempt.company_id}
+  `;
+  if (!flag(versions[0]?.proctored)) return { ok: true, stored: false };
+  if (kind === "HEARTBEAT") {
+    const recent = await sql<{ id: string }>`
+      select id from proctor_events
+      where company_id = ${ctx.attempt.company_id} and attempt_id = ${input.attemptId} and kind = 'HEARTBEAT'
+        and created_at > now() - interval '20 seconds'
+      limit 1
+    `;
+    if (recent[0]) return { ok: true, stored: false };
+  }
+  await sql`
+    insert into proctor_events (id, company_id, attempt_id, kind, detail)
+    values (${nid()}, ${ctx.attempt.company_id}, ${input.attemptId}, ${kind}, ${input.detail.slice(0, 200)})
+  `;
+  return { ok: true, stored: true };
+}
+
 function presentOptions(item: AttemptItem) {
-  const options = item.payload.options ?? [];
-  const order = item.option_order?.length ? item.option_order : options.map((option) => option.id);
-  return order
-    .map((id) => options.find((option) => option.id === id))
-    .filter((option): option is { id: string; label: string } => Boolean(option))
-    .map((option) => ({ id: option.id, label: option.label }));
+  return orderedOptions(item.payload, item.option_order);
 }
 
 async function loadOwnedAttempt(userId: string, attemptId: string) {
@@ -826,14 +908,13 @@ export async function saveResponse(
   return { status: "saved" as const, revision: updated[0].revision, replay: false };
 }
 
-function validateAnswer(type: string, payload: { options?: { id: string }[] }, answer: unknown): string | null {
+function validateAnswer(type: string, payload: unknown, answer: unknown): string | null {
   if (!answer || typeof answer !== "object") return "That answer is incomplete.";
   const record = answer as Record<string, unknown>;
-  if (type === "single") {
-    const ids = new Set((payload.options ?? []).map((option) => option.id));
+  const ids = new Set(orderedOptions(payload, null).map((option) => option.id));
+  if (type === "single" || type === "likert") {
     if (typeof record.optionId !== "string" || !ids.has(record.optionId)) return "Choose one of the listed options.";
   } else if (type === "multi") {
-    const ids = new Set((payload.options ?? []).map((option) => option.id));
     if (!Array.isArray(record.optionIds) || record.optionIds.some((id) => typeof id !== "string" || !ids.has(id))) {
       return "Choose from the listed options.";
     }
@@ -903,6 +984,7 @@ async function finalize(
       submittedAt: existing[0].submitted_at,
       reason: existing[0].reason,
       answered: existing[0].answers.length,
+      personality: await storedPersonality(attemptId),
       replay: true,
     };
   }
@@ -933,6 +1015,18 @@ async function finalize(
       if (expectedRevisions[response.attempt_item_id] !== response.revision) {
         throw new Error("Some answers changed while you were submitting. Review the latest saved answers.");
       }
+    }
+    const paper = await sql<{ id: string; type: string; answer: unknown }>`
+      select i.id, q.type, r.answer
+      from attempt_items i
+      join question_versions v on v.id = i.question_version_id
+      join questions q on q.id = v.question_id
+      left join responses r on r.attempt_item_id = i.id
+      where i.attempt_id = ${attemptId}
+    `;
+    const open = paper.filter((item) => !answerComplete(item.type, coerceAnswer(item.answer)));
+    if (open.length > 0) {
+      throw new Error(`Answer every question before submitting. ${open.length} still open. When time runs out, the server submits what is already saved.`);
     }
   }
   const finalReason = late ? "DEADLINE" : reason;
@@ -968,6 +1062,15 @@ async function finalize(
     attemptId,
     `Submitted (${finalReason}).`,
   );
+  try {
+    const { advanceJob } = await import("./ladder.server");
+    const jobs = await sql<{ job_id: string }>`
+      select job_id from applications where id = ${attempt.application_id} and company_id = ${attempt.company_id}
+    `;
+    if (jobs[0]) await advanceJob(attempt.company_id, jobs[0].job_id);
+  } catch {
+    // The submission is already stored. Opening the pipeline ranks again.
+  }
   const stamped = await sql<{ submitted_at: string }>`
     select to_char(submitted_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as submitted_at
     from submission_snapshots where attempt_id = ${attemptId}
@@ -977,6 +1080,7 @@ async function finalize(
     submittedAt: stamped[0]?.submitted_at ?? now.toISOString(),
     reason: finalReason,
     answered: responses.length,
+    personality: score.personality,
     replay: false,
   };
 }
@@ -990,7 +1094,7 @@ async function gradeObjective(companyId: string, attemptId: string) {
     section_id: string;
     weight: number;
     section_title: string;
-    key_payload: { correct?: string[]; expected?: string };
+    key_payload: { correct?: string[]; expected?: string; dimension?: string; toward?: string };
     payload: { absTolerance?: string; relTolerance?: string };
     answer: { optionId?: string; optionIds?: string[]; value?: string } | null;
   }>`
@@ -1003,8 +1107,24 @@ async function gradeObjective(companyId: string, attemptId: string) {
     left join responses r on r.attempt_item_id = i.id
     where i.attempt_id = ${attemptId} and i.company_id = ${companyId}
   `;
+  const personality = personalityFrom(items);
+  if (items.length > 0 && items.every((item) => item.type === "likert") && personality) {
+    const revisionRows = await sql<{ n: number }>`
+      select coalesce(max(revision), 0) as n from evaluations where attempt_id = ${attemptId}
+    `;
+    await sql`
+      insert into evaluations (
+        id, company_id, attempt_id, revision, origin, status, basis_points, raw, created_by
+      ) values (
+        ${nid()}, ${companyId}, ${attemptId}, ${Number(revisionRows[0]?.n ?? 0) + 1}, 'AUTOMATIC',
+        'FINAL', null, ${json(personality)}::jsonb, ${"system"}
+      )
+    `;
+    return { pending: false, basisPoints: null, personality };
+  }
   const bySection = new Map<string, { title: string; weight: number; earned: number; possible: number; pending: boolean }>();
   for (const item of items) {
+    if (item.type === "likert") continue;
     const bucket = bySection.get(item.section_id) ?? {
       title: item.section_title,
       weight: item.weight,
@@ -1060,7 +1180,39 @@ async function gradeObjective(companyId: string, attemptId: string) {
       ${json({ sections })}::jsonb, ${"system"}
     )
   `;
-  return { pending: weighted.status !== "FINAL", basisPoints: weighted.basisPoints };
+  return { pending: weighted.status !== "FINAL", basisPoints: weighted.basisPoints, personality: null };
+}
+
+function personalityFrom(items: {
+  type: string;
+  key_payload: { dimension?: string; toward?: string };
+  answer: { optionId?: string } | null;
+}[]): PersonalityResult | null {
+  const likert = items.filter((item) => item.type === "likert");
+  if (!likert.length) return null;
+  return scorePersonality(likert.map((item) => ({
+    optionId: item.answer?.optionId ?? null,
+    dimension: item.key_payload?.dimension ?? "",
+    toward: item.key_payload?.toward ?? "",
+  })));
+}
+
+async function storedPersonality(attemptId: string): Promise<PersonalityResult | null> {
+  const sql = await db();
+  const rows = await sql<{ raw: unknown }>`
+    select raw from evaluations where attempt_id = ${attemptId} and origin = 'AUTOMATIC'
+    order by revision desc limit 1
+  `;
+  const raw = rows[0]?.raw;
+  let parsed: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  return readPersonality(parsed);
 }
 
 export async function listReviews(userId: string, slug: string) {
@@ -1159,6 +1311,18 @@ export async function submitReview(
     scoreStatus: "FINAL",
   });
   await audit(actor, "review.submit", "review", input.reviewId, "Review submitted.");
+  try {
+    const { advanceJob } = await import("./ladder.server");
+    const jobs = await sql<{ job_id: string }>`
+      select a.job_id from attempts t
+      join assignments g on g.id = t.assignment_id
+      join applications a on a.id = g.application_id
+      where t.id = ${tasks[0].attempt_id} and t.company_id = ${actor.companyId}
+    `;
+    if (jobs[0]) await advanceJob(actor.companyId, jobs[0].job_id);
+  } catch {
+    // The review is already stored. Opening the pipeline ranks again.
+  }
   return { ok: true };
 }
 
@@ -1279,15 +1443,22 @@ export async function sampleRun(userId: string, attemptId: string) {
     limit 1
   `;
   const { runIsolated } = await import("./runner.server");
-  const result = await runIsolated(rows[0]?.answer?.text ?? "");
+  const { sandboxForAttempt } = await import("./ops.server");
+  const sandbox = await sandboxForAttempt(attempt.company_id, attemptId);
+  const result = await runIsolated(rows[0]?.answer?.text ?? "", sandbox
+    ? { timeoutMs: Number(sandbox.timeout_ms), maxOutputChars: Number(sandbox.max_output_chars) }
+    : undefined);
+  const sandboxNote = sandbox
+    ? ` Sandbox "${sandbox.name}": ${sandbox.timeout_ms} ms, ${sandbox.max_output_chars} characters, network denied, filesystem denied.`
+    : " Default sandbox: 1500 ms, 4000 characters, network denied, filesystem denied.";
   await sql`
     insert into code_runs (id, company_id, attempt_id, status, truncated, timed_out, output_excerpt)
     values (
       ${nid()}, ${attempt.company_id}, ${attemptId}, ${result.status},
-      ${result.truncated}, ${result.timedOut}, ${result.outputExcerpt.slice(0, 4000)}
+      ${result.truncated}, ${result.timedOut}, ${result.outputExcerpt.slice(0, 8000)}
     )
   `;
-  return result;
+  return { ...result, reason: `${result.reason}${sandboxNote}` };
 }
 
 const DEMO_CODE = [
@@ -1523,7 +1694,8 @@ async function judgeOne(companyId: string, row: CodeRow) {
   const { judgeIsolated } = await import("./runner.server");
   const run = await judgeIsolated(source, entry, cases.map((item) => item.args));
   if (run.status !== "JUDGED" || run.results.length !== cases.length) {
-    await saveJudgement({ ...blank, status: run.status === "JUDGED" ? "FAILED" : run.status });
+    const status = run.status === "TIMED_OUT" ? "TIMED_OUT" : (run.status === "REFUSED" || run.status === "INFRA" ? "REFUSED" : "FAILED");
+    await saveJudgement({ ...blank, status });
     return;
   }
   let passed = 0;

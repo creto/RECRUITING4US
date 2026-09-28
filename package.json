@@ -16,7 +16,7 @@
     "preview:stop": "node scripts/preview.mjs stop",
     "typecheck": "tsc --noEmit",
     "check:auth": "node scripts/check-auth-invariant.mjs",
-    "test": "node --test 'scripts/**/*.test.mjs' && node --experimental-strip-types --test src/domain/rules.test.ts src/domain/judge.test.ts src/domain/screen.test.ts src/domain/sheet.test.ts src/domain/embed-theme.test.ts src/domain/schema.invariants.test.ts src/domain/completion.test.ts src/lib/app-data/app-data.test.ts src/lib/app-data/readiness-schedule.test.ts src/lib/auth/gate-identity.test.ts src/lib/auth/sign-in-gate.test.ts",
+    "test": "node --test 'scripts/**/*.test.mjs' && node --experimental-strip-types --test src/domain/rules.test.ts src/domain/judge.test.ts src/domain/screen.test.ts src/domain/sheet.test.ts src/domain/embed-theme.test.ts src/domain/schema.invariants.test.ts src/domain/completion.test.ts src/domain/coding-bank.test.ts src/domain/attempt-record.test.ts src/domain/personality.test.ts src/domain/mental-math.test.ts src/domain/candidate-view.test.ts src/domain/expertise.test.ts src/domain/half.test.ts src/domain/cv-index.test.ts src/domain/scorecard.test.ts src/domain/mail.test.ts src/domain/ops.test.ts src/domain/platform/platform.test.ts src/server/talent/runner.test.ts src/server/talent/smtp.contract.test.ts src/lib/app-data/app-data.test.ts src/lib/app-data/readiness-schedule.test.ts src/lib/auth/gate-identity.test.ts src/lib/auth/sign-in-gate.test.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

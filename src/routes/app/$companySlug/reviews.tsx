@@ -19,7 +19,7 @@ function Reviews() {
       {(state.data ?? []).length === 0 ? <Empty title="No review tasks" body="Assign an assessment with a written section, or wait for a submission." /> : null}
       <ul className="space-y-3">
         {(state.data ?? []).map((task: any) => (
-          <li key={String(task.id)} className="rounded-md border border-line bg-surface p-4">
+          <li key={String(task.id)} className="rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4">
             <button type="button" className="text-left" onClick={() => setOpen(String(task.id))}>
               <span className="text-xl">{String(task.candidate_name)}</span>
               <span className="mt-1 block text-sm text-muted">{String(task.assessment_name)} · {String(task.job_title)} · {String(task.status)}</span>
@@ -40,7 +40,7 @@ function CodeBoard({ slug }: { slug: string }) {
   if (state.error) return <Alert>{state.error}</Alert>;
   const groups = state.data?.groups ?? [];
   return (
-    <section className="mb-8 rounded-md border border-line bg-surface p-4">
+    <section className="mb-8 rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4">
       <h2 className="text-2xl">Code ranking</h2>
       <p className="mt-1 text-sm text-muted">{state.data?.note}</p>
       {groups.length === 0 ? <div className="mt-3"><Empty title="No submitted code" body="Submitted code answers for this company show up here." /></div> : null}

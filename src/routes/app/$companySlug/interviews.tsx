@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { cancelInterview, createSlot, feedbackFor, interviewIcs, listInterviews, listSlots, refreshCalendar, submitFeedback } from "@/server/talent.functions";
-import { Alert, Button, Empty, Field, inputClass, Loading, PageTitle, refreshPage, useAuthed, when } from "@/components/talent/kit";
+import { cancelInterview, createSlot, feedbackFor, interviewIcs, listInterviews, listScoreboard, listSlots, refreshCalendar, submitFeedback } from "@/server/talent.functions";
+import { RATINGS } from "@/domain/scorecard";
+import { Alert, AppLink, Button, Empty, Field, inputClass, Loading, PageTitle, refreshPage, useAuthed, when } from "@/components/talent/kit";
 
 export const Route = createFileRoute("/app/$companySlug/interviews")({ component: Interviews });
 
@@ -33,17 +34,21 @@ function Interviews() {
   if (state.error) return <Alert>{state.error}</Alert>;
   return (
     <div>
-      <PageTitle title="Interviews" lede="Times are stored in UTC and shown in the interview timezone. Calendar refresh runs here. Without a vendor credential the state stays reconnect, and no token is stored." />
+      <PageTitle title="Interviews" lede="Scheduled conversations on the left. Rankings from submitted recommendations on the right." />
       <p className="mb-4 text-sm text-muted">
         {calendar
           ? `External calendar: ${calendar.status}.${calendar.error ? ` ${calendar.error}` : ""}`
           : "Checking the calendar connection."}
       </p>
+      <div className="grid items-start gap-8 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div>
+          <h2 className="text-xl">Scheduled</h2>
+          <div className="mt-3">
       {(state.data ?? []).length === 0 ? <Empty title="No interviews" body="Schedule one from an application." /> : null}
       <ul className="space-y-3">
         {(state.data ?? []).map((item: any) => (
-          <li key={String(item.id)} className="rounded-md border border-line bg-surface p-4 text-sm">
-            <h2 className="text-xl">{String(item.title)}</h2>
+          <li key={String(item.id)} className="rounded-[24px] border border-line bg-white p-4 text-sm shadow-[0_8px_24px_rgba(20,34,27,0.04)]">
+            <h3 className="text-xl">{String(item.title)}</h3>
             <p>{String(item.candidate_name)} · {String(item.job_title)}</p>
             <p>{when(String(item.starts_at), String(item.timezone))} · {String(item.status)}</p>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -54,7 +59,7 @@ function Interviews() {
           </li>
         ))}
       </ul>
-      <form className="mt-8 grid gap-2 rounded-md border border-line bg-surface p-4 md:grid-cols-2" onSubmit={(event) => {
+      <form className="mt-8 grid gap-2 rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4 md:grid-cols-2" onSubmit={(event) => {
         event.preventDefault();
         const data = new FormData(event.currentTarget);
         createSlot({ data: { slug: companySlug, localStart: String(data.get("start")), localEnd: String(data.get("end")), timezone: String(data.get("timezone")) } })
@@ -71,6 +76,10 @@ function Interviews() {
           ))}
         </ul>
       </form>
+          </div>
+        </div>
+        <Scoreboard slug={companySlug} />
+      </div>
       {error ? <div className="mt-3"><Alert>{error}</Alert></div> : null}
     </div>
   );
@@ -86,40 +95,139 @@ function download(text: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+function Scoreboard({ slug }: { slug: string }) {
+  const state = useAuthed(() => listScoreboard({ data: { slug } }), [slug]);
+  if (state.loading || state.isPending) return null;
+  if (state.error) return <div className="mb-6"><Alert>{state.error}</Alert></div>;
+  const rows = state.data?.rows ?? [];
+  return (
+    <section className="mb-8">
+      <h2 className="text-2xl">Scoreboard</h2>
+      <p className="mt-2 text-sm text-muted">{state.data?.note}</p>
+      {rows.length === 0 ? <p className="mt-3 text-sm">No interviews yet.</p> : null}
+      <ol className="mt-3 space-y-2">
+        {rows.map((row) => (
+          <li key={row.applicationId} className="rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4 text-sm">
+            <p className="font-medium">
+              {row.rank == null ? "Unranked" : `Rank ${row.rank}`}
+              {row.tied ? " · tied" : ""}
+              {" · "}
+              <AppLink href={`/app/${slug}/applications/${row.applicationId}`}>{row.name}</AppLink>
+            </p>
+            <p className="text-muted">
+              {row.jobTitle}
+              {row.average == null ? " · no submitted recommendation yet" : ` · average ${row.average} from ${row.submitted} submitted`}
+            </p>
+            {row.waiting ? <p className="text-muted">Some scorecards stay hidden until you submit yours for that interview. The rank waits until then.</p> : null}
+            {row.cards.map((card) => (
+              <div key={`${card.interviewId}-${card.reviewerId}`} className="mt-2">
+                <p>{card.reviewerName} · {card.interviewTitle} <RatingChip id={card.recommendation} label={card.recommendationLabel} /></p>
+                <p>{card.attributes.map((attribute) => `${attribute.label}: ${attribute.ratingLabel}`).join(" · ")}</p>
+                {card.notes ? <p className="text-muted">{card.notes}</p> : null}
+              </div>
+            ))}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+function RatingChip({ id, label }: { id: string; label: string }) {
+  const rating = RATINGS.find((item) => item.id === id);
+  return (
+    <span className="ml-1 inline-flex min-h-8 items-center rounded-md px-2 text-xs" style={rating ? { background: rating.background, color: rating.color } : undefined}>
+      {label}
+    </span>
+  );
+}
+
+function RatingScale({ label, value, onChange }: { label: string; value: string; onChange: (id: string) => void }) {
+  return (
+    <fieldset>
+      <legend className="text-sm">{label}</legend>
+      <div className="mt-1 flex flex-wrap gap-2" role="radiogroup" aria-label={label}>
+        {RATINGS.map((rating) => {
+          const selected = value === rating.id;
+          return (
+            <button
+              key={rating.id}
+              type="button"
+              aria-pressed={selected}
+              className="min-h-11 rounded-md border px-3 text-sm"
+              style={selected
+                ? { background: rating.background, color: rating.color, borderColor: "transparent" }
+                : { background: "var(--color-surface)", color: "var(--color-ink)", borderColor: "var(--color-line)" }}
+              onClick={() => onChange(rating.id)}
+            >
+              {rating.label}
+            </button>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
+
 function Feedback({ slug, interviewId }: { slug: string; interviewId: string }) {
   const state = useAuthed(() => feedbackFor({ data: { slug, interviewId } }), [slug, interviewId]);
+  const [ratings, setRatings] = useState<Record<string, string>>({});
+  const [recommendation, setRecommendation] = useState("");
   const [notes, setNotes] = useState("");
+  const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!state.data || ready) return;
+    const mine = state.data.mine;
+    const stored = mine?.ratings && typeof mine.ratings === "object" ? mine.ratings as Record<string, string> : {};
+    setRatings(stored);
+    setRecommendation(typeof mine?.recommendation === "string" ? mine.recommendation : "");
+    setNotes(mine?.notes ?? "");
+    setReady(true);
+  }, [state.data, ready]);
   if (!state.data) return null;
+  const submitted = state.data.mine?.status === "SUBMITTED";
   return (
-    <form className="mt-3 space-y-2" onSubmit={(event) => {
-      event.preventDefault();
-      const data = new FormData(event.currentTarget);
-      const ratings = {
-        evidence: Number(data.get("evidence")),
-        collaboration: Number(data.get("collaboration")),
-        communication: Number(data.get("communication")),
-      };
-      submitFeedback({
-        data: { slug, interviewId, ratings, recommendation: String(data.get("recommendation")), notes, submit: true },
-      }).then(() => refreshPage()).catch((err) => setError(err.message));
-    }}>
-      <p className="text-xs text-muted">{state.data.released ? "Peer feedback is visible." : "Other interviewers’ feedback stays hidden until you submit."}</p>
-      {state.data.scorecard.map((item: any) => (
-        <Field key={item.id} label={item.label}>
-          <input name={item.id} className={inputClass} type="number" min={0} max={4} required defaultValue={state.data?.mine?.ratings?.[item.id] ?? 3} />
-        </Field>
+    <div className="mt-3 space-y-3">
+      <p className="text-xs text-muted">
+        {state.data.released
+          ? "Submitted scorecards from this interview are visible."
+          : "Other interviewers’ scorecards stay hidden until you submit yours."}
+      </p>
+      {submitted ? (
+        <div className="space-y-2">
+          <p>Submitted. This scorecard cannot be edited.</p>
+          {state.data.attributes.map((attribute: { id: string; label: string }) => (
+            <p key={attribute.id}>{attribute.label}: <RatingChip id={ratings[attribute.id] ?? ""} label={RATINGS.find((item) => item.id === ratings[attribute.id])?.label ?? "Not rated"} /></p>
+          ))}
+          <p>Overall: <RatingChip id={recommendation} label={RATINGS.find((item) => item.id === recommendation)?.label ?? "Not rated"} /></p>
+          <p className="text-muted">{notes}</p>
+        </div>
+      ) : (
+        <form className="space-y-3" onSubmit={(event) => {
+          event.preventDefault();
+          submitFeedback({
+            data: { slug, interviewId, ratings, recommendation, notes, submit: true },
+          }).then(() => refreshPage()).catch((err) => setError(err instanceof Error ? err.message : "Could not submit."));
+        }}>
+          {state.data.attributes.map((attribute: { id: string; label: string }) => (
+            <RatingScale key={attribute.id} label={attribute.label} value={ratings[attribute.id] ?? ""} onChange={(id) => setRatings((current) => ({ ...current, [attribute.id]: id }))} />
+          ))}
+          <RatingScale label="Overall recommendation" value={recommendation} onChange={setRecommendation} />
+          <Field label="Written feedback">
+            <textarea className={`${inputClass} min-h-20 py-2`} value={notes} onChange={(event) => setNotes(event.target.value)} required />
+          </Field>
+          {error ? <Alert>{error}</Alert> : null}
+          <Button type="submit" variant="secondary">Submit scorecard</Button>
+        </form>
+      )}
+      {state.data.feedback?.filter((item: { reviewerId: string }) => item.reviewerId !== state.data?.mine?.reviewer_user_id).map((item: { reviewerId: string; reviewerName: string; recommendation: string; recommendationLabel: string; notes: string; attributes: { id: string; label: string; ratingLabel: string }[] }) => (
+        <div key={item.reviewerId} className="border-t border-line pt-2 text-sm">
+          <p>{item.reviewerName} <RatingChip id={item.recommendation} label={item.recommendationLabel} /></p>
+          <p>{item.attributes.map((attribute) => `${attribute.label}: ${attribute.ratingLabel}`).join(" · ")}</p>
+          <p className="text-muted">{item.notes}</p>
+        </div>
       ))}
-      <Field label="Recommendation">
-        <select name="recommendation" className={inputClass} defaultValue="yes">
-          <option value="yes">Yes</option>
-          <option value="mixed">Mixed</option>
-          <option value="no">No</option>
-        </select>
-      </Field>
-      <Field label="Notes"><textarea className={`${inputClass} min-h-16 py-2`} value={notes} onChange={(event) => setNotes(event.target.value)} /></Field>
-      {error ? <Alert>{error}</Alert> : null}
-      <Button type="submit" variant="secondary">Submit feedback</Button>
-    </form>
+    </div>
   );
 }

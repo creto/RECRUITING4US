@@ -2,12 +2,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { getAttempt, requestSampleRun, saveResponse, submitAttempt } from "@/server/talent.functions";
 import { questionIndex, saveStatusLabel } from "@/domain/rules";
-import { Alert, Button, Gate, Loading, PageTitle, useAuthed, when } from "@/components/talent/kit";
+import { ExamProctor } from "@/components/talent/proctor";
+import { ExamDesk, PersonalityCard, examPaper } from "@/components/talent/exam-shell";
+import { answerComplete, type SavedAnswer } from "@/domain/candidate-view";
+import { Alert, Gate, Loading, PageTitle, useAuthed, when } from "@/components/talent/kit";
 
 export const Route = createFileRoute("/candidate/attempts/$attemptId")({ component: AttemptPage });
 
 type Option = { id: string; label: string };
-type Answer = { optionId?: string; optionIds?: string[]; value?: string; text?: string };
+type Answer = SavedAnswer;
 type Item = {
   id: string;
   position: number;
@@ -25,9 +28,21 @@ type AttemptView = {
   assessmentName: string;
   instructions: string;
   runner: { available: boolean; reason: string; mode?: string };
+  proctored: boolean;
+  durationSeconds: number;
   attempt: { id: string; status: string; deadline: string; startedAt: string; reason: string | null };
   items: Item[];
   receipt: { id: string; submittedAt: string; reason: string; answered: number; score: number | null } | null;
+  personality: {
+    code: string | null;
+    letters?: string | null;
+    identity?: string | null;
+    title: string;
+    group?: string;
+    summary: string;
+    note: string;
+    scales: { name: string; result: string }[];
+  } | null;
 };
 
 function AttemptPage() {
@@ -36,9 +51,11 @@ function AttemptPage() {
   if (state.isPending || state.loading) return <Loading />;
   return (
     <Gate pending={state.isPending} signedOut={state.signedOut}>
-      <main className="mx-auto max-w-3xl px-4 py-6">
+      <main className={`${examPaper} min-h-screen bg-[#f4f7f5]`}>
+        <div className="mx-auto max-w-6xl px-4 py-6">
         {state.error ? <Alert>{state.error}</Alert> : null}
         {state.data ? <Delivery key={state.data.receipt?.id ?? state.data.attempt.status} view={state.data} /> : null}
+        </div>
       </main>
     </Gate>
   );
@@ -65,10 +82,13 @@ function Taker({ view }: { view: AttemptView }) {
   const [saveState, setSaveState] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<AttemptView["receipt"]>(null);
+  const [personality, setPersonality] = useState<AttemptView["personality"]>(null);
   const [runnerNote, setRunnerNote] = useState<string | null>(null);
   const timers = useRef<Record<string, number>>({});
   const left = useRemaining(view.attempt.deadline, view.serverNow);
+  const [cameraReady, setCameraReady] = useState(!view.proctored);
   const item = view.items[index];
+  const locked = view.proctored && !cameraReady;
 
   useEffect(() => {
     return () => {
@@ -154,12 +174,13 @@ function Taker({ view }: { view: AttemptView }) {
         answered: result.answered,
         score: null,
       });
+      setPersonality(result.personality ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not submit.");
     }
   }
 
-  const unanswered = view.items.filter((row) => !hasAnswer(answers[row.id] ?? row.answer, row.type)).length;
+  const unanswered = view.items.filter((row) => !answerComplete(row.type, answers[row.id] ?? row.answer)).length;
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -167,6 +188,7 @@ function Taker({ view }: { view: AttemptView }) {
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       const next = questionIndex(index, event.key, view.items.length);
       if (next == null) return;
+      if (next > index && item && !answerComplete(item.type, answers[item.id])) return;
       event.preventDefault();
       void flushCurrent().then(() => setIndex(next));
     }
@@ -176,163 +198,90 @@ function Taker({ view }: { view: AttemptView }) {
 
   if (receipt) {
     return (
-      <section className="space-y-3">
+      <section className="space-y-4">
         <PageTitle title="Submission receipt" lede="This receipt is the saved snapshot. A score appears only when the employer releases it." />
-        <p className="text-sm">Receipt {receipt.id}</p>
-        <p className="text-sm">Submitted {when(receipt.submittedAt)} · {receipt.reason} · {receipt.answered} saved answers</p>
-        <Link to="/candidate" className="text-sm text-accent">Back to your applications</Link>
+        <div className={`${examPaper} rounded-[28px] border border-[#d7e1da] px-6 py-5 text-sm`}>
+          <p className="text-[11px] uppercase tracking-[0.18em] text-[#4c6b16]">Receipt {receipt.id}</p>
+          <p className="mt-2 text-[#17211c]">Submitted {when(receipt.submittedAt)} · {receipt.reason} · {receipt.answered} saved answers</p>
+        </div>
+        <PersonalityReadout personality={personality} />
+        <Link to="/candidate" className="text-sm text-link">Back to your applications</Link>
       </section>
     );
   }
 
   if (!item) return <Alert>This attempt has no questions.</Alert>;
 
+  const secondsLeft = Math.max(0, Math.ceil(left / 1000));
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-sm text-muted">{view.assessmentName}</p>
-          <h1 className="text-3xl">{item.section}</h1>
-        </div>
-        <p className="rounded-md border border-line bg-surface px-3 py-2 text-sm tabular-nums" aria-live="polite">
-          {left > 0 ? formatLeft(left) : "Time is up"} · server clock
-        </p>
-      </div>
-      <p className="text-sm text-muted">{view.instructions}</p>
-      <nav className="flex gap-2 overflow-x-auto" aria-label="Questions">
-        {view.items.map((row, position) => (
-          <button
-            key={row.id}
-            type="button"
-            className={`min-h-11 min-w-11 rounded-md border px-2 text-sm ${position === index ? "border-accent bg-accent text-accent-ink" : "border-line bg-surface"}`}
-            onClick={() => {
-              void flushCurrent().then(() => setIndex(position));
-            }}
-          >
-            {position + 1}
-          </button>
-        ))}
-      </nav>
-      <article className="space-y-3 rounded-md border border-line bg-surface p-4">
-        <p className="whitespace-pre-wrap text-sm">{item.prompt}</p>
-        {item.type === "single" ? (
-          <fieldset className="space-y-2">
-            <legend className="sr-only">Choose one</legend>
-            {item.options.map((option) => (
-              <label key={option.id} className="flex min-h-11 items-start gap-2 text-sm">
-                <input
-                  type="radio"
-                  name={item.id}
-                  checked={answers[item.id]?.optionId === option.id}
-                  onChange={() => edit({ optionId: option.id })}
-                />
-                <span>{option.label}</span>
-              </label>
-            ))}
-          </fieldset>
-        ) : null}
-        {item.type === "numeric" ? (
-          <label className="block text-sm">
-            Number
-            <input
-              className="mt-1 min-h-11 w-full rounded-md border border-line bg-bg px-3"
-              inputMode="decimal"
-              value={answers[item.id]?.value ?? ""}
-              onChange={(event) => edit({ value: event.target.value })}
-            />
-          </label>
-        ) : null}
-        {item.type === "multi" ? (
-          <fieldset className="space-y-2">
-            <legend className="sr-only">Choose all that apply</legend>
-            {item.options.map((option) => {
-              const selected = answers[item.id]?.optionIds ?? [];
-              return (
-                <label key={option.id} className="flex min-h-11 items-start gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={selected.includes(option.id)}
-                    onChange={() => {
-                      const next = selected.includes(option.id)
-                        ? selected.filter((id) => id !== option.id)
-                        : [...selected, option.id];
-                      edit({ optionIds: next });
-                    }}
-                  />
-                  <span>{option.label}</span>
-                </label>
-              );
-            })}
-          </fieldset>
-        ) : null}
-        {item.type !== "single" && item.type !== "multi" && item.type !== "numeric" ? (
-          <label className="block text-sm">
-            {item.type === "code" ? "Source" : "Response"}
-            <textarea
-              className="mt-1 min-h-48 w-full rounded-md border border-line bg-bg px-3 py-2 font-mono text-sm"
-              value={answers[item.id]?.text ?? ""}
-              onChange={(event) => edit({ text: event.target.value })}
-            />
-          </label>
-        ) : null}
-        <p className="text-xs text-muted" aria-live="polite">
-          {saveStatusLabel(saveState[item.id])}
-        </p>
-        {item.type === "code" ? (
-          <div className="space-y-2">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => {
-                requestSampleRun({ data: { attemptId: view.attempt.id } })
-                  .then((result) => setRunnerNote(
-                    result.outputExcerpt
-                      ? `${result.reason}\n${result.outputExcerpt}`
-                      : result.reason,
-                  ))
-                  .catch((err) => setRunnerNote(err.message));
-              }}
-            >
-              Request a sample run
-            </Button>
-            <p className="whitespace-pre-wrap text-sm text-muted">{runnerNote ?? view.runner.reason}</p>
-          </div>
-        ) : null}
-      </article>
-      {error ? <Alert>{error}</Alert> : null}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted">{unanswered} unanswered</p>
-        <div className="flex gap-2">
-          <Button type="button" variant="secondary" disabled={index === 0} onClick={() => void flushCurrent().then(() => setIndex((value) => value - 1))}>
-            Previous
-          </Button>
-          <Button type="button" variant="secondary" disabled={index >= view.items.length - 1} onClick={() => void flushCurrent().then(() => setIndex((value) => value + 1))}>
-            Next
-          </Button>
-          <Button type="button" onClick={() => void submit()}>Submit</Button>
-        </div>
-      </div>
+      {view.proctored ? <ExamProctor liveAttemptId={view.attempt.id} onCamera={setCameraReady} /> : null}
+      {locked ? <Alert>Allow the camera to see the questions. The picture stays on this device and is not uploaded.</Alert> : (
+        <ExamDesk
+          kicker={view.assessmentName}
+          title={item.section}
+          instructions={`${view.instructions}${view.durationSeconds > 0 ? ` Limit ${Math.round(view.durationSeconds / 60)} minutes from the start.` : ""} The server clock ends the attempt. Editing this timer does not add time. The answer key is not on this page. You cannot move on until this question is answered.`}
+          items={view.items}
+          index={index}
+          answers={answers}
+          secondsLeft={secondsLeft}
+          totalSeconds={view.durationSeconds}
+          closed={left <= 0}
+          saveLabel={`${saveStatusLabel(saveState[item.id])}${unanswered ? ` · ${unanswered} still open` : ""}`}
+          notice={error}
+          onSelect={(next) => {
+            void flushCurrent().then(() => setIndex(next));
+          }}
+          onAnswer={edit}
+          onSubmit={() => void submit()}
+          toolbar={item.type === "code" ? (
+            <div className="space-y-2">
+              <button
+                type="button"
+                className="min-h-10 w-full rounded-full border border-line px-3 text-xs"
+                onClick={() => {
+                  requestSampleRun({ data: { attemptId: view.attempt.id } })
+                    .then((result) => setRunnerNote(result.outputExcerpt ? `${result.reason}\n${result.outputExcerpt}` : result.reason))
+                    .catch((err) => setRunnerNote(err.message));
+                }}
+              >
+                Request a sample run
+              </button>
+              <p className="whitespace-pre-wrap text-xs text-muted">{runnerNote ?? view.runner.reason}</p>
+            </div>
+          ) : null}
+        />
+      )}
     </div>
   );
+}
+
+function PersonalityReadout({ personality }: { personality: AttemptView["personality"] }) {
+  if (!personality) return null;
+  return <PersonalityCard personality={personality} />;
 }
 
 function Receipt({ view }: { view: AttemptView }) {
   const receipt = view.receipt;
   return (
-    <section className="space-y-3">
+    <section className="space-y-4">
       <PageTitle title={view.assessmentName} lede="Submitted work stays as it was. Reloading does not add time or change answers." />
-      <p className="text-sm">Status {view.attempt.status}{view.attempt.reason ? ` · ${view.attempt.reason}` : ""}</p>
-      {receipt ? (
-        <div className="rounded-md border border-line bg-surface p-4 text-sm">
-          <p>Receipt {receipt.id}</p>
-          <p>Submitted {when(receipt.submittedAt)} · {receipt.reason}</p>
-          <p>{receipt.answered} answers in the snapshot</p>
-          <p>{receipt.score == null ? "No score has been released." : `Released score: ${(receipt.score / 100).toFixed(2)}%`}</p>
-        </div>
-      ) : (
-        <p className="text-sm text-muted">This attempt is closed.</p>
-      )}
-      <Link to="/candidate" className="text-sm text-accent">Back to your applications</Link>
+      <div className={`${examPaper} rounded-[28px] border border-[#d7e1da] px-6 py-5 text-sm text-[#17211c]`}>
+        <p className="text-[11px] uppercase tracking-[0.18em] text-[#44574e]">Status {view.attempt.status}{view.attempt.reason ? ` · ${view.attempt.reason}` : ""}</p>
+        {receipt ? (
+          <>
+            <p className="mt-2">Receipt {receipt.id}</p>
+            <p>Submitted {when(receipt.submittedAt)} · {receipt.reason}</p>
+            <p>{receipt.answered} answers in the snapshot</p>
+            <p className="mt-2">{view.personality ? "A personality result is not a percentage." : receipt.score == null ? "No score has been released." : `Released score: ${(receipt.score / 100).toFixed(2)}%`}</p>
+          </>
+        ) : (
+          <p className="mt-2 text-muted">This attempt is closed.</p>
+        )}
+      </div>
+      <PersonalityReadout personality={view.personality} />
+      <Link to="/candidate" className="text-sm text-link">Back to your applications</Link>
     </section>
   );
 }
@@ -347,21 +296,4 @@ function useRemaining(deadline: string, serverNow: string) {
     return () => window.clearInterval(id);
   }, [deadline, skew]);
   return left;
-}
-
-function formatLeft(ms: number) {
-  const total = Math.ceil(ms / 1000);
-  const hours = Math.floor(total / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  const seconds = total % 60;
-  const clock = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-  return hours > 0 ? `${hours}:${clock}` : clock;
-}
-
-function hasAnswer(answer: Answer | null | undefined, type: string) {
-  if (!answer) return false;
-  if (type === "single") return Boolean(answer.optionId);
-  if (type === "multi") return Boolean(answer.optionIds && answer.optionIds.length > 0);
-  if (type === "numeric") return Boolean(answer.value);
-  return Boolean(answer.text && answer.text.trim());
 }

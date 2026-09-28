@@ -62,7 +62,7 @@ export function ApplyForm({
 
   if (done) {
     return (
-      <section className="space-y-2 rounded-md border border-line bg-surface p-4" aria-live="polite">
+      <section className="space-y-2 rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4" aria-live="polite">
         <h2 className="text-2xl">{done.title}</h2>
         {done.lines.map((line) => <p key={line} className="text-sm">{line}</p>)}
       </section>
@@ -70,7 +70,7 @@ export function ApplyForm({
   }
 
   return (
-    <form className="space-y-3 rounded-md border border-line bg-surface p-4" onSubmit={submit}>
+    <form className="space-y-3 rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4" onSubmit={submit}>
       <h2 className="text-2xl">Apply</h2>
       <Field label="Name"><input className={inputClass} value={name} onChange={(event) => setName(event.target.value)} required autoComplete="name" /></Field>
       <Field label="Email"><input className={inputClass} type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" /></Field>
@@ -97,7 +97,7 @@ export function ApplyForm({
           ) : (
             <input
               className={inputClass}
-              type={field.type === "url" ? "url" : "text"}
+              type={field.type === "url" ? "url" : field.type === "number" ? "number" : "text"}
               value={answers[field.id] ?? ""}
               required={Boolean(field.required)}
               onChange={(event) => setAnswers((current) => ({ ...current, [field.id]: event.target.value }))}
@@ -106,12 +106,12 @@ export function ApplyForm({
           {field.help ? <span className="mt-1 block text-xs text-muted">{field.help}</span> : null}
         </Field>
       ))}
-      <Field label="CV (PDF or text)">
+      <Field label="CV (PDF, text, or DOCX)">
         <input
           className={inputClass}
           type="file"
           required
-          accept=".pdf,.txt,.csv,application/pdf,text/plain,text/csv"
+          accept=".pdf,.txt,.csv,.docx,application/pdf,text/plain,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           onChange={(event) => {
             const file = event.target.files?.[0];
             if (!file) {
@@ -123,12 +123,17 @@ export function ApplyForm({
               setError("The CV must be 500 KB or smaller.");
               return;
             }
+            if (file.name.toLowerCase().endsWith(".doc") && !file.name.toLowerCase().endsWith(".docx")) {
+              setResume(null);
+              setError("Legacy Word .doc files are not extracted. Upload DOCX, PDF, or text.");
+              return;
+            }
             const reader = new FileReader();
             reader.onload = () => {
               const encoded = String(reader.result ?? "");
               const dataBase64 = encoded.includes(",") ? encoded.split(",")[1] ?? "" : encoded;
               const ext = file.name.toLowerCase().split(".").pop();
-              const mime = ext === "pdf" ? "application/pdf" : ext === "csv" ? "text/csv" : ext === "txt" ? "text/plain" : file.type;
+              const mime = ext === "pdf" ? "application/pdf" : ext === "csv" ? "text/csv" : ext === "txt" ? "text/plain" : ext === "docx" ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : file.type;
               setResume({ name: file.name, mime, dataBase64 });
               setError(null);
             };
@@ -136,7 +141,7 @@ export function ApplyForm({
           }}
         />
       </Field>
-      <p className="text-sm text-muted">The CV is checked for this job’s must-have skills. Your other answers are stored as one row. You will see a receipt when the form is complete. It is not emailed.</p>
+      <p className="text-sm text-muted">The CV is indexed into titles, skills, education, locations, and years. The original file stays attached. DOCX text is extracted without running macros. Legacy .doc and scanned images are kept but not read. A knockout question, if this job has one, can close the application. You will see a receipt. It is not emailed unless a mail provider is configured.</p>
       {error ? <Alert>{error}</Alert> : null}
       <Button type="submit" disabled={pending}>{pending ? "Submitting" : "Submit application"}</Button>
     </form>

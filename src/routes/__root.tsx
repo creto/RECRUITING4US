@@ -10,7 +10,7 @@ export const Route = createRootRoute({
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "RECRUIT4US" },
       { name: "description", content: "RECRUIT4US hiring workspace for jobs, assessments, interviews, and offers." },
-      { name: "theme-color", content: "#000000" },
+      { name: "theme-color", content: "#f4f7f5" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },

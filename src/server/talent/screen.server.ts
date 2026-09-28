@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import { assertSameSiteRequest } from "@/lib/auth/isolation.server";
 import {
-  extractResumeText,
   screenResume,
   termsFromJson,
 } from "@/domain/screen";
+import { readResume } from "./resume-text";
 import { allow, audit, db, json, nid, requireActor } from "./db.server";
 import { rememberEvent } from "./workflows.server";
 
@@ -143,8 +143,8 @@ export async function runCvScreen(input: { companyId: string; applicationId: str
   const app = apps[0];
   if (!app) throw new Error("Not found.");
 
-  const files = await sql<{ id: string; mime: string; content: string; scan_state: string }>`
-    select id, mime, content, scan_state from file_objects
+  const files = await sql<{ id: string; mime: string; content: string; scan_state: string; display_name: string }>`
+    select id, mime, content, scan_state, display_name from file_objects
     where company_id = ${input.companyId} and owner_id = ${input.applicationId}
     order by created_at desc
     limit 1
@@ -154,7 +154,7 @@ export async function runCvScreen(input: { companyId: string; applicationId: str
     ? file.scan_state
     : "QUARANTINE";
   const extracted = file && scanState === "CLEAN"
-    ? extractResumeText(file.mime, Buffer.from(file.content, "base64"))
+    ? await readResume(file.mime, Buffer.from(file.content, "base64"), file.display_name)
     : { text: null, readable: false, note: "" };
 
   const published = app.assessment_id

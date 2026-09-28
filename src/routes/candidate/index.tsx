@@ -1,12 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { exportMine, listMyApplications } from "@/server/talent.functions";
-import { AppLink, Button, Empty, Gate, Loading, PageTitle, useAuthed, when, Wordmark } from "@/components/talent/kit";
+import { candidateTask, exportMine, listMyApplications, listMyDesk, replyToIntent } from "@/server/talent.functions";
+import { AppLink, Button, Empty, Gate, Loading, PageTitle, refreshPage, useAuthed, when, Wordmark } from "@/components/talent/kit";
 import { UserButton } from "@/lib/auth/gates";
+import { useState } from "react";
 
 export const Route = createFileRoute("/candidate/")({ component: Portal });
 
 function Portal() {
   const state = useAuthed(() => listMyApplications(), []);
+  const desk = useAuthed(() => listMyDesk(), []);
+  const [reply, setReply] = useState("");
+  const [note, setNote] = useState<string | null>(null);
   return (
     <Gate pending={state.isPending} signedOut={state.signedOut}>
       <main className="mx-auto max-w-3xl px-4 py-8">
@@ -26,12 +30,34 @@ function Portal() {
             URL.revokeObjectURL(url);
           }).catch(() => undefined);
         }}>Download my data</Button>
+        {desk.data?.note ? <p className="mb-3 text-sm text-muted">{desk.data.note}</p> : null}
+        {(desk.data?.exercises ?? []).map((item: any) => (
+          <p key={item.token} className="mb-2 text-sm"><AppLink href={`/code/${item.token}`}>Coding exercise: {item.title}</AppLink></p>
+        ))}
+        {(desk.data?.tasks ?? []).map((task: any) => (
+          <p key={task.id} className="mb-2 flex items-center justify-between gap-2 text-sm">
+            <span>{task.title} · {task.status}</span>
+            {task.status !== "DONE" ? <Button type="button" variant="secondary" onClick={() => candidateTask({ data: { taskId: task.id } }).then(() => refreshPage())}>Mark done</Button> : null}
+          </p>
+        ))}
+        {(desk.data?.mail ?? []).map((message: any) => (
+          <form key={message.id} className="mb-3 rounded-md border border-line p-3 text-sm" onSubmit={(event) => {
+            event.preventDefault();
+            replyToIntent({ data: { intentId: message.intent_id, body: reply } }).then((row) => setNote(row.note)).catch(() => setNote("The reply was not saved."));
+          }}>
+            <p className="font-medium">{message.subject}</p>
+            <p className="whitespace-pre-wrap">{message.body}</p>
+            <textarea className="mt-2 min-h-16 w-full rounded-md border border-line p-2" value={reply} onChange={(event) => setReply(event.target.value)} aria-label="Reply" />
+            <Button type="submit" className="mt-2" variant="secondary">Save reply</Button>
+          </form>
+        ))}
+        {note ? <p className="mb-3 text-sm">{note}</p> : null}
         {state.loading ? <Loading /> : null}
         {(state.data ?? []).length === 0 ? <Empty title="Nothing here yet" body="Apply on a careers page with this account’s email. Unverified email addresses cannot claim someone else’s application." /> : null}
         <ul className="space-y-3">
-          {(state.data ?? []).map((item) => (
+          {(state.data ?? []).map((item: any) => (
             <li key={item.id}>
-              <AppLink className="block rounded-md border border-line bg-surface p-4" href={`/candidate/applications/${item.id}`}>
+              <AppLink className="block rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4" href={`/candidate/applications/${item.id}`}>
                 <span className="text-xl">{item.jobTitle}</span>
                 <span className="mt-1 block text-sm text-muted">{item.companyName} · {item.label} · {when(item.submittedAt)}</span>
               </AppLink>

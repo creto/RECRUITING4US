@@ -1,4 +1,5 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router";
+import { companyCssVars } from "@/domain/embed-theme";
 import { getWorkspace } from "@/server/talent.functions";
 import { Alert, CompanyWorkspaceProvider, Gate, Shell, useAuthed } from "@/components/talent/kit";
 
@@ -10,7 +11,12 @@ function Layout() {
   return (
     <Gate pending={state.isPending} signedOut={state.signedOut}>
       <CompanyWorkspaceProvider value={state}>
-        <Shell slug={companySlug} name={state.data?.company.name ?? "Workspace"} role={state.data?.company.role ?? ""}>
+        <Shell
+          slug={companySlug}
+          name={state.data?.company.name ?? "Workspace"}
+          role={state.data?.company.role ?? ""}
+          theme={state.data?.company.theme ? companyCssVars(state.data.company.theme) : undefined}
+        >
           {state.error && !state.data ? <Alert>{state.error}</Alert> : null}
           <Outlet />
         </Shell>

@@ -15,6 +15,14 @@ import {
   scheduleInterview,
   sendOffer,
   setLifecycle,
+  indexDocx,
+  inviteToCode,
+  listCodeResults,
+  listCodingQuestions,
+  openHire,
+  openLive,
+  queuePlatformMail,
+  rejudgeSubmission,
 } from "@/server/talent.functions";
 import { Alert, Button, Field, inputClass, Loading, PageTitle, money, refreshPage, useAuthed, when } from "@/components/talent/kit";
 
@@ -43,7 +51,7 @@ function ApplicationPage() {
   if (state.loading || state.isPending) return <Loading />;
   if (state.error) return <Alert>{state.error}</Alert>;
   if (!state.data || !app) return null;
-  const tabs = ["Overview", "Assessments", "Interviews", "Offers", "Activity"];
+  const tabs = ["Overview", "Assessments", "Interviews", "Offers", "Mail", "Workbench", "Activity"];
   return (
     <div>
       <PageTitle title={app.name || "Candidate"} lede={`${app.job_title} · ${app.stage_name} · version ${app.version}`} />
@@ -55,7 +63,7 @@ function ApplicationPage() {
       {error ? <div className="mb-3"><Alert>{error}</Alert></div> : null}
       {tab === "Overview" ? (
         <div className="grid gap-4 md:grid-cols-2">
-          <section className="space-y-2 rounded-md border border-line bg-surface p-4 text-sm">
+          <section className="space-y-2 rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4 text-sm">
             <p>{app.email || "Email hidden for this role"}</p>
             <p className="text-muted">Source {app.source} · submitted {when(app.submitted_at)}</p>
             <p>Lifecycle: {app.lifecycle}</p>
@@ -65,6 +73,22 @@ function ApplicationPage() {
               canAssign={Boolean(state.data.canAssign)}
               onRun={() => run(() => rescreenCv({ data: { slug: companySlug, applicationId } }))}
             />
+            {state.data.profile ? (
+              <div className="mt-3 border-t border-line pt-3">
+                <h2 className="text-xl">Indexed CV</h2>
+                <p>Titles: {(state.data.profile.titles ?? []).join(", ") || "none found"}</p>
+                <p>Skills: {(state.data.profile.skills ?? []).join(", ") || "none found"}</p>
+                <p>Years: {state.data.profile.years ?? "not found"}</p>
+                <p className="text-muted">{state.data.profile.note}</p>
+              </div>
+            ) : null}
+            {(state.data.ranks ?? []).length ? (
+              <ul className="mt-3 space-y-1 border-t border-line pt-3">
+                {state.data.ranks.map((row: { gate: string; score: number | null; rank: number; advanced: boolean }) => (
+                  <li key={row.gate}>{row.gate}: {row.score == null ? "no score" : row.score} · rank {row.rank} · {row.advanced ? "inside cutoff" : "not advanced by cutoff"}</li>
+                ))}
+              </ul>
+            ) : null}
             {state.data.canMove ? (
               <form className="space-y-2" onSubmit={(event) => { event.preventDefault(); void run(() => setLifecycle({ data: { slug: companySlug, applicationId, lifecycle: "REJECTED", expectedVersion: app.version, reason } })); }}>
                 <Field label="Decision reason">
@@ -79,7 +103,7 @@ function ApplicationPage() {
             ) : null}
           </section>
           <section className="space-y-2">
-            <form className="space-y-2 rounded-md border border-line bg-surface p-4" onSubmit={(event) => { event.preventDefault(); void run(() => addNote({ data: { slug: companySlug, applicationId, body: note } })); }}>
+            <form className="space-y-2 rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4" onSubmit={(event) => { event.preventDefault(); void run(() => addNote({ data: { slug: companySlug, applicationId, body: note } })); }}>
               <Field label="Internal note">
                 <textarea className={`${inputClass} min-h-24 py-2`} value={note} onChange={(event) => setNote(event.target.value)} />
               </Field>
@@ -89,7 +113,7 @@ function ApplicationPage() {
               <input name="tag" className={inputClass} aria-label="Tag" placeholder="Add a tag" />
               <Button type="submit" variant="secondary">Tag</Button>
             </form>
-            <form className="space-y-2 rounded-md border border-line bg-surface p-4" onSubmit={(event) => {
+            <form className="space-y-2 rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4" onSubmit={(event) => {
               event.preventDefault();
               const data = new FormData(event.currentTarget);
               void run(() => mergeCandidates({
@@ -115,7 +139,7 @@ function ApplicationPage() {
             </form>
             <ul className="space-y-2 text-sm">
               {state.data.notes.map((item: any) => (
-                <li key={String(item.id)} className="rounded-md border border-line bg-surface p-3">{String(item.body)}</li>
+                <li key={String(item.id)} className="rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-3">{String(item.body)}</li>
               ))}
             </ul>
           </section>
@@ -125,7 +149,7 @@ function ApplicationPage() {
         <div className="space-y-3">
           {state.data.assignments.length === 0 ? <p className="text-sm text-muted">No assessments assigned.</p> : null}
           {state.data.assignments.map((item: any) => (
-            <article key={String(item.id)} className="rounded-md border border-line bg-surface p-4 text-sm">
+            <article key={String(item.id)} className="rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4 text-sm">
               <h2 className="text-xl">{String(item.assessment_name)}</h2>
               <p className="text-muted">{String(item.status)} · start by {when(String(item.start_by))} · attempts {String(item.attempts)}</p>
               <p className="mt-2">{scoreLine(item)}</p>
@@ -154,7 +178,7 @@ function ApplicationPage() {
               ) : null}
             </article>
           ))}
-          <form className="space-y-2 rounded-md border border-line bg-surface p-4" onSubmit={(event) => {
+          <form className="space-y-2 rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4" onSubmit={(event) => {
             event.preventDefault();
             const data = new FormData(event.currentTarget);
             void run(() => assignAssessment({
@@ -185,19 +209,19 @@ function ApplicationPage() {
       {tab === "Interviews" ? (
         <div className="space-y-3">
           {state.data.interviews.map((item: any) => (
-            <article key={String(item.id)} className="rounded-md border border-line bg-surface p-4 text-sm">
+            <article key={String(item.id)} className="rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4 text-sm">
               <h2 className="text-xl">{String(item.title)}</h2>
               <p>{when(String(item.starts_at), String(item.timezone))} · {String(item.status)}</p>
               <p className="text-muted">{String(item.location)} {String(item.meeting_url)}</p>
             </article>
           ))}
-          <ScheduleForm slug={companySlug} applicationId={applicationId} onDone={() => refreshPage()} onError={setError} />
+          <ScheduleForm slug={companySlug} applicationId={applicationId} attributes={state.data.scorecardAttributes ?? []} onDone={() => refreshPage()} onError={setError} />
         </div>
       ) : null}
       {tab === "Offers" ? (
         <div className="space-y-3">
           {state.data.offers.map((offer: any) => (
-            <article key={offer.id} className="rounded-md border border-line bg-surface p-4 text-sm">
+            <article key={offer.id} className="rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4 text-sm">
               <h2 className="text-xl">{offer.title}</h2>
               <p>{offer.status} · revision {offer.current_revision}</p>
               <p>{state.data?.canSeePay ? money(offer.salary_minor, offer.currency) : "Compensation hidden for your role"}</p>
@@ -210,10 +234,16 @@ function ApplicationPage() {
           <OfferForm slug={companySlug} applicationId={applicationId} onDone={() => refreshPage()} onError={setError} />
         </div>
       ) : null}
+      {tab === "Mail" ? (
+        <MailTab slug={companySlug} applicationId={applicationId} canEmail={Boolean(state.data.canEmail)} onError={setError} />
+      ) : null}
+      {tab === "Workbench" ? (
+        <Workbench slug={companySlug} applicationId={applicationId} onError={setError} />
+      ) : null}
       {tab === "Activity" ? (
         <ul className="space-y-2 text-sm">
           {state.data.events.map((event: any) => (
-            <li key={String(event.id)} className="rounded-md border border-line bg-surface p-3">
+            <li key={String(event.id)} className="rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-3">
               {String(event.reason || event.to_lifecycle || "Update")} · {when(String(event.at))}
             </li>
           ))}
@@ -273,11 +303,12 @@ function CvScreen({
   );
 }
 
-function ScheduleForm({ slug, applicationId, onDone, onError }: { slug: string; applicationId: string; onDone: () => void; onError: (value: string) => void }) {
+function ScheduleForm({ slug, applicationId, attributes, onDone, onError }: { slug: string; applicationId: string; attributes: { id: string; label: string }[]; onDone: () => void; onError: (value: string) => void }) {
   return (
-    <form className="grid gap-2 rounded-md border border-line bg-surface p-4 md:grid-cols-2" onSubmit={(event) => {
+    <form className="grid gap-2 rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4 md:grid-cols-2" onSubmit={(event) => {
       event.preventDefault();
       const data = new FormData(event.currentTarget);
+      const focusIds = attributes.filter((item) => data.get(`focus-${item.id}`) === "on").map((item) => item.id);
       scheduleInterview({
         data: {
           slug,
@@ -288,6 +319,7 @@ function ScheduleForm({ slug, applicationId, onDone, onError }: { slug: string; 
           timezone: String(data.get("timezone")),
           location: String(data.get("location") ?? ""),
           meetingUrl: String(data.get("url") ?? ""),
+          focusIds,
         },
       }).then(onDone).catch((err) => onError(err.message));
     }}>
@@ -297,6 +329,12 @@ function ScheduleForm({ slug, applicationId, onDone, onError }: { slug: string; 
       <Field label="Local end"><input name="end" className={inputClass} placeholder="2026-10-06T11:00" required /></Field>
       <Field label="Location"><input name="location" className={inputClass} /></Field>
       <Field label="Meeting URL"><input name="url" className={inputClass} /></Field>
+      <div className="md:col-span-2 text-sm">
+        <p className="mb-1">Scorecard focus</p>
+        {attributes.map((item) => (
+          <label key={item.id} className="mr-3 inline-flex items-center gap-1"><input type="checkbox" name={`focus-${item.id}`} />{item.label}</label>
+        ))}
+      </div>
       <Button type="submit">Schedule</Button>
     </form>
   );
@@ -304,7 +342,7 @@ function ScheduleForm({ slug, applicationId, onDone, onError }: { slug: string; 
 
 function OfferForm({ slug, applicationId, onDone, onError }: { slug: string; applicationId: string; onDone: () => void; onError: (value: string) => void }) {
   return (
-    <form className="grid gap-2 rounded-md border border-line bg-surface p-4" onSubmit={(event) => {
+    <form className="grid gap-2 rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4" onSubmit={(event) => {
       event.preventDefault();
       const data = new FormData(event.currentTarget);
       createOffer({
@@ -349,4 +387,70 @@ function scoreLine(item: {
       : "Automatic exact match or numeric tolerance";
   const release = String(item.score_release) === "NONE" ? " Not released to the candidate." : "";
   return `${origin}: ${shown}.${release}`;
+}
+
+function MailTab({ slug, applicationId, canEmail, onError }: { slug: string; applicationId: string; canEmail: boolean; onError: (value: string) => void }) {
+  const [subject, setSubject] = useState("Update on {{job_title}}");
+  const [body, setBody] = useState("Hello {{candidate_name}},\n\nThis note is queued for delivery. Stored in this workspace is not the same as delivered.\n\n{{recruiter_name}}");
+  if (!canEmail) return <p className="text-sm">Your role cannot send mail.</p>;
+  return (
+    <form className="grid gap-2" onSubmit={(event) => {
+      event.preventDefault();
+      queuePlatformMail({ data: { slug, applicationId, kind: "FOLLOW_UP", subject, body, idempotencyKey: crypto.randomUUID() } })
+        .then(() => onError("Queued. Open Delivery to see stored, accepted, delivered, bounced, or failed. The in-product copy is a separate channel."))
+        .catch((err: Error) => onError(err.message));
+    }}>
+      <Field label="Subject"><input className={inputClass} value={subject} onChange={(event) => setSubject(event.target.value)} /></Field>
+      <Field label="Message"><textarea className={`${inputClass} min-h-28 py-2`} value={body} onChange={(event) => setBody(event.target.value)} /></Field>
+      <Button type="submit">Queue outside message</Button>
+    </form>
+  );
+}
+
+function Workbench({ slug, applicationId, onError }: { slug: string; applicationId: string; onError: (value: string) => void }) {
+  const results = useAuthed(() => listCodeResults({ data: { slug, applicationId } }), [slug, applicationId]);
+  const questions = useAuthed(() => listCodingQuestions({ data: { slug } }), [slug]);
+  const [room, setRoom] = useState<string | null>(null);
+  return (
+    <div className="space-y-3 text-sm">
+      <p>Hidden answers stay on the server. Rejudge keeps the older result. A judge failure is not a zero.</p>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" onClick={() => openLive({ data: { slug, applicationId, title: "Technical interview", prompt: "Write solve() and talk through it." } }).then((row) => setRoom(row.token)).catch((err: Error) => onError(err.message))}>Open live room</Button>
+        <Button type="button" variant="secondary" onClick={() => openHire({ data: { slug, applicationId, note: "Opened from the application", location: "", roleTitle: "" } }).then(() => onError("Onboarding opened, or it was already there.")).catch((err: Error) => onError(err.message))}>Open onboarding</Button>
+      </div>
+      {room ? <p>Live room token {room}. The meeting link, if you add one later, is an outside call.</p> : null}
+      <form className="flex flex-wrap gap-2" onSubmit={(event) => {
+        event.preventDefault();
+        const questionId = String(new FormData(event.currentTarget).get("questionId") ?? "");
+        inviteToCode({ data: { slug, applicationId, questionId } }).then(() => onError("Coding invite queued. Delivery is separate from the in-product copy.")).catch((err: Error) => onError(err.message));
+      }}>
+        <select name="questionId" className={inputClass}>
+          {(questions.data?.questions ?? []).map((question: { id: string; title: string }) => <option key={question.id} value={question.id}>{question.title}</option>)}
+        </select>
+        <Button type="submit" variant="secondary">Send coding exercise</Button>
+      </form>
+      <label className="block">DOCX resume
+        <input className="mt-1 block" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => {
+            const text = String(reader.result ?? "");
+            const base64 = text.includes(",") ? text.split(",")[1] ?? "" : "";
+            indexDocx({ data: { slug, applicationId, filename: file.name, base64 } }).then((row) => onError(`${row.status}: ${row.reason}`)).catch((err: Error) => onError(err.message));
+          };
+          reader.readAsDataURL(file);
+        }} />
+      </label>
+      <ul className="space-y-2">
+        {(results.data?.results ?? []).map((row: { id: string; title?: string; kind?: string; status?: string; score?: number | null; max_score?: number | null; detail?: string }) => (
+          <li key={String(row.id)} className="rounded-md border border-line p-3">
+            {String(row.title)} · {String(row.kind)} · {String(row.status)} · {row.score == null ? "no score" : `${row.score} / ${row.max_score}`}
+            <p className="text-muted">{String(row.detail ?? "")}</p>
+            <Button type="button" variant="secondary" onClick={() => rejudgeSubmission({ data: { slug, submissionId: String(row.id) } }).then((next) => onError(next.detail)).catch((err: Error) => onError(err.message))}>Rejudge</Button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }

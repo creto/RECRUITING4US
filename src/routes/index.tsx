@@ -11,12 +11,12 @@ function Home() {
         <Wordmark />
         <SignInGate
           fallback={
-            <Link to="/login" className="inline-flex min-h-11 items-center rounded-md bg-accent px-4 text-sm text-accent-ink">
+            <Link to="/login" className="inline-flex min-h-11 items-center rounded-full bg-accent px-5 text-sm text-accent-ink">
               Enter
             </Link>
           }
         >
-          <Link to="/app" className="inline-flex min-h-11 items-center rounded-md bg-accent px-4 text-sm text-accent-ink">
+          <Link to="/app" className="inline-flex min-h-11 items-center rounded-full bg-accent px-5 text-sm text-accent-ink">
             Open workspace
           </Link>
         </SignInGate>
@@ -26,13 +26,13 @@ function Home() {
       </div>
       <section className="mt-14 grid gap-10 md:grid-cols-[1.2fr_0.8fr] md:items-end">
         <div>
-          <p className="text-sm font-medium text-accent">Hiring with the evidence attached</p>
+          <p className="text-sm font-medium text-link">Hiring with the evidence attached</p>
           <h1 className="mt-3 text-5xl leading-tight text-ink">Jobs, assessments, and offers in one company workspace.</h1>
           <p className="mt-4 max-w-xl text-base text-muted">
             RECRUIT4US keeps each employer’s candidates, scores, and notes separate. A score is evidence for a person to read — not an automatic hire or reject.
           </p>
         </div>
-        <div className="rounded-md border border-line bg-surface p-4">
+        <div className="rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4">
           <p className="text-xs uppercase tracking-wide text-muted">Example pipeline</p>
           <ul className="mt-3 space-y-2 text-sm">
             {[
@@ -56,7 +56,7 @@ function Home() {
           ["Assessments", "Objective items score themselves. Written and code work waits for a person. Code is never run on this server."],
           ["Interviews and offers", "Schedule with a calendar file, approve exact terms, and record the candidate’s response."],
         ].map(([title, body]) => (
-          <article key={title} className="rounded-md border border-line bg-surface p-4">
+          <article key={title} className="rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4">
             <h2 className="text-2xl">{title}</h2>
             <p className="mt-2 text-sm text-muted">{body}</p>
           </article>

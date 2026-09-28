@@ -689,9 +689,10 @@ export function filePolicy(input: { name: string; mime: string; size: number }):
     jpg: ["image/jpeg"],
     jpeg: ["image/jpeg"],
     csv: ["text/csv", "text/plain", "application/vnd.ms-excel"],
+    docx: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
   };
   const ext = name.split(".").pop() ?? "";
-  if (!allowed[ext]) return "Upload a PDF, text, CSV, PNG, or JPEG file.";
+  if (!allowed[ext]) return "Upload a PDF, text, CSV, PNG, JPEG, or DOCX file.";
   if (!allowed[ext].includes(input.mime)) return "The file type does not match its contents label.";
   if (name.endsWith(".html") || name.endsWith(".svg") || name.endsWith(".exe")) {
     return "That file type is not allowed.";
@@ -961,8 +962,16 @@ function rubricDimensions(rubric: unknown): RubricDimension[] {
 }
 
 function optionRows(payload: unknown): { id: string; label: string }[] {
-  if (!payload || typeof payload !== "object") return [];
-  const options = (payload as { options?: unknown }).options;
+  let value = payload;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value) as unknown;
+    } catch {
+      return [];
+    }
+  }
+  if (!value || typeof value !== "object") return [];
+  const options = (value as { options?: unknown }).options;
   if (!Array.isArray(options)) return [];
   return options.flatMap((option) => {
     if (!option || typeof option !== "object") return [];
@@ -1025,6 +1034,13 @@ export function explainAuthorQuestion(input: {
       return { ...guide, keySummary: "This question has no rubric, so it cannot be published or finalized." };
     }
     const names = dimensions.map((dimension) => dimension.label).join(" and ");
+    const judged = !input.payload || typeof input.payload !== "object" || (input.payload as { judged?: boolean }).judged !== false;
+    if (!judged) {
+      return {
+        ...guide,
+        keySummary: `No automatic cases are attached, so this answer is not ranked by the judge. A person scores ${names} from 0 to 4. A sample run is not a score.`,
+      };
+    }
     return {
       ...guide,
       keySummary: `Judge cases are worth up to 7000 basis points. A fully correct answer also earns up to 2000 for a better estimated time class and up to 1000 for measured time. The class is a heuristic, not a proof. ${names} is still scored by a person from 0 to 4. A timeout is not stored as zero.`,

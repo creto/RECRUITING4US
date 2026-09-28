@@ -2,9 +2,9 @@
 
 | Integration | State | What actually happens |
 |---|---|---|
-| Email | Local capture | Rows in `mail_messages` with status `CAPTURED`, `FAILED`, or `UNKNOWN`. No SMTP. `CAPTURED` is not external delivery. A timeout is classified `UNKNOWN` by `classifyDelivery` and is not retried as success. |
+| Email | Adapter ready, external delivery blocked in this preview | `message_intents` keeps queued, accepted, delivered, bounced, failed, and stored apart from in-product `mail_messages`. SMTP runs when `MAIL_SMTP_HOST` and `MAIL_FROM` are set. A 250 is accepted, not delivered. No credentials are set here, so real inboxes are not reached. |
 | Files | Local database | Bytes stay in `file_objects`. Upload inserts `QUARANTINE`, then a local demo scanner may mark `CLEAN` or `INFECTED`. A scanner error stays quarantined. A clean download writes a five-minute `file_grants` row. This is not a commercial antivirus and not object storage. |
-| Code execution | Local process, no remote key | A sample run is not a score. Reviews can judge saved source in a separate process against known cases. Fully correct answers rank by an estimated time class, then space, then measured time. The class is a heuristic, not a proof. A timeout stores no score. No remote runner key is configured. |
+| Code execution | Local isolated Node | JavaScript runs in a user, mount, pid, and network namespace with Node's permission model. Sample output is not a score. A timeout or infrastructure failure stores no zero. No remote judge is configured. |
 | Queue | PostgreSQL outbox | `outbox_events` is leased in the web process, in the same transaction as the domain write. `scripts/outbox-worker.mjs` does not process events and does not use Redis. Without a shared database it cannot see preview data. |
 | Object storage | Not connected | No S3 or MinIO. Downloads are an authorized server call plus a short-lived database grant, not a signed object URL. |
 | Calendar | Reconnect until a credential exists | Interviews and ICS files work. Refresh polls on the interviews page. Without `CALENDAR_REFRESH_TOKEN` and `CALENDAR_VENDOR_URL` the status is `RECONNECT` and no token is stored or returned. A failed vendor call becomes reconnect and does not echo the token. |

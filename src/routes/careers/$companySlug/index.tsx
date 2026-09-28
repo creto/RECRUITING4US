@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { listPublicJobs } from "@/server/talent.functions";
+import { companyCssVars } from "@/domain/embed-theme";
 import { Empty, AppLink, inputClass, Loading, Wordmark } from "@/components/talent/kit";
 
 export const Route = createFileRoute("/careers/$companySlug/")({ component: Careers });
@@ -33,11 +34,13 @@ function Careers() {
     };
   }, [companySlug, q, work]);
 
+  const theme = data?.company ? companyCssVars(data.company.theme) : undefined;
   return (
-    <main className="mx-auto max-w-3xl px-4 py-8">
+    <main className="min-h-screen bg-bg text-ink" style={theme}>
+      <div className="mx-auto max-w-3xl px-4 py-8">
       <Link to="/"><Wordmark /></Link>
       <h1 className="mt-3 text-4xl">{data?.company?.name ?? "Careers"}</h1>
-      <p className="mt-2 text-sm text-muted">Published jobs only. Drafts, paused roles, and closed roles are hidden.</p>
+      <p className="mt-2 text-sm text-muted">{data?.company?.headline || "Published jobs only. Drafts, paused roles, and closed roles are hidden."}</p>
       <form className="mt-6 flex flex-col gap-2 sm:flex-row" onSubmit={(event) => event.preventDefault()}>
         <input className={inputClass} value={q} onChange={(event) => setQ(event.target.value)} aria-label="Search jobs" placeholder="Search" />
         <select className={inputClass} value={work} aria-label="Work arrangement" onChange={(event) => setWork(event.target.value)}>
@@ -54,13 +57,14 @@ function Careers() {
       <ul className="mt-4 space-y-3">
         {(data?.jobs ?? []).map((job) => (
           <li key={job.id}>
-            <AppLink className="block rounded-md border border-line bg-surface p-4" href={`/careers/${companySlug}/${job.slug}`}>
+            <AppLink className="block rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4" href={`/careers/${companySlug}/${job.slug}`}>
               <span className="text-xl">{job.title}</span>
               <span className="mt-1 block text-sm text-muted">{job.department} · {job.locations || job.work_arrangement}</span>
             </AppLink>
           </li>
         ))}
       </ul>
+      </div>
     </main>
   );
 }
