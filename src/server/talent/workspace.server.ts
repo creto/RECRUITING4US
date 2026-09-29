@@ -1870,7 +1870,11 @@ export async function submitApplication(input: ApplyInput) {
         ${input.phone ?? null}, 'CAREERS', ${sessionEmail ? input.sessionUserId! : null}
       )
       on conflict (company_id, email_normalized) do update
-      set user_id = coalesce(candidates.user_id, excluded.user_id)
+      set
+        name = excluded.name,
+        email = excluded.email,
+        phone = coalesce(excluded.phone, candidates.phone),
+        user_id = coalesce(candidates.user_id, excluded.user_id)
     `;
     const candidate = await sql<{ id: string }>`
       select id from candidates where company_id = ${job.company_id} and email_normalized = ${email}
