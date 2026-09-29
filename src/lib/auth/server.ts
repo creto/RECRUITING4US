@@ -115,15 +115,30 @@ const baseURL = explicitBaseURL ?? {
 
 // Origins Better Auth accepts on credentialed POSTs (sign-up/sign-in, etc.).
 // Missing entries here surface as FORBIDDEN "Invalid origin".
-const trustedOrigins: string[] = explicitBaseURL
-  ? [explicitBaseURL, ...LOCAL_DEV_ORIGINS]
-  : [
-      // Host wildcards (matched against Origin's host)
-      ...previewAllowedHosts,
-      // Full-origin wildcards (matched against Origin)
-      ...previewAllowedHosts.flatMap((host) => [`https://${host}`, `http://${host}`]),
-      ...LOCAL_DEV_ORIGINS,
-    ];
+// Production can serve both the Vercel alias and a custom domain; list every
+// public https origin here (or via BETTER_AUTH_TRUSTED_ORIGINS) so login works
+// on each host. Cookies stay per-host (__Host-).
+const extraTrustedOrigins = (env("BETTER_AUTH_TRUSTED_ORIGINS") ?? "")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
+const productionAliases = [
+  "https://recruit4us.vercel.app",
+  "https://recruit.tiglobal.com.co",
+];
+const trustedOrigins: string[] = [
+  ...(explicitBaseURL
+    ? [explicitBaseURL, ...productionAliases, ...extraTrustedOrigins, ...LOCAL_DEV_ORIGINS]
+    : [
+        // Host wildcards (matched against Origin's host)
+        ...previewAllowedHosts,
+        // Full-origin wildcards (matched against Origin)
+        ...previewAllowedHosts.flatMap((host) => [`https://${host}`, `http://${host}`]),
+        ...productionAliases,
+        ...extraTrustedOrigins,
+        ...LOCAL_DEV_ORIGINS,
+      ]),
+].filter((value, index, all) => all.indexOf(value) === index);
 
 const databaseUrl = env("DATABASE_URL");
 
