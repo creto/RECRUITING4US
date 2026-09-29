@@ -1,6 +1,10 @@
 import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 const port = 8091;
 const base = `http://127.0.0.1:${port}`;
@@ -71,11 +75,11 @@ async function run() {
     "node",
     ["scripts/with-app-env.mjs", "vite", "dev", "--host", "127.0.0.1", "--port", String(port)],
     {
-      cwd: "/workspace",
+      cwd: root,
       env: {
         ...process.env,
         VITE_AUTH_ENABLED: "false",
-        PATH: `/workspace/node_modules/.bin:${process.env.PATH ?? ""}`,
+        PATH: `${join(root, "node_modules/.bin")}:${process.env.PATH ?? ""}`,
       },
       stdio: "inherit",
     },
@@ -193,11 +197,12 @@ async function run() {
     console.log(JSON.stringify({ ok: true, slug, person, interviewTitle }));
   } catch (error) {
     if (browser) {
-      mkdirSync("/workspace/artifacts", { recursive: true });
+      const shotDir = join(root, "artifacts");
+      mkdirSync(shotDir, { recursive: true });
       const pages = browser.contexts().flatMap((context) => context.pages());
       if (pages[0]) {
         console.error(await pages[0].locator("body").innerText().catch(() => ""));
-        await pages[0].screenshot({ path: "/workspace/artifacts/e2e-critical.png", fullPage: true }).catch(() => undefined);
+        await pages[0].screenshot({ path: join(shotDir, "e2e-critical.png"), fullPage: true }).catch(() => undefined);
       }
     }
     throw error;

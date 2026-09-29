@@ -96,8 +96,9 @@ function Taker({ view }: { view: AttemptView }) {
   const locked = view.proctored && !cameraReady;
 
   useEffect(() => {
+    const handles = timers.current;
     return () => {
-      for (const timer of Object.values(timers.current)) window.clearTimeout(timer);
+      for (const timer of Object.values(handles)) window.clearTimeout(timer);
     };
   }, []);
 

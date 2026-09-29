@@ -72,7 +72,6 @@ const attributes = ["placeholder", "aria-label", "title"] as const;
 function LocaleApply({ locale }: { locale: Locale }) {
   useEffect(() => {
     document.documentElement.lang = locale;
-    let frame = 0;
 
     function remember(node: Text) {
       if (!originals.has(node)) originals.set(node, node.data);
@@ -124,9 +123,6 @@ function LocaleApply({ locale }: { locale: Locale }) {
     }
 
     run();
-    return () => {
-      window.cancelAnimationFrame(frame);
-    };
   }, [locale]);
 
   return null;

@@ -29,6 +29,16 @@ test("injects before </head>", () => {
   assert.ok(out.indexOf("manifest") < out.indexOf("</head>"));
 });
 
+test("keeps a product manifest and still adds the host script", () => {
+  const out = injectGrokPwaHead(
+    '<html><head><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/favicon.svg"></head></html>',
+  );
+  assert.match(out, /href="\/manifest\.webmanifest"/);
+  assert.doesNotMatch(out, /__grok\/manifest/);
+  assert.doesNotMatch(out, /__grok\/icon-180/);
+  assert.match(out, /grok-app-builder\/extensions\.js/);
+});
+
 test("injects the extensions script without a project id", () => {
   const out = injectGrokPwaHead("<html><head></head></html>", {
     appName: "Demo",

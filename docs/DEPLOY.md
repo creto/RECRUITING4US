@@ -31,3 +31,16 @@ These are listed in [INTEGRATIONS.md](INTEGRATIONS.md). Missing values do not fa
 `GET /api/health/live` answers without the database. `GET /api/health/ready` runs `select 1` and returns 503 when the database is down. Connectors shows which optional integrations are only configured, not which ones have succeeded.
 
 Changing `BETTER_AUTH_SECRET` signs every session out. Changing `DATABASE_URL` to another database does not move files that already live in a bucket. Backup and restore are in [RUNBOOK.md](RUNBOOK.md).
+
+## What the package keeps
+
+Guest sign-in stays. "Continue without an account" creates a real user named Guest and opens that person's workspace. It is not a shared anonymous session.
+
+Mail, files, and errors stay as adapters. SMTP sends only when `MAIL_SMTP_HOST` and `MAIL_FROM` are set. New résumé bytes go to S3 or R2 only when the bucket variables are set; otherwise they stay in `file_objects`. `SENTRY_DSN` and `VITE_SENTRY_DSN` are detected by `GET /api/health` and do not send until `setErrorSink` / `setServerErrorSink` are given a client. Live and ready probes stay at `/api/health/live` and `/api/health/ready`.
+
+## Host chrome
+
+`public/manifest.webmanifest`, `public/favicon.svg`, and `public/license.txt` are the product. `public/__grok/`, `scripts/grok-pwa-*`, and the preview bridge are the host frame. They stay in this repository so the preview can wrap the app. They are not the RECRUIT4US name, icon, or license.
+
+The HTML injector still adds the host script. If the document already has a manifest and an apple touch icon, it does not replace them with the host ones. Do not delete those host files to "clean" a build. A self-hosted copy uses the product manifest. The host banner is a project setting on the preview, not a line to strip from the source.
+

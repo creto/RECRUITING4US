@@ -4,7 +4,8 @@ This matches the code. It does not describe Redis, MinIO, or a code runner.
 
 1. Start the app with `npm run dev`.
 2. Check types with `npm run typecheck`.
-3. Run product tests with `npm test`. That command runs `src/**/*.test.ts` only.
+3. Run product tests with `npm test`. That command runs `src/**/*.test.ts` only. GitHub Actions runs typecheck, lint (`--max-warnings 0`), and that suite on every push. The browser walk (apply, assessment, scorecard, offer) is `npm run e2e`. It is not on that check. Actions runs it nightly and when someone starts the Nightly workflow by hand.
+
 
 4. Build with `npm run build`. The build applies SQL only when `DATABASE_URL` is set. The embedded database applies `migrations/*.sql` when the app starts.
 5. Count handwritten lines with `node scripts/measure-loc.mjs`.
