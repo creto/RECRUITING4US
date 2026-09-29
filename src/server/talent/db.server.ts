@@ -10,8 +10,23 @@ import {
 } from "@/domain/rules";
 
 export async function db(): Promise<Sql> {
+  if (testSql) return testSql;
   return getSql();
 }
+
+/** Tests only. The live process keeps using getSql. */
+export function setTestSql(sql: Sql | null) {
+  testSql = sql;
+  actorCache.clear();
+}
+
+export function forgetActor(userId: string) {
+  for (const key of actorCache.keys()) {
+    if (key.startsWith(`${userId}\n`)) actorCache.delete(key);
+  }
+}
+
+let testSql: Sql | null = null;
 
 export { withTransaction };
 
@@ -84,6 +99,7 @@ type UserRow = { id: string; email: string; name: string; email_verified: boolea
 
 export async function requireUser(userId: string): Promise<UserRow & { emailNormalized: string }> {
   const sql = await db();
+  if (userId === "dev-user") await sql`select app_ensure_dev_user()`;
   const rows = await sql<UserRow>`
     select id, email, name, email_verified
     from app_user_identity(${userId})

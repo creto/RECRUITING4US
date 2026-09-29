@@ -13,7 +13,6 @@ import {
   manualBasisPoints,
   DEFAULT_TEXT_RUBRIC,
   mapExternalScore,
-  operationalFailure,
   planExtension,
   seededShuffle,
   validateAssessmentPublish,
@@ -415,7 +414,7 @@ async function candidateOwns(userId: string, applicationId: string) {
 }
 
 export async function listMyApplications(userId: string) {
-  const user = await requireUser(userId);
+  await requireUser(userId);
   const sql = await db();
   const rows = await sql<{
     id: string;

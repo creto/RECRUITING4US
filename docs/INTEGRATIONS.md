@@ -27,6 +27,17 @@ Without those, bookings stay here and Interviews can still download ICS. Two peo
 
 The sandbox board never calls that URL. LinkedIn is not connected.
 
+## Object storage
+
+- `OBJECT_STORE_BUCKET`
+- `OBJECT_STORE_ACCESS_KEY_ID`
+- `OBJECT_STORE_SECRET_ACCESS_KEY`
+- `OBJECT_STORE_ENDPOINT` for Cloudflare R2 or any other S3-compatible host
+- `OBJECT_STORE_REGION` (defaults to `us-east-1`, or `auto` for R2)
+- `OBJECT_STORE_PROVIDER` `s3` or `r2`
+
+Without a bucket, résumé bytes stay in `file_objects`. A configured bucket receives new files. A refused upload is not saved. Existing database files still open. Deleting a file removes the object first and keeps the row if that delete fails.
+
 ## HRIS
 
 - `HRIS_EXPORT_URL` and `HRIS_EXPORT_TOKEN`

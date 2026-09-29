@@ -28,8 +28,8 @@ export function ApplyForm({
   const [done, setDone] = useState<{ title: string; lines: string[] } | null>(null);
 
   useEffect(() => {
-    if (user?.primaryEmail) setEmail(user.primaryEmail);
-    if (user?.displayName) setName(user.displayName);
+    if (user?.primaryEmail) setEmail((current) => current || user.primaryEmail || "");
+    if (user?.displayName) setName((current) => current || user.displayName || "");
   }, [user]);
 
   async function submit(event: React.FormEvent) {

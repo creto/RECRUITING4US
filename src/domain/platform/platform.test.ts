@@ -81,7 +81,9 @@ describe("plans", () => {
     assert.equal(classifySmtpCode(550), "bounced");
     assert.equal(interpretBoardResponse(401, "{\"error\":\"no\"}").status, "FAILED");
     assert.equal(interpretHrisPush(200, "{}").status, "PUSHED");
-    assert.match(integrationHealth({ smtpHost: false, mailFrom: false, inboundSecret: false, calendarVendor: false, calendarToken: false, jobBoard: false, hris: false, unshare: true })[0]?.state ?? "", /blocked/i);
+    const health = integrationHealth({ smtpHost: false, mailFrom: false, inboundSecret: false, calendarVendor: false, calendarToken: false, jobBoard: false, hris: false, unshare: true, objectStore: false });
+    assert.match(health[0]?.state ?? "", /blocked/i);
+    assert.match(health.find((row) => row.name === "Object storage")?.state ?? "", /database/i);
     assert.match(explainCutoff({ name: "Ada", score: null, advanced: false, missing: true, cutoffScore: 8, percent: 50 }), /no score/);
     const form = calendarTokenForm({ code: "abc", clientId: "id", clientSecret: "secret", redirectUri: "https://example.com/cb" });
     assert.match(form, /grant_type=authorization_code/);

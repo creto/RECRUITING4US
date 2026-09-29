@@ -32,8 +32,13 @@ export class CrossSiteRequestError extends Error {
 
 /** Throw `CrossSiteRequestError` for a scripted cross-site/sibling request. */
 export function assertSameSiteRequest(): void {
-  const request = getRequest();
-  if (!request) return; // no request context (e.g. build) — nothing to guard
+  let request: ReturnType<typeof getRequest> | undefined;
+  try {
+    request = getRequest();
+  } catch {
+    return;
+  }
+  if (!request) return;
   const h = request.headers;
   const site = h.get("sec-fetch-site");
   // Non-browser client (no header), the app's own origin, or a direct

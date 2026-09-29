@@ -18,7 +18,7 @@ Outbox rows are leased (`lease_until`, `attempts`) inside the same transaction a
 - After five attempts a failure can be marked `FAILED` instead of looping forever.
 - Mail `CAPTURED` was never given to an outside provider. `UNKNOWN` means the outcome is not known; do not announce success.
 - Code submissions stay in the snapshot. There is no runner to retry.
-- Anonymize removes that company's profile and files. A restored backup can bring the person back. This does not erase backups.
+- Anonymize removes that company's profile and files. A restored backup can bring the person back. This does not erase backups. The dump and restore steps are in `docs/RUNBOOK.md`. Deploy variable names are in `docs/DEPLOY.md` and `.env.example`.
 - Do not add a `.env` file here. Do not put answer keys or the seed sentinel in client code.
 
 ## Line count

@@ -66,9 +66,10 @@ export function attributesOrDefault(value: unknown): ScoreAttribute[] {
   return parsed.length > 0 ? parsed : DEFAULT_ATTRIBUTES;
 }
 
-/** Focus is the subset checked for this interview. At least one is required. */
+/** Focus is the subset checked for this interview. None checked means every attribute for the role. */
 export function focusAttributes(source: ScoreAttribute[], selectedIds: string[]): { attributes: ScoreAttribute[] } | { error: string } {
   const pool = source.length > 0 ? source : DEFAULT_ATTRIBUTES;
+  if (selectedIds.length === 0) return { attributes: pool };
   const chosen = pool.filter((item) => selectedIds.includes(item.id));
   if (chosen.length === 0) return { error: "Choose at least one focus attribute for this interview." };
   return { attributes: chosen };

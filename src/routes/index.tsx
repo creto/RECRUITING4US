@@ -62,9 +62,16 @@ function Home() {
           </article>
         ))}
       </section>
-      <p className="mt-10 text-sm text-muted">
-        Demo assessments are fictional and are not a validated hiring instrument. Mail stays inside the workspace.
-      </p>
+      <footer className="mt-10 flex flex-wrap items-center gap-x-4 gap-y-2 pb-24 text-sm text-muted">
+        <p>Demo assessments are fictional and are not a validated hiring instrument. Mail stays inside the workspace.</p>
+        <nav className="flex flex-wrap gap-x-4 gap-y-2" aria-label="Notices">
+          <Link to="/notice" hash="privacy" className="text-link">Privacy</Link>
+          <Link to="/notice" hash="terms" className="text-link">Terms</Link>
+          <Link to="/notice" hash="notice" className="text-link">Candidate notice</Link>
+          <a href="/license.txt" className="text-link">License</a>
+          <Link to="/status" className="text-link">Health</Link>
+        </nav>
+      </footer>
     </main>
   );
 }

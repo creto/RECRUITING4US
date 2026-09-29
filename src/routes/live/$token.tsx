@@ -19,6 +19,8 @@ function LiveRoom() {
   const baseRef = useRef<{ revision: number; source: string } | null>(null);
   const sourceRef = useRef("");
   const sending = useRef(false);
+  const reloadRef = useRef(state.reload);
+  reloadRef.current = state.reload;
   const room = state.data;
   const text = source ?? room?.source ?? "";
   sourceRef.current = text;
@@ -34,7 +36,7 @@ function LiveRoom() {
         if (!dirty) {
           setSource(next.source);
           baseRef.current = { revision: next.revision, source: next.source };
-          state.reload();
+          reloadRef.current();
         } else if (base && next.revision !== base.revision && !sending.current) {
           const edit = diffEdit(base.source, local);
           sending.current = true;

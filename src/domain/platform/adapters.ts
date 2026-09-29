@@ -106,6 +106,7 @@ export function integrationHealth(env: {
   jobBoard: boolean;
   hris: boolean;
   unshare: boolean;
+  objectStore: boolean;
 }): { name: string; state: string }[] {
   return [
     {
@@ -137,6 +138,12 @@ export function integrationHealth(env: {
       state: env.jobBoard
         ? "One JSON job-board endpoint is configured. The sandbox board is separate and is not that provider."
         : "No external board is connected. LinkedIn is not connected. The sandbox board is labeled and stays inside this workspace.",
+    },
+    {
+      name: "Object storage",
+      state: env.objectStore
+        ? "An S3 or R2 bucket is configured. New files are stored there. A refused upload is not saved. This is not verified until a file is actually stored."
+        : "No bucket is configured. Files stay in the database. Set OBJECT_STORE_BUCKET, OBJECT_STORE_ACCESS_KEY_ID, and OBJECT_STORE_SECRET_ACCESS_KEY. R2 also needs OBJECT_STORE_ENDPOINT.",
     },
     {
       name: "HRIS",

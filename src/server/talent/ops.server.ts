@@ -1,6 +1,7 @@
 import { assertSafeOutboundUrl, roleHas } from "@/domain/rules";
 import { biLocalPlan, sandboxSpec, textPlan } from "@/domain/ops";
 import { integrationHealth } from "@/domain/platform/adapters";
+import { readObjectStoreEnv } from "@/domain/object-store";
 import { isolateAvailable } from "./runner.server";
 import { assertSameSiteRequest } from "@/lib/auth/isolation.server";
 import { enterTenant } from "@/lib/tenant";
@@ -214,6 +215,7 @@ export async function getConnectors(userId: string, slug: string) {
       jobBoard: Boolean(process.env.JOB_BOARD_URL && process.env.JOB_BOARD_TOKEN),
       hris: Boolean(process.env.HRIS_EXPORT_URL && process.env.HRIS_EXPORT_TOKEN),
       unshare: isolateAvailable(),
+      objectStore: readObjectStoreEnv(process.env).configured,
     }),
     queue: await sql<{ status: string; n: number }>`
       select status, count(*)::int as n from message_intents where company_id = ${actor.companyId} group by status order by status

@@ -2,6 +2,7 @@ import { scoreExpertise } from "@/domain/expertise";
 import { rankTopHalf } from "@/domain/half";
 import { termsFromJson } from "@/domain/screen";
 import { readResume } from "./resume-text";
+import { loadFileBytes } from "./object-store.server";
 import { assertSameSiteRequest } from "@/lib/auth/isolation.server";
 import { allow, audit, db, json, nid, requireActor, sha256 } from "./db.server";
 import { rememberEvent } from "./workflows.server";
@@ -216,7 +217,7 @@ async function rankExpertise(companyId: string, jobId: string) {
     const file = files[0];
     const clean = file?.scan_state === "CLEAN";
     const extracted = file && clean
-      ? await readResume(file.mime, Buffer.from(file.content, "base64"), file.display_name)
+      ? await readResume(file.mime, await loadFileBytes(file.content), file.display_name)
       : { text: null, readable: false };
     const expertise = scoreExpertise({
       text: extracted.text,

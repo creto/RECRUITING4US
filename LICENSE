@@ -1,0 +1,39 @@
+RECRUIT4US
+Proprietary license
+
+Copyright (c) 2026 RECRUIT4US. All rights reserved.
+
+1. The work
+This package is the RECRUIT4US hiring workspace: jobs, applications,
+assessments, interviews, offers, and the original question banks that
+ship with it. The source that expresses that product is the intellectual
+property of its owner.
+
+2. What this copy allows
+A copy you were given may be run so you can evaluate or operate
+RECRUIT4US. That permission is limited to that use. It is not a sale of
+the intellectual property.
+
+3. What this copy does not allow
+You may not republish the work, sell it, sublicense it, or present it
+under another name. You may not remove this notice from a copy you
+redistribute. A score, a question, or a screen in the product is not a
+grant of those rights.
+
+4. Host chrome is not this product
+The preview frame is separate packaging. It is not part of the
+RECRUIT4US grant and it is not licensed by this file. That material
+includes the public/__grok directory, the scripts named grok-pwa-*,
+the document injector that adds host tags, and the silent preview
+bridge. Those files stay so a host can frame the app. They do not make
+the host's marks part of RECRUIT4US, and this license does not grant
+the host's marks.
+
+5. Other licenses
+Packages named in package.json stay under their own licenses. This file
+does not relicense them.
+
+6. No warranty
+The work is provided as is, without warranty of any kind. A demonstration
+company and its assessments are fictional and are not a validated hiring
+instrument.

@@ -13,6 +13,7 @@ import { allow, audit, db, json, mapDbError, nid, requireActor, requireUser, typ
 import { judgeIsolated, JUDGE_RUNTIME } from "./runner.server";
 import { sendSmtp, smtpConfigFromEnv } from "./smtp.server";
 import { QUESTION_CORPUS } from "./question-corpus";
+import { storeFileBytes } from "./object-store.server";
 
 const AT = `to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
 
@@ -1060,11 +1061,17 @@ export async function indexDocx(userId: string, slug: string, applicationId: str
   const extracted = await extractOffice(filename, bytes);
   const sql = await db();
   const fileId = nid();
+  const content = await storeFileBytes({
+    companyId: actor.companyId,
+    fileId,
+    bytes,
+    contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  });
   await sql`
     insert into file_objects (id, company_id, owner_scope, owner_id, display_name, mime, size_bytes, content, scan_state, scan_note)
     values (
       ${fileId}, ${actor.companyId}, 'APPLICATION', ${applicationId}, ${filename.slice(0, 180)},
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document', ${bytes.length}, ${base64},
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document', ${bytes.length}, ${content},
       ${extracted.status === "OK" ? "CLEAN" : "QUARANTINE"},
       ${"Macros were not executed. No malware scanner is connected. " + extracted.reason}
     )

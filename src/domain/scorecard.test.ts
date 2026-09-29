@@ -7,7 +7,9 @@ describe("scorecards", () => {
     const attributes = parseAttributes("System design, SQL, System design");
     assert.deepEqual(attributes.map((item) => item.id), ["system-design", "sql"]);
     const missing = focusAttributes(attributes, []);
-    assert.equal("error" in missing, true);
+    assert.equal("attributes" in missing && missing.attributes.length, 2);
+    const unknown = focusAttributes(attributes, ["missing"]);
+    assert.equal("error" in unknown, true);
     const focus = focusAttributes(attributes, ["sql"]);
     assert.equal("attributes" in focus && focus.attributes.length, 1);
   });

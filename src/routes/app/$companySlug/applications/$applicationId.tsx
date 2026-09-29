@@ -308,7 +308,7 @@ function ScheduleForm({ slug, applicationId, attributes, onDone, onError }: { sl
     <form className="grid gap-2 rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4 md:grid-cols-2" onSubmit={(event) => {
       event.preventDefault();
       const data = new FormData(event.currentTarget);
-      const focusIds = attributes.filter((item) => data.get(`focus-${item.id}`) === "on").map((item) => item.id);
+      const focusIds = data.getAll("focusIds").map(String);
       scheduleInterview({
         data: {
           slug,
@@ -321,7 +321,7 @@ function ScheduleForm({ slug, applicationId, attributes, onDone, onError }: { sl
           meetingUrl: String(data.get("url") ?? ""),
           focusIds,
         },
-      }).then(onDone).catch((err) => onError(err.message));
+      }).then(onDone).catch((err) => onError(err instanceof Error ? err.message : "Could not schedule."));
     }}>
       <Field label="Title"><input name="title" className={inputClass} defaultValue="Interview" required /></Field>
       <Field label="Timezone"><input name="timezone" className={inputClass} defaultValue="America/New_York" required /></Field>
@@ -332,7 +332,10 @@ function ScheduleForm({ slug, applicationId, attributes, onDone, onError }: { sl
       <div className="md:col-span-2 text-sm">
         <p className="mb-1">Scorecard focus</p>
         {attributes.map((item) => (
-          <label key={item.id} className="mr-3 inline-flex items-center gap-1"><input type="checkbox" name={`focus-${item.id}`} />{item.label}</label>
+          <label key={item.id} className="mr-3 inline-flex items-center gap-1">
+            <input type="checkbox" name="focusIds" value={item.id} defaultChecked />
+            {item.label}
+          </label>
         ))}
       </div>
       <Button type="submit">Schedule</Button>

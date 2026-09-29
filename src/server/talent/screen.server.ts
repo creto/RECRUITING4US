@@ -5,6 +5,7 @@ import {
   termsFromJson,
 } from "@/domain/screen";
 import { readResume } from "./resume-text";
+import { loadFileBytes, storeFileBytes } from "./object-store.server";
 import { allow, audit, db, json, nid, requireActor } from "./db.server";
 import { rememberEvent } from "./workflows.server";
 
@@ -96,12 +97,14 @@ async function insertDemoApplicant(
     select id from applications where id = ${applicationId} and company_id = ${companyId}
   `;
   if (!stored[0]) return;
+  const bytes = Buffer.from(text);
+  const content = await storeFileBytes({ companyId, fileId, bytes, contentType: "text/plain" });
   await sql`
     insert into file_objects (
       id, company_id, owner_scope, owner_id, display_name, mime, size_bytes, content, scan_state, scan_note
     ) values (
       ${fileId}, ${companyId}, 'application', ${applicationId}, ${`${key}-cv.txt`}, 'text/plain',
-      ${text.length}, ${Buffer.from(text).toString("base64")}, 'CLEAN',
+      ${bytes.length}, ${content}, 'CLEAN',
       'Local demo scanner. Not a commercial antivirus.'
     )
     on conflict do nothing
@@ -154,7 +157,7 @@ export async function runCvScreen(input: { companyId: string; applicationId: str
     ? file.scan_state
     : "QUARANTINE";
   const extracted = file && scanState === "CLEAN"
-    ? await readResume(file.mime, Buffer.from(file.content, "base64"), file.display_name)
+    ? await readResume(file.mime, await loadFileBytes(file.content), file.display_name)
     : { text: null, readable: false, note: "" };
 
   const published = app.assessment_id

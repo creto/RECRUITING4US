@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { memo, useState, type ReactNode } from "react";
 import { answerComplete, type SavedAnswer } from "@/domain/candidate-view";
 
 export type ExamCard = {
@@ -241,6 +241,7 @@ function AnswerSurface({
           className="mt-2 w-full rounded-2xl border border-[#d7e1da] bg-white px-4 py-5 text-center font-brand text-4xl tracking-wide text-[#17211c] outline-none focus:border-[#4c6b16]"
           value={answer?.value ?? ""}
           placeholder="0"
+          aria-label="Your answer"
           onChange={(event) => onAnswer({ value: event.target.value })}
         />
       </label>
@@ -260,7 +261,7 @@ function AnswerSurface({
   );
 }
 
-export function TimeRing({ secondsLeft, totalSeconds }: { secondsLeft: number; totalSeconds: number }) {
+export const TimeRing = memo(function TimeRing({ secondsLeft, totalSeconds }: { secondsLeft: number; totalSeconds: number }) {
   const left = Math.max(0, secondsLeft);
   const total = Math.max(left, totalSeconds, 1);
   const ratio = Math.min(1, left / total);
@@ -287,7 +288,7 @@ export function TimeRing({ secondsLeft, totalSeconds }: { secondsLeft: number; t
       <span className="sr-only">{left <= 0 ? "Time is up" : `${label} remaining`}</span>
     </div>
   );
-}
+});
 
 export function PersonalityCard({
   personality,

@@ -11,6 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as NoticeRouteImport } from './routes/notice'
+import { Route as StatusRouteImport } from './routes/status'
 import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AppCompanySlugRouteRouteImport } from './routes/app/$companySlug/route'
 import { Route as BookTokenRouteImport } from './routes/book/$token'
@@ -19,6 +21,7 @@ import { Route as CodeTokenRouteImport } from './routes/code/$token'
 import { Route as InviteTokenRouteImport } from './routes/invite/$token'
 import { Route as LiveTokenRouteImport } from './routes/live/$token'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiHealthIndexRouteImport } from './routes/api/health/index'
 import { Route as ApiHealthLiveRouteImport } from './routes/api/health/live'
 import { Route as ApiHealthReadyRouteImport } from './routes/api/health/ready'
 import { Route as ApiMailEventsRouteImport } from './routes/api/mail/events'
@@ -63,6 +66,16 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const NoticeRoute = NoticeRouteImport.update({
+  id: '/notice',
+  path: '/notice',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StatusRoute = StatusRouteImport.update({
+  id: '/status',
+  path: '/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/app/',
   path: '/app/',
@@ -101,6 +114,11 @@ const LiveTokenRoute = LiveTokenRouteImport.update({
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiHealthIndexRoute = ApiHealthIndexRouteImport.update({
+  id: '/api/health/',
+  path: '/api/health/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiHealthLiveRoute = ApiHealthLiveRouteImport.update({
@@ -283,6 +301,8 @@ const AppCompanySlugJobsJobIdPipelineRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/notice': typeof NoticeRoute
+  '/status': typeof StatusRoute
   '/app/$companySlug': typeof AppCompanySlugRouteRouteWithChildren
   '/book/$token': typeof BookTokenRoute
   '/code/$token': typeof CodeTokenRoute
@@ -318,6 +338,7 @@ export interface FileRoutesByFullPath {
   '/candidate/offers/$offerId': typeof CandidateOffersOfferIdRoute
   '/careers/$companySlug/$jobSlug': typeof CareersCompanySlugJobSlugRoute
   '/embed/$companySlug/$jobSlug': typeof EmbedCompanySlugJobSlugRoute
+  '/api/health/': typeof ApiHealthIndexRoute
   '/app/$companySlug/': typeof AppCompanySlugIndexRoute
   '/careers/$companySlug/': typeof CareersCompanySlugIndexRoute
   '/app/$companySlug/applications/$applicationId': typeof AppCompanySlugApplicationsApplicationIdRoute
@@ -328,6 +349,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/notice': typeof NoticeRoute
+  '/status': typeof StatusRoute
   '/book/$token': typeof BookTokenRoute
   '/code/$token': typeof CodeTokenRoute
   '/invite/$token': typeof InviteTokenRoute
@@ -362,6 +385,7 @@ export interface FileRoutesByTo {
   '/candidate/offers/$offerId': typeof CandidateOffersOfferIdRoute
   '/careers/$companySlug/$jobSlug': typeof CareersCompanySlugJobSlugRoute
   '/embed/$companySlug/$jobSlug': typeof EmbedCompanySlugJobSlugRoute
+  '/api/health': typeof ApiHealthIndexRoute
   '/app/$companySlug': typeof AppCompanySlugIndexRoute
   '/careers/$companySlug': typeof CareersCompanySlugIndexRoute
   '/app/$companySlug/applications/$applicationId': typeof AppCompanySlugApplicationsApplicationIdRoute
@@ -373,6 +397,8 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/notice': typeof NoticeRoute
+  '/status': typeof StatusRoute
   '/app/$companySlug': typeof AppCompanySlugRouteRouteWithChildren
   '/book/$token': typeof BookTokenRoute
   '/code/$token': typeof CodeTokenRoute
@@ -408,6 +434,7 @@ export interface FileRoutesById {
   '/candidate/offers/$offerId': typeof CandidateOffersOfferIdRoute
   '/careers/$companySlug/$jobSlug': typeof CareersCompanySlugJobSlugRoute
   '/embed/$companySlug/$jobSlug': typeof EmbedCompanySlugJobSlugRoute
+  '/api/health/': typeof ApiHealthIndexRoute
   '/app/$companySlug/': typeof AppCompanySlugIndexRoute
   '/careers/$companySlug/': typeof CareersCompanySlugIndexRoute
   '/app/$companySlug/applications/$applicationId': typeof AppCompanySlugApplicationsApplicationIdRoute
@@ -420,6 +447,8 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/notice'
+    | '/status'
     | '/app/$companySlug'
     | '/book/$token'
     | '/code/$token'
@@ -455,6 +484,7 @@ export interface FileRouteTypes {
     | '/candidate/offers/$offerId'
     | '/careers/$companySlug/$jobSlug'
     | '/embed/$companySlug/$jobSlug'
+    | '/api/health/'
     | '/app/$companySlug/'
     | '/careers/$companySlug/'
     | '/app/$companySlug/applications/$applicationId'
@@ -465,6 +495,8 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/notice'
+    | '/status'
     | '/book/$token'
     | '/code/$token'
     | '/invite/$token'
@@ -499,6 +531,7 @@ export interface FileRouteTypes {
     | '/candidate/offers/$offerId'
     | '/careers/$companySlug/$jobSlug'
     | '/embed/$companySlug/$jobSlug'
+    | '/api/health'
     | '/app/$companySlug'
     | '/careers/$companySlug'
     | '/app/$companySlug/applications/$applicationId'
@@ -509,6 +542,8 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/login'
+    | '/notice'
+    | '/status'
     | '/app/$companySlug'
     | '/book/$token'
     | '/code/$token'
@@ -544,6 +579,7 @@ export interface FileRouteTypes {
     | '/candidate/offers/$offerId'
     | '/careers/$companySlug/$jobSlug'
     | '/embed/$companySlug/$jobSlug'
+    | '/api/health/'
     | '/app/$companySlug/'
     | '/careers/$companySlug/'
     | '/app/$companySlug/applications/$applicationId'
@@ -555,6 +591,8 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
+  NoticeRoute: typeof NoticeRoute
+  StatusRoute: typeof StatusRoute
   AppCompanySlugRouteRoute: typeof AppCompanySlugRouteRouteWithChildren
   BookTokenRoute: typeof BookTokenRoute
   CodeTokenRoute: typeof CodeTokenRoute
@@ -572,6 +610,7 @@ export interface RootRouteChildren {
   CandidateOffersOfferIdRoute: typeof CandidateOffersOfferIdRoute
   CareersCompanySlugJobSlugRoute: typeof CareersCompanySlugJobSlugRoute
   EmbedCompanySlugJobSlugRoute: typeof EmbedCompanySlugJobSlugRoute
+  ApiHealthIndexRoute: typeof ApiHealthIndexRoute
   CareersCompanySlugIndexRoute: typeof CareersCompanySlugIndexRoute
 }
 
@@ -589,6 +628,20 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/notice': {
+      id: '/notice'
+      path: '/notice'
+      fullPath: '/notice'
+      preLoaderRoute: typeof NoticeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/status': {
+      id: '/status'
+      path: '/status'
+      fullPath: '/status'
+      preLoaderRoute: typeof StatusRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/app/': {
@@ -645,6 +698,13 @@ declare module '@tanstack/react-router' {
       path: '/api/auth/$'
       fullPath: '/api/auth/$'
       preLoaderRoute: typeof ApiAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/health/': {
+      id: '/api/health/'
+      path: '/api/health'
+      fullPath: '/api/health/'
+      preLoaderRoute: typeof ApiHealthIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/health/live': {
@@ -952,6 +1012,8 @@ const AppCompanySlugRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
+  NoticeRoute: NoticeRoute,
+  StatusRoute: StatusRoute,
   AppCompanySlugRouteRoute: AppCompanySlugRouteRouteWithChildren,
   BookTokenRoute: BookTokenRoute,
   CodeTokenRoute: CodeTokenRoute,
@@ -970,6 +1032,7 @@ const rootRouteChildren: RootRouteChildren = {
   CandidateOffersOfferIdRoute: CandidateOffersOfferIdRoute,
   CareersCompanySlugJobSlugRoute: CareersCompanySlugJobSlugRoute,
   EmbedCompanySlugJobSlugRoute: EmbedCompanySlugJobSlugRoute,
+  ApiHealthIndexRoute: ApiHealthIndexRoute,
   CareersCompanySlugIndexRoute: CareersCompanySlugIndexRoute,
 }
 export const routeTree = rootRouteImport

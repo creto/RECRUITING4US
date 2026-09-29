@@ -532,7 +532,7 @@ function sameLocal(parts: ZonedParts, y: number, mo: number, d: number, h: numbe
 export function zonedLocalToUtc(local: string, timeZone: string): Date {
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(local);
   if (!match) throw new Error("Enter a local time as YYYY-MM-DDTHH:mm.");
-  let zone = timeZone;
+  const zone = timeZone;
   try {
     new Intl.DateTimeFormat("en-US", { timeZone: zone }).format(new Date());
   } catch {

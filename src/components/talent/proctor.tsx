@@ -31,6 +31,9 @@ export function ExamProctor({
   const [log, setLog] = useState<{ id: number; text: string }[]>([]);
   const seq = useRef(0);
   const lastFace = useRef<string>("");
+  const noteRef = useRef<(kind: ProctorKind, detail: string) => void>(() => {});
+  const onCameraRef = useRef(onCamera);
+  onCameraRef.current = onCamera;
 
   function note(kind: ProctorKind, detail: string) {
     const text = `${kind.replaceAll("_", " ").toLowerCase()}: ${detail}`;
@@ -52,6 +55,7 @@ export function ExamProctor({
       });
     });
   }
+  noteRef.current = note;
 
   useEffect(() => {
     let stream: MediaStream | null = null;
@@ -63,8 +67,8 @@ export function ExamProctor({
     async function start() {
       if (!navigator.mediaDevices?.getUserMedia) {
         setStatus("This browser has no camera API.");
-        note("CAMERA_DENIED", "No camera API.");
-        onCamera?.(false);
+        noteRef.current("CAMERA_DENIED", "No camera API.");
+        onCameraRef.current?.(false);
         return;
       }
       try {
@@ -78,17 +82,17 @@ export function ExamProctor({
           await video.play().catch(() => undefined);
         }
         setStatus("Camera is on. The picture stays in this browser.");
-        note("CAMERA_GRANTED", "Camera track started.");
-        onCamera?.(true);
+        noteRef.current("CAMERA_GRANTED", "Camera track started.");
+        onCameraRef.current?.(true);
         heart = window.setInterval(() => {
           const live = stream?.getVideoTracks().some((track) => track.readyState === "live" && track.enabled);
           if (!live) {
             setStatus("The camera stopped.");
-            note("CAMERA_ENDED", "Video track ended.");
-            onCamera?.(false);
+            noteRef.current("CAMERA_ENDED", "Video track ended.");
+            onCameraRef.current?.(false);
             return;
           }
-          note("HEARTBEAT", "Camera track still live.");
+          noteRef.current("HEARTBEAT", "Camera track still live.");
         }, 25000);
         const facesApi = detector();
         if (!facesApi) {
@@ -98,32 +102,32 @@ export function ExamProctor({
             void facesApi.detect(video).then((found) => {
               const next = found.length === 0 ? "NO_FACE" : found.length > 1 ? "EXTRA_FACE" : "ONE";
               setFaces(next === "ONE" ? "One face in frame." : next === "NO_FACE" ? "No face in frame." : "More than one face in frame.");
-              if (next !== "ONE" && next !== lastFace.current) note(next, `${found.length} faces.`);
+              if (next !== "ONE" && next !== lastFace.current) noteRef.current(next, `${found.length} faces.`);
               lastFace.current = next;
             }).catch(() => setFaces("Face check failed in this browser."));
           }, 8000);
         }
       } catch {
         setStatus("Camera permission was denied.");
-        note("CAMERA_DENIED", "Permission denied.");
-        onCamera?.(false);
+        noteRef.current("CAMERA_DENIED", "Permission denied.");
+        onCameraRef.current?.(false);
       }
     }
 
     void start();
 
     function hidden() {
-      if (document.visibilityState === "hidden") note("TAB_HIDDEN", "The page was hidden.");
+      if (document.visibilityState === "hidden") noteRef.current("TAB_HIDDEN", "The page was hidden.");
     }
     function blur() {
-      note("WINDOW_BLUR", "The window lost focus.");
+      noteRef.current("WINDOW_BLUR", "The window lost focus.");
     }
     function fullscreen() {
-      if (!document.fullscreenElement) note("FULLSCREEN_LEFT", "Fullscreen is off.");
+      if (!document.fullscreenElement) noteRef.current("FULLSCREEN_LEFT", "Fullscreen is off.");
     }
     function copied(event: ClipboardEvent) {
       const kind = proctorKind(event.type === "paste" ? "PASTE" : "COPY");
-      if (kind) note(kind, "Clipboard use during the exam.");
+      if (kind) noteRef.current(kind, "Clipboard use during the exam.");
     }
     document.addEventListener("visibilitychange", hidden);
     window.addEventListener("blur", blur);
@@ -141,7 +145,7 @@ export function ExamProctor({
       document.removeEventListener("copy", copied);
       document.removeEventListener("paste", copied);
       if (stream) for (const track of stream.getTracks()) track.stop();
-      onCamera?.(false);
+      onCameraRef.current?.(false);
     };
   }, [liveAttemptId]);
 

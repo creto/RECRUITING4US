@@ -27,10 +27,11 @@ import { applicationForm, compileSearch, knockoutResult, parseResumeProfile } fr
 import { attributesFromJson, attributesOrDefault, parseAttributes } from "@/domain/scorecard";
 import { stringList, termPresent, termsFromJson } from "@/domain/screen";
 import { readResume } from "./resume-text";
+import { loadFileBytes, removeStoredFile, storeFileBytes } from "./object-store.server";
 import { sniffResume } from "@/domain/platform/docx";
 import { applicationReceipt, applicationSheetCsv, cvResultLabel, storedAnswerText, type SheetField, type SheetRow } from "@/domain/sheet";
 import { enterTenant } from "@/lib/tenant";
-import { allow, audit, canonical, db, json, mapDbError, nid, requireActor, requireUser, sha256, withTransaction, type Actor } from "./db.server";
+import { allow, audit, canonical, db, forgetActor, json, mapDbError, nid, requireActor, requireUser, sha256, withTransaction, type Actor } from "./db.server";
 import { rememberEvent } from "./workflows.server";
 import { ensureDemoCvSamples, runCvScreen } from "./screen.server";
 
@@ -390,6 +391,7 @@ export async function removeMember(userId: string, input: { slug: string; member
   await sql`
     update memberships set status = 'REMOVED' where id = ${input.membershipId} and company_id = ${actor.companyId}
   `;
+  forgetActor(target[0].user_id);
   await audit(actor, "member.remove", "membership", input.membershipId, "Membership removed.");
   return { ok: true };
 }
@@ -944,7 +946,7 @@ async function indexMissingProfiles(companyId: string) {
     select a.id as application_id, f.id as file_id, f.mime, f.content, f.scan_state, f.display_name
     from applications a
     join lateral (
-      select id, mime, content, scan_state from file_objects
+      select id, mime, content, scan_state, display_name from file_objects
       where company_id = a.company_id and owner_id = a.id
       order by created_at desc limit 1
     ) f on true
@@ -954,7 +956,7 @@ async function indexMissingProfiles(companyId: string) {
   `;
   for (const row of rows) {
     const extracted = row.scan_state === "CLEAN"
-      ? await readResume(row.mime, Buffer.from(row.content, "base64"), row.display_name)
+      ? await readResume(row.mime, await loadFileBytes(row.content), row.display_name)
       : { text: null, readable: false };
     const profile = parseResumeProfile(extracted.readable ? extracted.text : null);
     await sql`
@@ -1973,12 +1975,18 @@ async function storeResume(
   const sample = bytes.subarray(0, 400).toString("utf8");
   const sql = await db();
   const fileId = nid();
+  const content = await storeFileBytes({
+    companyId,
+    fileId,
+    bytes,
+    contentType: resume.mime,
+  });
   await sql`
     insert into file_objects (
       id, company_id, owner_scope, owner_id, display_name, mime, size_bytes, content, scan_state, scan_note
     ) values (
       ${fileId}, ${companyId}, 'application', ${applicationId}, ${resume.name.slice(0, 180)}, ${resume.mime},
-      ${bytes.length}, ${resume.dataBase64}, 'QUARANTINE',
+      ${bytes.length}, ${content}, 'QUARANTINE',
       'Held for the local demo scanner. Not a commercial antivirus.'
     )
   `;
@@ -2020,7 +2028,7 @@ export async function readFile(userId: string, slug: string, fileId: string) {
     expiresAt: expires.toISOString(),
     name: file.display_name,
     mime: file.mime,
-    dataBase64: file.content,
+    dataBase64: (await loadFileBytes(file.content)).toString("base64"),
   };
 }
 
@@ -2056,7 +2064,7 @@ export async function readGrantedFile(userId: string, grantId: string) {
     grantUserId: grant.user_id,
   });
   if (!allowed || !canDownloadFile(grant.scan_state)) throw new Error("This download link has expired.");
-  return { name: grant.display_name, mime: grant.mime, dataBase64: grant.content };
+  return { name: grant.display_name, mime: grant.mime, dataBase64: (await loadFileBytes(grant.content)).toString("base64") };
 }
 
 export async function mergeCandidates(
@@ -2107,12 +2115,13 @@ export async function runRetention(userId: string, slug: string) {
   const actor = await requireActor(userId, slug);
   if (actor.role !== "OWNER" && actor.role !== "ADMIN") throw new Error("You do not have permission to do that.");
   const sql = await db();
-  const files = await sql<{ id: string; created_at: string }>`
-    select id, created_at::text as created_at from file_objects where company_id = ${actor.companyId}
+  const files = await sql<{ id: string; created_at: string; content: string }>`
+    select id, created_at::text as created_at, content from file_objects where company_id = ${actor.companyId}
   `;
   const now = new Date();
   const due = files.filter((file) => retentionDue(new Date(file.created_at), now, actor.retentionDays));
   for (const file of due) {
+    await removeStoredFile(file.content);
     await sql`delete from file_objects where id = ${file.id} and company_id = ${actor.companyId}`;
   }
   await audit(actor, "privacy.retention", "company", actor.companyId, `Removed ${due.length} files past retention.`);
@@ -2156,6 +2165,12 @@ export async function anonymizeCandidate(userId: string, input: { slug: string; 
     returning id
   `;
   if (!updated[0]) throw new Error("Not found.");
+  const files = await sql<{ content: string }>`
+    select content from file_objects where company_id = ${actor.companyId} and owner_id in (
+      select id from applications where candidate_id = ${input.candidateId} and company_id = ${actor.companyId}
+    )
+  `;
+  for (const file of files) await removeStoredFile(file.content);
   await sql`
     delete from file_objects where company_id = ${actor.companyId} and owner_id in (
       select id from applications where candidate_id = ${input.candidateId} and company_id = ${actor.companyId}

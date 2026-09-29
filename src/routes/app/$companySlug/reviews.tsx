@@ -94,14 +94,15 @@ function ReviewForm({ slug, reviewId }: { slug: string; reviewId: string }) {
   const [ratings, setRatings] = useState<Record<string, number>>({});
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const dimensions = state.data?.items[0]?.rubric.dimensions ?? [];
+  const rubricDimensions = state.data?.items[0]?.rubric.dimensions;
+  const dimensions = rubricDimensions ?? [];
   useEffect(() => {
-    if (dimensions.length === 0) return;
+    if (!rubricDimensions || rubricDimensions.length === 0) return;
     setRatings((current) => {
-      if (dimensions.every((dimension) => typeof current[dimension.id] === "number")) return current;
-      return Object.fromEntries(dimensions.map((dimension) => [dimension.id, current[dimension.id] ?? 2]));
+      if (rubricDimensions.every((dimension) => typeof current[dimension.id] === "number")) return current;
+      return Object.fromEntries(rubricDimensions.map((dimension) => [dimension.id, current[dimension.id] ?? 2]));
     });
-  }, [dimensions]);
+  }, [rubricDimensions]);
   if (state.loading) return <Loading />;
   if (state.error || !state.data) return <Alert>{state.error ?? "Not found"}</Alert>;
   const ids = dimensions.map((dimension) => dimension.id);

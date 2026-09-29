@@ -85,7 +85,12 @@ function Taker({ view }: { view: AttemptView }) {
   const [personality, setPersonality] = useState<AttemptView["personality"]>(null);
   const [runnerNote, setRunnerNote] = useState<string | null>(null);
   const timers = useRef<Record<string, number>>({});
-  const left = useRemaining(view.attempt.deadline, view.serverNow);
+  const answersRef = useRef(answers);
+  const revisionsRef = useRef(revisions);
+  const saveRef = useRef(saveState);
+  answersRef.current = answers;
+  revisionsRef.current = revisions;
+  saveRef.current = saveState;
   const [cameraReady, setCameraReady] = useState(!view.proctored);
   const item = view.items[index];
   const locked = view.proctored && !cameraReady;
@@ -95,15 +100,6 @@ function Taker({ view }: { view: AttemptView }) {
       for (const timer of Object.values(timers.current)) window.clearTimeout(timer);
     };
   }, []);
-
-  function schedule(next: Item, answer: Answer, expected: number) {
-    const existing = timers.current[next.id];
-    if (existing) window.clearTimeout(existing);
-    setSaveState((current) => ({ ...current, [next.id]: "unsaved" }));
-    timers.current[next.id] = window.setTimeout(() => {
-      void persist(next, answer, expected);
-    }, 450);
-  }
 
   async function persist(next: Item, answer: Answer, expected: number): Promise<number> {
     setSaveState((current) => ({ ...current, [next.id]: "saving" }));
@@ -139,28 +135,37 @@ function Taker({ view }: { view: AttemptView }) {
   function edit(answer: Answer) {
     if (!item) return;
     setAnswers((current) => ({ ...current, [item.id]: answer }));
-    schedule(item, answer, revisions[item.id] ?? 0);
+    const existing = timers.current[item.id];
+    if (existing) window.clearTimeout(existing);
+    const itemId = item.id;
+    const itemType = item.type;
+    timers.current[itemId] = window.setTimeout(() => {
+      delete timers.current[itemId];
+      if (saveRef.current[itemId] === "saving") return;
+      setSaveState((current) => ({ ...current, [itemId]: "unsaved" }));
+      void persist(item, answer, revisionsRef.current[itemId] ?? 0);
+    }, answerComplete(itemType, answer) ? 80 : 450);
   }
 
   async function flushCurrent() {
     if (!item) return;
     const timer = timers.current[item.id];
     if (timer) window.clearTimeout(timer);
-    const answer = answers[item.id];
-    if (!answer || saveState[item.id] === "saved") return;
-    const revision = await persist(item, answer, revisions[item.id] ?? 0);
+    const answer = answersRef.current[item.id];
+    if (!answer || saveRef.current[item.id] === "saved" || saveRef.current[item.id] === "saving") return;
+    const revision = await persist(item, answer, revisionsRef.current[item.id] ?? 0);
     setRevisions((current) => ({ ...current, [item.id]: revision }));
   }
 
   async function submit() {
     setError(null);
-    const latest = { ...revisions };
+    const latest = { ...revisionsRef.current };
     if (item) {
       const timer = timers.current[item.id];
       if (timer) window.clearTimeout(timer);
-      const answer = answers[item.id];
-      if (answer && saveState[item.id] !== "saved") {
-        latest[item.id] = await persist(item, answer, revisions[item.id] ?? 0);
+      const answer = answersRef.current[item.id];
+      if (answer && saveRef.current[item.id] !== "saved" && saveRef.current[item.id] !== "saving") {
+        latest[item.id] = await persist(item, answer, revisionsRef.current[item.id] ?? 0);
       }
     }
     const expectedRevisions: Record<string, number> = {};
@@ -180,6 +185,9 @@ function Taker({ view }: { view: AttemptView }) {
     }
   }
 
+  const flushRef = useRef(flushCurrent);
+  flushRef.current = flushCurrent;
+
   const unanswered = view.items.filter((row) => !answerComplete(row.type, answers[row.id] ?? row.answer)).length;
 
   useEffect(() => {
@@ -188,13 +196,13 @@ function Taker({ view }: { view: AttemptView }) {
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       const next = questionIndex(index, event.key, view.items.length);
       if (next == null) return;
-      if (next > index && item && !answerComplete(item.type, answers[item.id])) return;
+      if (next > index && item && !answerComplete(item.type, answersRef.current[item.id])) return;
       event.preventDefault();
-      void flushCurrent().then(() => setIndex(next));
+      void flushRef.current().then(() => setIndex(next));
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [index, answers, revisions, saveState, item, view.items.length, view.attempt.id]);
+  }, [index, item, view.items.length, view.attempt.id]);
 
   if (receipt) {
     return (
@@ -212,48 +220,78 @@ function Taker({ view }: { view: AttemptView }) {
 
   if (!item) return <Alert>This attempt has no questions.</Alert>;
 
-  const secondsLeft = Math.max(0, Math.ceil(left / 1000));
-
   return (
     <div className="space-y-4">
       {view.proctored ? <ExamProctor liveAttemptId={view.attempt.id} onCamera={setCameraReady} /> : null}
       {locked ? <Alert>Allow the camera to see the questions. The picture stays on this device and is not uploaded.</Alert> : (
-        <ExamDesk
-          kicker={view.assessmentName}
-          title={item.section}
-          instructions={`${view.instructions}${view.durationSeconds > 0 ? ` Limit ${Math.round(view.durationSeconds / 60)} minutes from the start.` : ""} The server clock ends the attempt. Editing this timer does not add time. The answer key is not on this page. You cannot move on until this question is answered.`}
-          items={view.items}
+        <ExamClock
+          view={view}
           index={index}
           answers={answers}
-          secondsLeft={secondsLeft}
-          totalSeconds={view.durationSeconds}
-          closed={left <= 0}
-          saveLabel={`${saveStatusLabel(saveState[item.id])}${unanswered ? ` · ${unanswered} still open` : ""}`}
-          notice={error}
+          saveState={saveState}
+          unanswered={unanswered}
+          error={error}
+          item={item}
+          runnerNote={runnerNote}
           onSelect={(next) => {
-            void flushCurrent().then(() => setIndex(next));
+            setIndex(next);
+            void flushCurrent();
           }}
           onAnswer={edit}
           onSubmit={() => void submit()}
-          toolbar={item.type === "code" ? (
-            <div className="space-y-2">
-              <button
-                type="button"
-                className="min-h-10 w-full rounded-full border border-line px-3 text-xs"
-                onClick={() => {
-                  requestSampleRun({ data: { attemptId: view.attempt.id } })
-                    .then((result) => setRunnerNote(result.outputExcerpt ? `${result.reason}\n${result.outputExcerpt}` : result.reason))
-                    .catch((err) => setRunnerNote(err.message));
-                }}
-              >
-                Request a sample run
-              </button>
-              <p className="whitespace-pre-wrap text-xs text-muted">{runnerNote ?? view.runner.reason}</p>
-            </div>
-          ) : null}
+          onSample={() => {
+            requestSampleRun({ data: { attemptId: view.attempt.id } })
+              .then((result) => setRunnerNote(result.outputExcerpt ? `${result.reason}\n${result.outputExcerpt}` : result.reason))
+              .catch((err: Error) => setRunnerNote(err.message));
+          }}
         />
       )}
     </div>
+  );
+}
+
+function ExamClock({
+  view, index, answers, saveState, unanswered, error, item, runnerNote, onSelect, onAnswer, onSubmit, onSample,
+}: {
+  view: AttemptView;
+  index: number;
+  answers: Record<string, Answer>;
+  saveState: Record<string, string>;
+  unanswered: number;
+  error: string | null;
+  item: Item;
+  runnerNote: string | null;
+  onSelect: (next: number) => void;
+  onAnswer: (answer: Answer) => void;
+  onSubmit: () => void;
+  onSample: () => void;
+}) {
+  const clock = useClock(view.attempt.deadline, view.serverNow);
+  return (
+    <ExamDesk
+        kicker={view.assessmentName}
+        title={item.section}
+        instructions={`${view.instructions}${view.durationSeconds > 0 ? ` Limit ${Math.round(view.durationSeconds / 60)} minutes from the start.` : ""} The server clock ends the attempt. Editing this timer does not add time. The answer key is not on this page. You cannot move on until this question is answered.`}
+        items={view.items}
+        index={index}
+        answers={answers}
+        secondsLeft={clock.secondsLeft}
+        totalSeconds={view.durationSeconds}
+        closed={clock.closed}
+        saveLabel={`${saveStatusLabel(saveState[item.id])}${unanswered ? ` · ${unanswered} still open` : ""}`}
+        notice={error}
+        onSelect={onSelect}
+        onAnswer={onAnswer}
+        onSubmit={onSubmit}
+        toolbar={item.type === "code" ? (
+          <div className="space-y-2">
+            <button type="button" className="min-h-10 w-full rounded-full border border-line px-3 text-xs" onClick={onSample}>
+              Request a sample run
+            </button>
+            <p className="whitespace-pre-wrap text-xs text-muted">{runnerNote ?? view.runner.reason}</p>
+          </div>
+        ) : null}
+      />
   );
 }
 
@@ -286,14 +324,19 @@ function Receipt({ view }: { view: AttemptView }) {
   );
 }
 
-function useRemaining(deadline: string, serverNow: string) {
+/** Tick the ring without rebuilding the answer form every second. */
+function useClock(deadline: string, serverNow: string) {
   const skew = useMemo(() => new Date(serverNow).getTime() - Date.now(), [serverNow]);
-  const [left, setLeft] = useState(() => Math.max(0, new Date(deadline).getTime() - Date.now() - skew));
+  const read = () => {
+    const secondsLeft = Math.max(0, Math.ceil((new Date(deadline).getTime() - Date.now() - skew) / 1000));
+    return { secondsLeft, closed: secondsLeft <= 0 };
+  };
+  const [clock, setClock] = useState(read);
   useEffect(() => {
-    const id = window.setInterval(() => {
-      setLeft(Math.max(0, new Date(deadline).getTime() - Date.now() - skew));
-    }, 1000);
+    const id = window.setInterval(() => setClock(read()), 1000);
     return () => window.clearInterval(id);
+    // deadline and skew fully describe the clock
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deadline, skew]);
-  return left;
+  return clock;
 }
