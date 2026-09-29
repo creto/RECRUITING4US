@@ -1,5 +1,6 @@
 import { assertSameSiteRequest } from "@/lib/auth/isolation.server";
 import { DEFAULT_MAIL_TEMPLATES, MAIL_NOTE, mailText, parseCc, renderMail } from "@/domain/mail";
+import { prepareMailBody } from "@/domain/mail-html";
 import { roleHas } from "@/domain/rules";
 import { allow, audit, db, nid, requireActor, requireUser } from "./db.server";
 
@@ -49,7 +50,7 @@ export async function saveTemplate(
   const id = input.id?.trim() || nid();
   await sql`
     insert into email_templates (id, company_id, name, subject, body, created_by)
-    values (${id}, ${actor.companyId}, ${name.text}, ${subject.text}, ${body.text}, ${actor.userId})
+    values (${id}, ${actor.companyId}, ${name.text}, ${subject.text}, ${prepareMailBody(body.text)}, ${actor.userId})
     on conflict (company_id, id) do update
       set name = excluded.name, subject = excluded.subject, body = excluded.body
   `;
@@ -167,7 +168,7 @@ export async function sendApplicationEmail(
       from_name, from_email, application_id, cc, author
     ) values (
       ${id}, ${actor.companyId}, ${person.email},
-      ${renderMail(subject.text, values)}, ${renderMail(body.text, values)},
+      ${renderMail(subject.text, values)}, ${prepareMailBody(renderMail(body.text, values))},
       'CAPTURED', ${input.applicationId},
       ${actor.name}, ${actor.email}, ${input.applicationId}, ${cc.emails.join(", ")}, 'STAFF'
     )

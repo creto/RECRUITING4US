@@ -25,6 +25,8 @@ import {
   rejudgeSubmission,
 } from "@/server/talent.functions";
 import { Alert, Button, Field, inputClass, Loading, PageTitle, money, refreshPage, useAuthed, when } from "@/components/talent/kit";
+import { RichMailEditor } from "@/components/talent/mail-compose";
+import { plainToEditorHtml } from "@/domain/mail-html";
 
 export const Route = createFileRoute("/app/$companySlug/applications/$applicationId")({ component: ApplicationPage });
 
@@ -394,7 +396,7 @@ function scoreLine(item: {
 
 function MailTab({ slug, applicationId, canEmail, onError }: { slug: string; applicationId: string; canEmail: boolean; onError: (value: string) => void }) {
   const [subject, setSubject] = useState("Update on {{job_title}}");
-  const [body, setBody] = useState("Hello {{candidate_name}},\n\nThis note is queued for delivery. Stored in this workspace is not the same as delivered.\n\n{{recruiter_name}}");
+  const [body, setBody] = useState(() => plainToEditorHtml("Hello {{candidate_name}},\n\nThis note is queued for delivery. Stored in this workspace is not the same as delivered.\n\n{{recruiter_name}}"));
   if (!canEmail) return <p className="text-sm">Your role cannot send mail.</p>;
   return (
     <form className="grid gap-2" onSubmit={(event) => {
@@ -404,7 +406,7 @@ function MailTab({ slug, applicationId, canEmail, onError }: { slug: string; app
         .catch((err: Error) => onError(err.message));
     }}>
       <Field label="Subject"><input className={inputClass} value={subject} onChange={(event) => setSubject(event.target.value)} /></Field>
-      <Field label="Message"><textarea className={`${inputClass} min-h-28 py-2`} value={body} onChange={(event) => setBody(event.target.value)} /></Field>
+      <Field label="Message"><RichMailEditor value={body} onChange={setBody} /></Field>
       <Button type="submit">Queue outside message</Button>
     </form>
   );

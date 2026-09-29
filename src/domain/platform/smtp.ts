@@ -1,3 +1,5 @@
+import { htmlToPlain, looksLikeHtml, prepareMailBody } from "../mail-html.ts";
+
 export type SmtpReply = { code: number; text: string };
 
 /** Pull complete SMTP replies out of a buffer. A reply ends on a line whose fourth character is a space. */
@@ -29,17 +31,46 @@ export function classifySmtpCode(code: number): "accepted" | "deferred" | "bounc
   return "failed";
 }
 
+function encodeBody(raw: string): string {
+  return raw.replace(/\r?\n/g, "\r\n").replace(/^\./gm, "..");
+}
+
+/** Build an RFC822 message. HTML bodies go out as multipart/alternative (plain + sanitized HTML). */
 export function buildRfc822(input: { from: string; to: string; cc: string; subject: string; body: string; messageId: string }): string {
+  const subject = input.subject.replace(/[\r\n]/g, " ").slice(0, 200);
   const headers = [
     `From: ${input.from}`,
     `To: ${input.to}`,
     input.cc.trim() ? `Cc: ${input.cc.trim()}` : "",
-    `Subject: ${input.subject.replace(/[\r\n]/g, " ").slice(0, 200)}`,
+    `Subject: ${subject}`,
     `Message-ID: <${input.messageId}>`,
     "MIME-Version: 1.0",
-    "Content-Type: text/plain; charset=utf-8",
   ].filter(Boolean);
-  const body = input.body.replace(/\r?\n/g, "\r\n").replace(/^\./gm, "..");
+
+  const prepared = prepareMailBody(input.body);
+  if (looksLikeHtml(prepared)) {
+    const html = prepared;
+    const plain = htmlToPlain(html) || " ";
+    const boundary = `recruit4us_${input.messageId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24) || "mail"}`;
+    const htmlDoc = `<!DOCTYPE html><html><body style="font-family:system-ui,Segoe UI,sans-serif;font-size:14px;line-height:1.5;color:#14221b">${html}</body></html>`;
+    headers.push(`Content-Type: multipart/alternative; boundary="${boundary}"`);
+    const parts = [
+      `--${boundary}`,
+      "Content-Type: text/plain; charset=utf-8",
+      "",
+      encodeBody(plain),
+      `--${boundary}`,
+      "Content-Type: text/html; charset=utf-8",
+      "",
+      encodeBody(htmlDoc),
+      `--${boundary}--`,
+      "",
+    ].join("\r\n");
+    return `${headers.join("\r\n")}\r\n\r\n${parts}`;
+  }
+
+  headers.push("Content-Type: text/plain; charset=utf-8");
+  const body = encodeBody(prepared);
   return `${headers.join("\r\n")}\r\n\r\n${body}\r\n`;
 }
 

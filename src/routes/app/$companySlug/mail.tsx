@@ -2,6 +2,7 @@ import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { deleteTemplate, listInbox, listMailbox, listTemplates, saveTemplate } from "@/server/talent.functions";
 import { Alert, AppLink, Button, Empty, Field, inputClass, Loading, PageTitle, refreshPage, useAuthed, when } from "@/components/talent/kit";
+import { RichMailEditor, SafeMailBody } from "@/components/talent/mail-compose";
 
 export const Route = createFileRoute("/app/$companySlug/mail")({ component: Mail });
 
@@ -52,7 +53,7 @@ function Mail() {
               <input className={inputClass} value={subject} onChange={(event) => setSubject(event.target.value)} required />
             </Field>
             <Field label="Message">
-              <textarea className={`${inputClass} min-h-28 py-2`} value={body} onChange={(event) => setBody(event.target.value)} required />
+              <RichMailEditor key={editing ?? "new"} value={body} onChange={setBody} required />
             </Field>
             <Button type="submit">{editing ? "Save template" : "Add template"}</Button>
           </form>
@@ -78,7 +79,7 @@ function Mail() {
                   {when(message.at)}
                 </p>
                 <p className="text-muted">To {message.to_email}{message.cc ? ` · copy stored ${message.cc}` : ""}</p>
-                <p className="mt-2 whitespace-pre-wrap">{message.body}</p>
+                <SafeMailBody body={message.body} />
                 {message.application_id ? <AppLink className="mt-2 inline-flex text-link" href={`/app/${companySlug}/applications/${message.application_id}`}>Open application</AppLink> : null}
               </li>
             ))}
@@ -105,7 +106,7 @@ function Mail() {
           {(delivery.data?.inbound ?? []).map((row: any) => (
             <li key={String(row.id)} className="rounded-md border border-line p-3 text-sm">
               <p>{row.matched ? "Matched" : "Quarantined"} · {String(row.from_email)}</p>
-              <p className="whitespace-pre-wrap">{String(row.body)}</p>
+              <SafeMailBody body={String(row.body)} className="text-sm" />
               {row.quarantine_reason ? <p className="text-muted">{String(row.quarantine_reason)}</p> : null}
             </li>
           ))}

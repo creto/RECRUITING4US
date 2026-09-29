@@ -2,6 +2,8 @@ import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { listInbox, queuePlatformMail, suppressAddress, unsuppressAddress } from "@/server/talent.functions";
 import { Alert, Button, Empty, Field, inputClass, Loading, PageTitle, refreshPage, useAuthed } from "@/components/talent/kit";
+import { RichMailEditor, SafeMailBody } from "@/components/talent/mail-compose";
+import { plainToEditorHtml } from "@/domain/mail-html";
 
 export const Route = createFileRoute("/app/$companySlug/inbox")({ component: Inbox });
 
@@ -11,7 +13,7 @@ function Inbox() {
   const [applicationId, setApplicationId] = useState("");
   const [candidateName, setCandidateName] = useState("");
   const [subject, setSubject] = useState("Hello {{candidate_name}}");
-  const [body, setBody] = useState("Hello {{candidate_name}},\n\nThis is about {{job_title}} at {{company_name}}.\n\n{{recruiter_name}}");
+  const [body, setBody] = useState(() => plainToEditorHtml("Hello {{candidate_name}},\n\nThis is about {{job_title}} at {{company_name}}.\n\n{{recruiter_name}}"));
   const [error, setError] = useState<string | null>(null);
   if (state.loading || state.isPending) return <Loading />;
   const box = state.data;
@@ -38,7 +40,7 @@ function Inbox() {
         <Field label="Application id"><input className={inputClass} value={applicationId} onChange={(event) => setApplicationId(event.target.value)} placeholder="Or paste an application id" /></Field>
         <p className="text-sm text-muted">A name sends only when one application matches. If several match, the error lists their ids. An application id is used as written and ignores the name.</p>
         <Field label="Subject"><input className={inputClass} value={subject} onChange={(event) => setSubject(event.target.value)} /></Field>
-        <Field label="Message"><textarea className={`${inputClass} min-h-28 py-2`} value={body} onChange={(event) => setBody(event.target.value)} /></Field>
+        <Field label="Message"><RichMailEditor value={body} onChange={setBody} /></Field>
         <Button type="submit">Queue message</Button>
       </form>
       <form className="mb-6 flex flex-wrap gap-2" onSubmit={(event) => {
@@ -81,7 +83,7 @@ function Inbox() {
         {(box?.inbound ?? []).map((row: any) => (
           <li key={String(row.id)} className="rounded-md border border-line p-3 text-sm">
             <p>{String(row.from_email)} · {row.matched ? "matched" : "quarantined"}</p>
-            <p>{String(row.body)}</p>
+            <SafeMailBody body={String(row.body)} className="text-sm" />
             {row.quarantine_reason ? <p className="text-muted">{String(row.quarantine_reason)}</p> : null}
           </li>
         ))}

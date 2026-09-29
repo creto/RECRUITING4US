@@ -3,6 +3,7 @@ import { assertSameSiteRequest } from "@/lib/auth/isolation.server";
 import { estimateComplexity } from "@/domain/judge";
 import { applyDocument, applyOpChain, canSeeNote, type Edit } from "@/domain/platform/collab";
 import { classifySandboxAddress, chooseMailApplication, deliveryLabel, isTerminal, nextState, renderTokens, retryDelayMinutes, stripQuotedReply, webhookFresh, type DeliveryState } from "@/domain/platform/delivery";
+import { htmlToPlain, looksLikeHtml, prepareMailBody } from "@/domain/mail-html";
 import { extractOffice } from "@/domain/platform/docx";
 import { disposeCase, similarityOpensCase, similarityPercent, signalChangesScore } from "@/domain/platform/integrity";
 import { candidateCases, type Grade } from "@/domain/platform/score";
@@ -218,8 +219,9 @@ export async function queueMail(userId: string, slug: string, input: {
     recruiter_name: actor.name,
   };
   const subject = renderTokens(input.subject, tokens).slice(0, 200);
-  const body = renderTokens(input.body, tokens).slice(0, 8000);
-  if (subject.trim().length < 2 || body.trim().length < 2) throw new Error("Write a subject and a message.");
+  const body = prepareMailBody(renderTokens(input.body, tokens));
+  const bodyPlain = looksLikeHtml(body) ? htmlToPlain(body) : body;
+  if (subject.trim().length < 2 || bodyPlain.trim().length < 2) throw new Error("Write a subject and a message.");
   const id = nid();
   const thread = nid().replace(/-/g, "");
   try {
@@ -306,8 +308,9 @@ export async function queueProspectMail(userId: string, slug: string, input: {
   if (!to.includes("@")) throw new Error("That address is not usable.");
   const tokens = { candidate_name: input.name, company_name: actor.companyName, recruiter_name: actor.name, job_title: "" };
   const subject = renderTokens(input.subject, tokens).slice(0, 200);
-  const body = renderTokens(input.body, tokens).slice(0, 8000);
-  if (subject.trim().length < 2 || body.trim().length < 2) throw new Error("Write a subject and a message.");
+  const body = prepareMailBody(renderTokens(input.body, tokens));
+  const bodyPlain = looksLikeHtml(body) ? htmlToPlain(body) : body;
+  if (subject.trim().length < 2 || bodyPlain.trim().length < 2) throw new Error("Write a subject and a message.");
   const id = nid();
   const thread = nid().replace(/-/g, "");
   const inserted = await sql<{ id: string }>`
