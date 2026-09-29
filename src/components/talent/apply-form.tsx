@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { applicantNotice } from "@/domain/sheet";
+import { MAX_UPLOAD_BYTES } from "@/domain/rules";
 import { submitApplicationAuthed, submitApplicationPublic } from "@/server/talent.functions";
 import { Alert, Button, Field, inputClass } from "./kit";
 
@@ -65,6 +66,7 @@ export function ApplyForm({
       <section className="space-y-2 rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4" aria-live="polite">
         <h2 className="text-2xl">{done.title}</h2>
         {done.lines.map((line) => <p key={line} className="text-sm">{line}</p>)}
+        <a className="inline-flex text-sm text-link" href="/track">Track this application</a>
       </section>
     );
   }
@@ -118,9 +120,9 @@ export function ApplyForm({
               setResume(null);
               return;
             }
-            if (file.size > 500_000) {
+            if (file.size > MAX_UPLOAD_BYTES) {
               setResume(null);
-              setError("The CV must be 500 KB or smaller.");
+              setError("The CV must be 5 MB or smaller.");
               return;
             }
             if (file.name.toLowerCase().endsWith(".doc") && !file.name.toLowerCase().endsWith(".docx")) {

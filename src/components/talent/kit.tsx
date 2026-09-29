@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type AnchorHTMLAttribut
 import { Link, useRouter, useRouterState } from "@tanstack/react-router";
 import { RedirectToSignIn, UserButton } from "@/lib/auth/gates";
 import { useCurrentUserState, type AppUser } from "@/lib/auth/use-current-user";
+import { looksLikeHtml, sanitizeMailHtml } from "@/domain/mail-html";
 
 const inflight = new Map<string, Promise<unknown>>();
 const refreshers = new Set<() => void>();
@@ -177,6 +178,60 @@ export function Button({
       className={`inline-flex min-h-11 items-center justify-center rounded-full px-5 text-sm font-medium disabled:opacity-50 ${look} ${className}`}
       {...props}
     />
+  );
+}
+
+export function StageBar({ steps, index, stopped }: { steps: string[]; index: number; stopped?: boolean }) {
+  const names = steps.length > 0 ? steps : ["Applied"];
+  const at = Math.max(0, Math.min(index, names.length));
+  const filled = Math.min(names.length, at >= names.length ? names.length : at + 1);
+  const current = names[Math.min(at, names.length - 1)] ?? "";
+  return (
+    <div className="mt-3" role="img" aria-label={`${current}. ${filled} of ${names.length} stages.`}>
+      <div className="flex gap-1">
+        {names.map((step, stepIndex) => {
+          const on = stepIndex < filled;
+          const warn = Boolean(stopped) && stepIndex === at;
+          return (
+            <div key={`${step}-${stepIndex}`} className="min-w-0 flex-1">
+              <div className={`h-2 rounded-full ${on ? (warn ? "bg-warn" : "bg-accent") : "bg-line"}`} />
+              <p className={`mt-1 truncate text-[11px] ${stepIndex === Math.min(at, names.length - 1) ? "font-medium" : "text-muted"}`} title={step}>{step}</p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** The card an applicant receives: company name, the message in a field, then the footer. */
+export function MailCard({ name, body, footer, accent }: { name: string; body: string; footer?: string; accent?: string }) {
+  const title = name.trim() || "Message";
+  let shown = body.replace(/\r\n/g, "\n").trim();
+  if (shown.startsWith(`${title}\n`)) shown = shown.slice(title.length).trim();
+  const foot = (footer ?? "").trim();
+  if (foot && shown.endsWith(foot)) shown = shown.slice(0, -foot.length).trim();
+  const rich = looksLikeHtml(shown);
+  const color = accent && /^#[0-9a-fA-F]{6}$/.test(accent) ? accent : undefined;
+  return (
+    <article className="overflow-hidden rounded-[24px] border border-line bg-white text-ink shadow-[0_8px_24px_rgba(20,34,27,0.04)]">
+      <div className="px-4 pb-1 pt-4">
+        <p className="text-2xl leading-tight">{title}</p>
+      </div>
+      <div className="px-4 pb-4 pt-2">
+        <p className="mb-1.5 text-sm font-semibold">Message</p>
+        {rich ? (
+          <div
+            className="rounded-xl border border-line px-3.5 py-3 text-base leading-normal [&_a]:text-link [&_a]:underline [&_img]:max-w-full [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5"
+            dangerouslySetInnerHTML={{ __html: sanitizeMailHtml(shown) }}
+          />
+        ) : (
+          <div className="whitespace-pre-wrap rounded-xl border border-line px-3.5 py-3 text-base leading-normal">{shown || " "}</div>
+        )}
+        {foot ? <p className="mt-4 text-[13px] text-muted">{foot}</p> : null}
+      </div>
+      <div className="h-2 bg-accent" style={color ? { background: color } : undefined} />
+    </article>
   );
 }
 

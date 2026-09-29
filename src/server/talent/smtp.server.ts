@@ -99,7 +99,16 @@ async function hello(io: Session): Promise<SmtpReply> {
 async function afterHello(
   io: Session,
   config: SmtpConfig,
-  message: { to: string[]; cc: string; subject: string; body: string; messageId: string },
+  message: {
+    to: string[];
+    cc: string;
+    subject: string;
+    body: string;
+    messageId: string;
+    fromName?: string;
+    html?: string;
+    logo?: { mime: string; base64: string } | null;
+  },
   secrets: string[],
 ) {
   if (config.user) {
@@ -131,6 +140,9 @@ async function afterHello(
     subject: message.subject,
     body: message.body,
     messageId: message.messageId,
+    fromName: message.fromName,
+    html: message.html,
+    logo: message.logo,
   });
   io.raw(`${raw}.\r\n`);
   const accepted = await io.read();
@@ -152,7 +164,16 @@ async function afterHello(
  */
 export async function sendSmtp(
   config: SmtpConfig,
-  message: { to: string[]; cc: string; subject: string; body: string; messageId: string },
+  message: {
+    to: string[];
+    cc: string;
+    subject: string;
+    body: string;
+    messageId: string;
+    fromName?: string;
+    html?: string;
+    logo?: { mime: string; base64: string } | null;
+  },
 ): Promise<{ result: "accepted" | "deferred" | "bounced" | "failed"; detail: string }> {
   const secrets = [config.password, config.user].filter((value) => value.length >= 4);
   try {

@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { assertSameSiteRequest } from "@/lib/auth/isolation.server";
 import { estimateComplexity } from "@/domain/judge";
 import { applyDocument, applyOpChain, canSeeNote, type Edit } from "@/domain/platform/collab";
-import { classifySandboxAddress, chooseMailApplication, deliveryLabel, isTerminal, nextState, renderTokens, retryDelayMinutes, stripQuotedReply, webhookFresh, type DeliveryState } from "@/domain/platform/delivery";
+import { classifySandboxAddress, chooseMailApplication, deliveryLabel, isTerminal, nextState, renderTokens, retryDelayMinutes, stripQuotedReply, webhookFresh, brandHtml, brandPlain, type DeliveryState, type MailBrand } from "@/domain/platform/delivery";
 import { htmlToPlain, looksLikeHtml, prepareMailBody } from "@/domain/mail-html";
 import { extractOffice } from "@/domain/platform/docx";
 import { disposeCase, similarityOpensCase, similarityPercent, signalChangesScore } from "@/domain/platform/integrity";
@@ -34,9 +34,36 @@ async function companyOf(fn: "app_company_for_code" | "app_company_for_live" | "
   return found[0]?.company_id ?? null;
 }
 
+async function companyBrand(companyId: string): Promise<MailBrand & { logoMime: string; logoBytes: string }> {
+  const sql = await db();
+  const rows = await sql<{
+    name: string;
+    mail_from_name: string;
+    mail_footer: string;
+    mail_logo_url: string;
+    mail_logo_mime: string;
+    mail_logo_bytes: string;
+    embed_accent: string;
+  }>`
+    select name, mail_from_name, mail_footer, mail_logo_url, mail_logo_mime, mail_logo_bytes, embed_accent
+    from companies where id = ${companyId}
+  `;
+  const row = rows[0];
+  return {
+    companyName: row?.name ?? "",
+    fromName: row?.mail_from_name ?? "",
+    footer: row?.mail_footer ?? "",
+    logoUrl: row?.mail_logo_url ?? "",
+    accent: row?.embed_accent ?? "",
+    logoMime: row?.mail_logo_mime ?? "",
+    logoBytes: row?.mail_logo_bytes ?? "",
+  };
+}
+
 async function drain(actor: Actor) {
   const sql = await db();
   const mode = mailMode();
+  const brand = await companyBrand(actor.companyId);
   const queued = await sql<{
     id: string;
     status: string;
@@ -80,7 +107,7 @@ async function drain(actor: Actor) {
       else if (kind === "defer" && row.attempt_count === 0) providerResult = "deferred";
       else providerResult = "stored";
     } else {
-      const sent = await smtpSend(row);
+      const sent = await smtpSend(row, brand);
       providerResult = sent.result;
       detail = sent.detail;
       providerId = sent.providerId;
@@ -109,9 +136,10 @@ async function drain(actor: Actor) {
       values (${nid()}, ${actor.companyId}, ${row.id}, ${attemptNo}, ${mode.provider}, ${step.state}, ${finalDetail})
     `;
     if (step.state === "STORED" && mode.provider === "sandbox") {
+      const copy = mailCopy(row.body);
       await sql`
         insert into sandbox_mailbox (id, company_id, intent_id, to_email, subject, body)
-        values (${nid()}, ${actor.companyId}, ${row.id}, ${row.to_email}, ${row.subject}, ${row.body})
+        values (${nid()}, ${actor.companyId}, ${row.id}, ${row.to_email}, ${row.subject}, ${brandPlain(copy.text, brand)})
       `;
     }
     if (step.state === "BOUNCED") {
@@ -131,20 +159,36 @@ async function drain(actor: Actor) {
   }
 }
 
-async function smtpSend(row: { id: string; to_email: string; cc: string; bcc: string; subject: string; body: string }): Promise<{ result: "accepted" | "deferred" | "bounced" | "failed"; detail: string; providerId: string }> {
+async function smtpSend(
+  row: { id: string; to_email: string; cc: string; bcc: string; subject: string; body: string },
+  brand: MailBrand & { logoMime: string; logoBytes: string },
+): Promise<{ result: "accepted" | "deferred" | "bounced" | "failed"; detail: string; providerId: string }> {
   const config = smtpConfigFromEnv();
   if (!config) return { result: "failed", detail: "SMTP is not configured.", providerId: "" };
   const recipients = [row.to_email, ...row.cc.split(","), ...row.bcc.split(",")]
     .map((item) => item.trim())
     .filter((item) => item.includes("@"));
+  const copy = mailCopy(row.body);
+  const logo = brand.logoBytes && (brand.logoMime === "image/png" || brand.logoMime === "image/jpeg")
+    ? { mime: brand.logoMime, base64: brand.logoBytes }
+    : null;
   const sent = await sendSmtp(config, {
     to: recipients,
     cc: row.cc,
     subject: row.subject,
-    body: row.body,
+    body: brandPlain(copy.text, brand),
     messageId: `${row.id}@recruit4us`,
+    fromName: brand.fromName || brand.companyName,
+    html: brandHtml(copy.htmlBody, brand, Boolean(logo), copy.rich),
+    logo,
   });
   return { result: sent.result === "accepted" ? "accepted" : sent.result, detail: sent.detail, providerId: sent.result === "accepted" ? row.id : "" };
+}
+
+function mailCopy(body: string): { text: string; htmlBody: string; rich: boolean } {
+  const prepared = prepareMailBody(body);
+  const rich = looksLikeHtml(prepared);
+  return { text: rich ? htmlToPlain(prepared) || " " : body, htmlBody: rich ? prepared : body, rich };
 }
 
 export async function listInbox(userId: string, slug: string) {
@@ -154,9 +198,14 @@ export async function listInbox(userId: string, slug: string) {
   const sql = await db();
   const mode = mailMode();
   const intents = await sql.query<Record<string, unknown>>(
-    `select id, kind, to_email, cc, bcc, subject, status, provider, attempt_count, last_error, thread_token, application_id,
-            ${AT} as created_at
-     from message_intents where company_id = $1 order by created_at desc limit 80`,
+    `select i.id, i.kind, i.to_email, i.cc, i.bcc, i.subject, i.status, i.provider, i.attempt_count, i.last_error, i.thread_token, i.application_id,
+            c.name as candidate_name, j.title as job_title,
+            ${AT.replaceAll("created_at", "i.created_at")} as created_at
+     from message_intents i
+     left join applications a on a.id = i.application_id and a.company_id = i.company_id
+     left join candidates c on c.id = a.candidate_id and c.company_id = a.company_id
+     left join jobs j on j.id = a.job_id and j.company_id = a.company_id
+     where i.company_id = $1 order by i.created_at desc limit 80`,
     [actor.companyId],
   );
   const inbound = await sql.query<Record<string, unknown>>(
@@ -245,6 +294,37 @@ export async function queueMail(userId: string, slug: string, input: {
   }
 }
 
+export async function resolveApplicationId(
+  companyId: string,
+  input: { applicationId?: string; candidateName?: string },
+): Promise<string> {
+  const sql = await db();
+  const applicationId = (input.applicationId ?? "").trim();
+  const name = (input.candidateName ?? "").trim();
+  if (applicationId.length >= 8) {
+    const hit = await sql<{ id: string }>`
+      select id from applications where company_id = ${companyId} and id = ${applicationId}
+    `;
+    if (!hit[0]) throw new Error("No application matches that id.");
+    return hit[0].id;
+  }
+  if (name.length < 2) throw new Error("Give an application id or a candidate name.");
+  const key = name.toLowerCase().replace(/\s+/g, " ");
+  const rows = await sql<{ id: string; lifecycle: string; title: string; name: string }>`
+    select a.id, a.lifecycle, j.title, c.name
+    from applications a
+    join candidates c on c.company_id = a.company_id and c.id = a.candidate_id
+    join jobs j on j.company_id = a.company_id and j.id = a.job_id
+    where a.company_id = ${companyId}
+      and lower(regexp_replace(trim(c.name), '\\s+', ' ', 'g')) = ${key}
+    order by a.submitted_at desc
+    limit 30
+  `;
+  const chosen = chooseMailApplication(rows);
+  if ("error" in chosen) throw new Error(chosen.error);
+  return chosen.id;
+}
+
 export async function queueNamedMail(userId: string, slug: string, input: {
   applicationId?: string;
   candidateName?: string;
@@ -258,32 +338,8 @@ export async function queueNamedMail(userId: string, slug: string, input: {
   assertSameSiteRequest();
   const actor = await requireActor(userId, slug);
   allow(actor, "application.note");
-  const applicationId = (input.applicationId ?? "").trim();
-  const name = (input.candidateName ?? "").trim();
-  if (applicationId.length >= 8) {
-    const sql = await db();
-    const hit = await sql<{ id: string }>`
-      select id from applications where company_id = ${actor.companyId} and id = ${applicationId}
-    `;
-    if (!hit[0]) throw new Error("No application matches that id.");
-    return queueMail(userId, slug, { ...input, applicationId: hit[0].id });
-  }
-  if (name.length < 2) throw new Error("Give an application id or a candidate name.");
-  const sql = await db();
-  const key = name.toLowerCase().replace(/\s+/g, " ");
-  const rows = await sql<{ id: string; lifecycle: string; title: string; name: string }>`
-    select a.id, a.lifecycle, j.title, c.name
-    from applications a
-    join candidates c on c.company_id = a.company_id and c.id = a.candidate_id
-    join jobs j on j.company_id = a.company_id and j.id = a.job_id
-    where a.company_id = ${actor.companyId}
-      and lower(regexp_replace(trim(c.name), '\\s+', ' ', 'g')) = ${key}
-    order by a.submitted_at desc
-    limit 30
-  `;
-  const chosen = chooseMailApplication(rows);
-  if ("error" in chosen) throw new Error(chosen.error);
-  return queueMail(userId, slug, { ...input, applicationId: chosen.id });
+  const applicationId = await resolveApplicationId(actor.companyId, input);
+  return queueMail(userId, slug, { ...input, applicationId });
 }
 
 export async function queueProspectMail(userId: string, slug: string, input: {
@@ -1170,9 +1226,21 @@ export async function indexDocx(userId: string, slug: string, applicationId: str
 export async function listMyDesk(userId: string) {
   const user = await requireUser(userId);
   const sql = await db();
-  const mail = await sql<{ id: string; subject: string; body: string; company_id: string; intent_id: string }>`
-    select m.id, m.subject, m.body, m.company_id, m.intent_id
+  const mail = await sql<{
+    id: string;
+    subject: string;
+    body: string;
+    company_id: string;
+    intent_id: string;
+    company_name: string;
+    mail_from_name: string;
+    mail_footer: string;
+    accent: string;
+  }>`
+    select m.id, m.subject, m.body, m.company_id, m.intent_id,
+      co.name as company_name, co.mail_from_name, co.mail_footer, co.embed_accent as accent
     from sandbox_mailbox m
+    join companies co on co.id = m.company_id
     where lower(m.to_email) = ${user.emailNormalized}
     order by m.created_at desc limit 20
   `;

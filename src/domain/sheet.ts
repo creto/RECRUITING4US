@@ -1,4 +1,4 @@
-import { toCsv } from "./rules.ts";
+import { candidateStageLabel, toCsv } from "./rules.ts";
 
 export type SheetField = { id: string; label: string };
 
@@ -14,7 +14,7 @@ export type SheetRow = {
 };
 
 export function applicationReceipt(applicationId: string): string {
-  const compact = applicationId.replace(/[^a-z0-9]/gi, "").slice(0, 8).toUpperCase();
+  const compact = applicationId.replace(/[^a-zA-Z0-9]/gi, "").slice(0, 8).toUpperCase();
   return `R-${compact || "APPLY"}`;
 }
 
@@ -52,7 +52,65 @@ export function applicantNotice(input: { alreadyApplied: boolean; receipt: strin
     lines.push("Your CV was checked. An assessment was not sent.");
   }
   lines.push("This confirmation is shown on this page and stored for the employer. It is not emailed.");
+  lines.push("Use this receipt or your email on the application status page to see a progress bar.");
   return { title: "Form complete", lines };
+}
+
+/** One lookup box: email, the R- receipt from the apply form, or the application id. */
+export function trackQuery(raw: string): { email: string } | { receipt: string } | { id: string } | { error: string } {
+  const text = raw.trim();
+  if (text.length < 3) return { error: "Enter the email or the receipt from the apply form." };
+  if (text.includes("@")) {
+    const email = text.toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 200) return { error: "That email is not usable." };
+    return { email };
+  }
+  const compact = text.toUpperCase().replace(/^R-/, "").replace(/[^A-Z0-9]/g, "");
+  if (compact.length === 8 && text.length <= 12) return { receipt: compact };
+  if (text.length >= 8 && text.length <= 80 && /^[a-zA-Z0-9-]+$/.test(text)) return { id: text };
+  return { error: "Enter the email, the receipt from the apply form, or the application id." };
+}
+
+/** Stages of this job, with the current one marked. Hired fills the bar. A stop stays on the stage it reached. */
+export function trackBar(input: { stages: string[]; stageName: string; category: string; lifecycle: string }): {
+  steps: string[];
+  index: number;
+  label: string;
+  stopped: boolean;
+  hired: boolean;
+} {
+  const steps = input.stages.map((name) => name.trim()).filter(Boolean);
+  const names = steps.length > 0 ? steps : [input.stageName.trim() || "Applied"];
+  const found = names.findIndex((name) => name === input.stageName);
+  const index = found >= 0 ? found : 0;
+  const hired = input.lifecycle === "HIRED";
+  return {
+    steps: names,
+    index: hired ? names.length - 1 : index,
+    label: candidateStageLabel(input.category, input.lifecycle),
+    stopped: input.lifecycle === "REJECTED" || input.lifecycle === "WITHDRAWN",
+    hired,
+  };
+}
+
+/** Stage names from the public lookup. Accepts a JSON string or an already-parsed array. */
+export function stageNameList(value: unknown): string[] {
+  let parsed: unknown = value;
+  if (typeof value === "string") {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(parsed)) return [];
+  const names: string[] = [];
+  for (const item of parsed) {
+    if (!item || typeof item !== "object") continue;
+    const name = (item as { name?: unknown }).name;
+    if (typeof name === "string" && name.trim()) names.push(name);
+  }
+  return names;
 }
 
 export function sheetColumns(schema: readonly SheetField[], rows: readonly SheetRow[]): SheetField[] {

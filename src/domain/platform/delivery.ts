@@ -143,3 +143,49 @@ export function chooseMailApplication(rows: MailApplicationHit[]): { id: string 
   const more = pool.length > 8 ? ` (+${pool.length - 8} more)` : "";
   return { error: `More than one application matches that name. Use an application id: ${shown}${more}` };
 }
+
+export type MailBrand = {
+  companyName: string;
+  fromName: string;
+  footer: string;
+  logoUrl: string;
+  accent: string;
+};
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "\u0026amp;")
+    .replace(/</g, "\u0026lt;")
+    .replace(/>/g, "\u0026gt;")
+    .replace(/"/g, "\u0026quot;");
+}
+
+/** Plain copy the mailbox stores: company name, the message, then the footer. */
+export function brandPlain(body: string, brand: MailBrand): string {
+  const name = (brand.fromName || brand.companyName).trim();
+  const footer = brand.footer.trim();
+  const head = name ? `${name}\n\n` : "";
+  const foot = footer ? `\n\n${footer}` : "";
+  return `${head}${body.trim()}${foot}`.trim();
+}
+
+/** HTML the provider receives. Same card as the apply form: name, then the message in a field. */
+export function brandHtml(body: string, brand: MailBrand, logoCid: boolean, rich = false): string {
+  const name = escapeHtml((brand.fromName || brand.companyName).trim() || "Message");
+  const accent = /^#[0-9a-fA-F]{6}$/.test(brand.accent) ? brand.accent : "#14221b";
+  const logo = logoCid
+    ? `<img src="cid:logo@recruit4us" alt="" width="120" style="display:block;max-width:120px;height:auto;margin:0 0 12px" />`
+    : /^https:\/\//i.test(brand.logoUrl)
+      ? `<img src="${escapeHtml(brand.logoUrl)}" alt="" width="120" style="display:block;max-width:120px;height:auto;margin:0 0 12px" />`
+      : "";
+  const paragraphs = rich
+    ? body.trim()
+    : escapeHtml(body.trim())
+        .split("\n")
+        .map((line) => (line === "" ? "<br />" : `<p style="margin:0 0 12px">${line}</p>`))
+        .join("");
+  const footer = brand.footer.trim()
+    ? `<p style="margin:16px 0 0;color:#5c6b63;font-size:13px">${escapeHtml(brand.footer.trim())}</p>`
+    : "";
+  return `<!DOCTYPE html><html><body style="margin:0;background:#f4f7f5;color:#14221b;font-family:Figtree,Georgia,serif"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px"><table role="presentation" width="560" style="max-width:560px;background:#ffffff;border:1px solid #d7e1da;border-radius:24px"><tr><td style="padding:16px 16px 4px">${logo}<p style="margin:0;font-size:24px;line-height:1.2">${name}</p></td></tr><tr><td style="padding:8px 16px 16px"><p style="margin:0 0 6px;font-size:14px;font-weight:600">Message</p><div style="border:1px solid #d7e1da;border-radius:12px;padding:12px 14px;font-size:16px;line-height:1.5">${paragraphs}</div>${footer}</td></tr><tr><td style="height:8px;background:${accent};border-radius:0 0 24px 24px;font-size:0;line-height:0">&nbsp;</td></tr></table></td></tr></table></body></html>`;
+}

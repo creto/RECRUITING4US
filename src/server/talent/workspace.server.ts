@@ -8,6 +8,8 @@ import {
   candidateStageLabel,
   canDownloadFile,
   filePolicy,
+  mailLogoProblem,
+  mailLogoUrl,
   idempotencyDecision,
   normalizeEmail,
   scanDecision,
@@ -21,6 +23,7 @@ import {
   retentionDue,
   roleHas,
 } from "@/domain/rules";
+import { trackBar, trackQuery, stageNameList } from "@/domain/sheet";
 import { describeSavedAnswer, attemptWasSubmitted, responseResultLabel } from "@/domain/attempt-record";
 import { readPersonality } from "@/domain/personality";
 import { applicationForm, compileSearch, knockoutResult, parseResumeProfile } from "@/domain/cv-index";
@@ -232,7 +235,23 @@ export async function getWorkspace(userId: string, slug: string) {
 
 export async function updateCompany(
   userId: string,
-  input: { slug: string; name: string; timezone: string; retentionDays: number; careersHeadline: string; embedBackground: string; embedInk: string; embedAccent: string; embedAccentInk: string },
+  input: {
+    slug: string;
+    name: string;
+    timezone: string;
+    retentionDays: number;
+    careersHeadline: string;
+    embedBackground: string;
+    embedInk: string;
+    embedAccent: string;
+    embedAccentInk: string;
+    mailFromName: string;
+    mailFooter: string;
+    mailLogoUrl: string;
+    mailLogoMime: string;
+    mailLogoBytes: string;
+    clearLogo: boolean;
+  },
 ) {
   assertSameSiteRequest();
   const actor = await requireActor(userId, input.slug);
@@ -241,7 +260,25 @@ export async function updateCompany(
     throw new Error("You do not have permission to do that.");
   }
   const headline = input.careersHeadline.trim().slice(0, 160);
+  const fromName = input.mailFromName.trim().replace(/\s+/g, " ").slice(0, 80);
+  const footer = input.mailFooter.trim().slice(0, 400);
+  const logoUrl = mailLogoUrl(input.mailLogoUrl);
   const sql = await db();
+  const current = await sql<{ mail_logo_mime: string; mail_logo_bytes: string }>`
+    select mail_logo_mime, mail_logo_bytes from companies where id = ${actor.companyId}
+  `;
+  let logoMime = current[0]?.mail_logo_mime ?? "";
+  let logoBytes = current[0]?.mail_logo_bytes ?? "";
+  if (input.mailLogoBytes.trim()) {
+    const raw = Buffer.from(input.mailLogoBytes, "base64");
+    const problem = mailLogoProblem({ mime: input.mailLogoMime, bytes: new Uint8Array(raw) });
+    if (problem) throw new Error(problem);
+    logoMime = input.mailLogoMime;
+    logoBytes = raw.toString("base64");
+  } else if (input.clearLogo) {
+    logoMime = "";
+    logoBytes = "";
+  }
   await sql`
     update companies set name = ${input.name.trim()}, timezone = ${input.timezone},
       retention_days = ${input.retentionDays},
@@ -250,6 +287,11 @@ export async function updateCompany(
       embed_ink = ${input.embedInk.toLowerCase()},
       embed_accent = ${input.embedAccent.toLowerCase()},
       embed_accent_ink = ${input.embedAccentInk.toLowerCase()},
+      mail_from_name = ${fromName},
+      mail_footer = ${footer},
+      mail_logo_url = ${logoUrl},
+      mail_logo_mime = ${logoMime},
+      mail_logo_bytes = ${logoBytes},
       updated_at = now()
     where id = ${actor.companyId}
   `;
@@ -1265,8 +1307,9 @@ export async function getApplication(userId: string, slug: string, applicationId
     years: number | null;
     history: unknown;
     note: string;
+    indexed_text: string;
   }>`
-    select titles, skills, education, locations, years, history, note
+    select titles, skills, education, locations, years, history, note, indexed_text
     from candidate_profiles
     where company_id = ${actor.companyId} and application_id = ${applicationId}
   `;
@@ -1321,6 +1364,7 @@ export async function getApplication(userId: string, slug: string, applicationId
           years: profile.years == null ? null : Number(profile.years),
           history: stringList(profile.history),
           note: profile.note,
+          cvText: profile.indexed_text.trim().slice(0, 12000),
         }
       : null,
     ranks: ranks.map((row) => ({
@@ -1668,6 +1712,46 @@ export async function listViews(userId: string, slug: string) {
   const actor = await requireActor(userId, slug);
   const sql = await db();
   return sql`select id, name, filters from saved_views where company_id = ${actor.companyId} and user_id = ${actor.userId} order by created_at desc`;
+}
+
+export async function trackApplications(query: string) {
+  const parsed = trackQuery(query);
+  if ("error" in parsed) throw new Error(parsed.error);
+  const kind = "email" in parsed ? "email" : "receipt" in parsed ? "receipt" : "id";
+  const value = "email" in parsed ? normalizeEmail(parsed.email) : "receipt" in parsed ? parsed.receipt : parsed.id;
+  const sql = await db();
+  const rows = await sql.query<{
+    job_title: string;
+    company_name: string;
+    stage_name: string;
+    category: string;
+    lifecycle: string;
+    stages: unknown;
+  }>(
+    `select job_title, company_name, stage_name, category, lifecycle, stages
+     from app_track_applications($1, $2)`,
+    [kind, value],
+  );
+  return {
+    items: rows.map((row) => {
+      const bar = trackBar({
+        stages: stageNameList(row.stages),
+        stageName: row.stage_name,
+        category: row.category,
+        lifecycle: row.lifecycle,
+      });
+      return {
+        companyName: row.company_name,
+        jobTitle: row.job_title,
+        stageName: row.stage_name,
+        label: bar.label,
+        steps: bar.steps,
+        index: bar.index,
+        stopped: bar.stopped,
+        hired: bar.hired,
+      };
+    }),
+  };
 }
 
 export async function listPublicJobs(input: { companySlug: string; q?: string; department?: string; workArrangement?: string }) {
@@ -2349,8 +2433,14 @@ export async function integrationStatus(userId: string, slug: string) {
     embed_accent: string;
     embed_accent_ink: string;
     careers_headline: string;
+    mail_from_name: string;
+    mail_footer: string;
+    mail_logo_url: string;
+    mail_logo_bytes: string;
   }>`
-    select embed_background, embed_ink, embed_accent, embed_accent_ink, careers_headline
+    select embed_background, embed_ink, embed_accent, embed_accent_ink, careers_headline,
+      mail_from_name, mail_footer, mail_logo_url,
+      case when mail_logo_bytes = '' then '' else '1' end as mail_logo_bytes
     from companies where id = ${actor.companyId}
   `;
   const colors = rows[0];
@@ -2359,6 +2449,12 @@ export async function integrationStatus(userId: string, slug: string) {
     timezone: actor.timezone,
     retentionDays: actor.retentionDays,
     headline: colors?.careers_headline ?? "",
+    mail: {
+      fromName: colors?.mail_from_name ?? "",
+      footer: colors?.mail_footer ?? "",
+      logoUrl: colors?.mail_logo_url ?? "",
+      hasLogo: Boolean(colors?.mail_logo_bytes),
+    },
     embed: {
       background: colors?.embed_background ?? "#ffffff",
       ink: colors?.embed_ink ?? "#14221b",

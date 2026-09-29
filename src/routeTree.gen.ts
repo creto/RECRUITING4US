@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as NoticeRouteImport } from './routes/notice'
 import { Route as StatusRouteImport } from './routes/status'
+import { Route as TrackRouteImport } from './routes/track'
 import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AppCompanySlugRouteRouteImport } from './routes/app/$companySlug/route'
 import { Route as BookTokenRouteImport } from './routes/book/$token'
@@ -74,6 +75,11 @@ const NoticeRoute = NoticeRouteImport.update({
 const StatusRoute = StatusRouteImport.update({
   id: '/status',
   path: '/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TrackRoute = TrackRouteImport.update({
+  id: '/track',
+  path: '/track',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppIndexRoute = AppIndexRouteImport.update({
@@ -303,6 +309,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/notice': typeof NoticeRoute
   '/status': typeof StatusRoute
+  '/track': typeof TrackRoute
   '/app/$companySlug': typeof AppCompanySlugRouteRouteWithChildren
   '/book/$token': typeof BookTokenRoute
   '/code/$token': typeof CodeTokenRoute
@@ -351,6 +358,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/notice': typeof NoticeRoute
   '/status': typeof StatusRoute
+  '/track': typeof TrackRoute
   '/book/$token': typeof BookTokenRoute
   '/code/$token': typeof CodeTokenRoute
   '/invite/$token': typeof InviteTokenRoute
@@ -399,6 +407,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/notice': typeof NoticeRoute
   '/status': typeof StatusRoute
+  '/track': typeof TrackRoute
   '/app/$companySlug': typeof AppCompanySlugRouteRouteWithChildren
   '/book/$token': typeof BookTokenRoute
   '/code/$token': typeof CodeTokenRoute
@@ -449,6 +458,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/notice'
     | '/status'
+    | '/track'
     | '/app/$companySlug'
     | '/book/$token'
     | '/code/$token'
@@ -497,6 +507,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/notice'
     | '/status'
+    | '/track'
     | '/book/$token'
     | '/code/$token'
     | '/invite/$token'
@@ -544,6 +555,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/notice'
     | '/status'
+    | '/track'
     | '/app/$companySlug'
     | '/book/$token'
     | '/code/$token'
@@ -593,6 +605,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   NoticeRoute: typeof NoticeRoute
   StatusRoute: typeof StatusRoute
+  TrackRoute: typeof TrackRoute
   AppCompanySlugRouteRoute: typeof AppCompanySlugRouteRouteWithChildren
   BookTokenRoute: typeof BookTokenRoute
   CodeTokenRoute: typeof CodeTokenRoute
@@ -642,6 +655,13 @@ declare module '@tanstack/react-router' {
       path: '/status'
       fullPath: '/status'
       preLoaderRoute: typeof StatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/track': {
+      id: '/track'
+      path: '/track'
+      fullPath: '/track'
+      preLoaderRoute: typeof TrackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/app/': {
@@ -1014,6 +1034,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   NoticeRoute: NoticeRoute,
   StatusRoute: StatusRoute,
+  TrackRoute: TrackRoute,
   AppCompanySlugRouteRoute: AppCompanySlugRouteRouteWithChildren,
   BookTokenRoute: BookTokenRoute,
   CodeTokenRoute: CodeTokenRoute,

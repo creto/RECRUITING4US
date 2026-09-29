@@ -41,6 +41,7 @@ function Careers() {
       <Link to="/"><Wordmark /></Link>
       <h1 className="mt-3 text-4xl">{data?.company?.name ?? "Careers"}</h1>
       <p className="mt-2 text-sm text-muted">{data?.company?.headline || "Published jobs only. Drafts, paused roles, and closed roles are hidden."}</p>
+      <p className="mt-2 text-sm"><Link to="/track" className="text-link">Already applied? Check your progress</Link></p>
       <form className="mt-6 flex flex-col gap-2 sm:flex-row" onSubmit={(event) => event.preventDefault()}>
         <input className={inputClass} value={q} onChange={(event) => setQ(event.target.value)} aria-label="Search jobs" placeholder="Search" />
         <select className={inputClass} value={work} aria-label="Work arrangement" onChange={(event) => setWork(event.target.value)}>

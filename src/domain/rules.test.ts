@@ -19,6 +19,8 @@ import {
   deduplicateEvents,
   escapeCsvCell,
   filePolicy,
+  mailLogoProblem,
+  MAX_UPLOAD_BYTES,
   gradeExactMultipleChoice,
   gradeNumeric,
   meetsThreshold,
@@ -329,6 +331,10 @@ describe("hiring rules", () => {
     assert.throws(() => assertSafeOutboundUrl("https://metadata.google.internal/", false));
     assert.equal(filePolicy({ name: "cv.exe", mime: "application/pdf", size: 20 }), "Upload a PDF, text, CSV, PNG, JPEG, or DOCX file.");
     assert.equal(filePolicy({ name: "cv.pdf", mime: "text/plain", size: 20 })?.includes("does not match"), true);
+    assert.equal(filePolicy({ name: "cv.pdf", mime: "application/pdf", size: MAX_UPLOAD_BYTES }), null);
+    assert.equal(filePolicy({ name: "cv.pdf", mime: "application/pdf", size: MAX_UPLOAD_BYTES + 1 })?.includes("5 MB"), true);
+    assert.equal(mailLogoProblem({ mime: "image/png", bytes: Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0]) }), null);
+    assert.equal(mailLogoProblem({ mime: "image/png", bytes: Uint8Array.from([0x4d, 0x5a, 0, 0, 0, 0, 0, 0]) })?.includes("PNG"), true);
     assert.equal(scanDecision({ name: "note.txt", textSample: "<script>alert(1)</script>" }), "INFECTED");
     assert.equal(scanDecision({ name: "note.txt", textSample: "hello" }), "CLEAN");
   });

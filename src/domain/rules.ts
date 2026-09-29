@@ -677,9 +677,12 @@ export function assertSafeOutboundUrl(raw: string, allowLocalDev: boolean): URL 
   return url;
 }
 
+export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+export const MAX_LOGO_BYTES = 120_000;
+
 export function filePolicy(input: { name: string; mime: string; size: number }): string | null {
-  if (!Number.isInteger(input.size) || input.size <= 0 || input.size > 500_000) {
-    return "Files must be between 1 byte and 500 KB in this workspace.";
+  if (!Number.isInteger(input.size) || input.size <= 0 || input.size > MAX_UPLOAD_BYTES) {
+    return "Files must be between 1 byte and 5 MB in this workspace.";
   }
   const name = input.name.toLowerCase();
   const allowed: Record<string, string[]> = {
@@ -698,6 +701,24 @@ export function filePolicy(input: { name: string; mime: string; size: number }):
     return "That file type is not allowed.";
   }
   return null;
+}
+
+/** A company logo is a small PNG or JPEG. The bytes must match the claimed type. */
+export function mailLogoProblem(input: { mime: string; bytes: Uint8Array }): string | null {
+  if (input.bytes.length < 8 || input.bytes.length > MAX_LOGO_BYTES) {
+    return "The logo must be a PNG or JPEG under 120 KB.";
+  }
+  const png = input.bytes[0] === 0x89 && input.bytes[1] === 0x50 && input.bytes[2] === 0x4e && input.bytes[3] === 0x47;
+  const jpeg = input.bytes[0] === 0xff && input.bytes[1] === 0xd8 && input.bytes[2] === 0xff;
+  if (png && input.mime === "image/png") return null;
+  if (jpeg && input.mime === "image/jpeg") return null;
+  return "The logo must be a PNG or JPEG under 120 KB.";
+}
+
+export function mailLogoUrl(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  return assertSafeOutboundUrl(trimmed, false).toString().slice(0, 300);
 }
 
 export function scanDecision(input: { name: string; textSample: string }): "CLEAN" | "INFECTED" {

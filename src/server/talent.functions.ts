@@ -49,6 +49,12 @@ export const updateCompany = createServerFn({ method: "POST" })
     embedInk: z.string().regex(EMBED_HEX),
     embedAccent: z.string().regex(EMBED_HEX),
     embedAccentInk: z.string().regex(EMBED_HEX),
+    mailFromName: z.string().max(80),
+    mailFooter: z.string().max(400),
+    mailLogoUrl: z.string().max(300),
+    mailLogoMime: z.string().max(40),
+    mailLogoBytes: z.string().max(200_000),
+    clearLogo: z.boolean(),
   }))
   .handler(async ({ context, data }) => {
     const userId = context.userId;
@@ -332,6 +338,13 @@ export const listPublicJobs = createServerFn({ method: "POST" })
     return api.listPublicJobs(data);
   });
 
+export const trackApplications = createServerFn({ method: "POST" })
+  .validator(z.object({ query: z.string().trim().min(3).max(200) }))
+  .handler(async ({ data }) => {
+    const api = await import("./talent/workspace.server");
+    return api.trackApplications(data.query);
+  });
+
 export const getPublicJob = createServerFn({ method: "POST" })
   .validator(z.object({ companySlug: Slug, jobSlug: z.string().regex(/^[a-z0-9-]{2,80}$/) }))
   .handler(async ({ data }) => {
@@ -351,7 +364,7 @@ const applySchema = z.object({
   resume: z.object({
     name: z.string().max(180),
     mime: z.string().max(80),
-    dataBase64: z.string().max(900_000),
+    dataBase64: z.string().max(7_200_000),
   }).nullable().optional(),
 });
 
@@ -754,7 +767,8 @@ export const scheduleInterview = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({
     slug: Slug,
-    applicationId: z.string().min(8).max(80),
+    applicationId: z.string().max(80).optional(),
+    candidateName: z.string().max(120).optional(),
     title: z.string().min(2).max(140),
     localStart: z.string().max(20),
     localEnd: z.string().max(20),
@@ -857,7 +871,8 @@ export const createOffer = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({
     slug: Slug,
-    applicationId: z.string().min(8).max(80),
+    applicationId: z.string().max(80).optional(),
+    candidateName: z.string().max(120).optional(),
     title: z.string().min(2).max(140),
     salaryMinor: z.number().int().min(0),
     currency: z.string().max(8),
@@ -1151,7 +1166,7 @@ export const listIntegrity = createServerFn({ method: "POST" }).middleware([auth
 export const saveIntegrityPolicy = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ slug: Slug, assessmentKey: z.string().max(80), consentText: z.string().max(2000), allowPaste: z.boolean(), webcamRequested: z.boolean(), threshold: z.number().int().min(50).max(100), accommodationText: z.string().max(1000).optional(), retentionDays: z.number().int().min(1).max(365).optional() })).handler(async ({ context, data }) => (await import("./talent/platform.server")).saveIntegrityPolicy(context.userId, data.slug, data) as any);
 export const compareSubmissions = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ slug: Slug, leftId: z.string().min(8).max(80), rightId: z.string().min(8).max(80) })).handler(async ({ context, data }) => (await import("./talent/platform.server")).compareSubmissions(context.userId, data.slug, data.leftId, data.rightId) as any);
 export const disposeIntegrity = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ slug: Slug, caseId: z.string().min(8).max(80), next: z.enum(["DISMISSED", "CONFIRMED"]), note: z.string().max(500) })).handler(async ({ context, data }) => (await import("./talent/platform.server")).disposeIntegrity(context.userId, data.slug, data.caseId, data.next, data.note) as any);
-export const indexDocx = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ slug: Slug, applicationId: z.string().min(8).max(80), filename: z.string().max(180), base64: z.string().max(2200000) })).handler(async ({ context, data }) => (await import("./talent/platform.server")).indexDocx(context.userId, data.slug, data.applicationId, data.filename, data.base64) as any);
+export const indexDocx = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ slug: Slug, applicationId: z.string().min(8).max(80), filename: z.string().max(180), base64: z.string().max(7_200_000) })).handler(async ({ context, data }) => (await import("./talent/platform.server")).indexDocx(context.userId, data.slug, data.applicationId, data.filename, data.base64) as any);
 export const listMyDesk = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => (await import("./talent/platform.server")).listMyDesk(context.userId) as any);
 export const replyToIntent = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ intentId: z.string().min(8).max(80), body: z.string().max(8000) })).handler(async ({ context, data }) => (await import("./talent/platform.server")).replyToIntent(context.userId, data.intentId, data.body) as any);
 export const listCrm = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ slug: Slug })).handler(async ({ context, data }) => (await import("./talent/growth.server")).listCrm(context.userId, data.slug) as any);

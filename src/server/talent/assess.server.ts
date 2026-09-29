@@ -18,6 +18,7 @@ import {
   validateAssessmentPublish,
 } from "@/domain/rules";
 import { runnerAvailability } from "@/domain/edge";
+import { stageNameList, trackBar } from "@/domain/sheet";
 import {
   answersMatch,
   casesForQuestion,
@@ -426,10 +427,17 @@ export async function listMyApplications(userId: string) {
     job_title: string;
     lifecycle: string;
     category: string;
+    stage_name: string;
+    stages: unknown;
     submitted_at: string;
   }>`
     select a.id, c.name as company_name, c.slug as company_slug, j.title as job_title,
-      a.lifecycle, s.category,
+      a.lifecycle, s.category, s.name as stage_name,
+      coalesce((
+        select json_agg(json_build_object('name', ps.name) order by ps.position)::text
+        from pipeline_stages ps
+        where ps.company_id = a.company_id and ps.job_id = a.job_id and ps.archived = false
+      ), '[]') as stages,
       to_char(a.submitted_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as submitted_at
     from applications a
     join companies c on c.id = a.company_id
@@ -441,21 +449,28 @@ export async function listMyApplications(userId: string) {
       or (lower(cand.email) = lower(u.email) and u.email_verified = true)
     order by a.submitted_at desc
   `;
-  return rows.map((row) => ({
-    id: row.id,
-    companyName: row.company_name,
-    companySlug: row.company_slug,
-    jobTitle: row.job_title,
-    status: row.lifecycle === "ACTIVE" ? row.category : row.lifecycle,
-    label: row.lifecycle === "REJECTED"
-      ? "Not moving forward"
-      : row.lifecycle === "WITHDRAWN"
-        ? "Withdrawn"
-        : row.lifecycle === "HIRED"
-          ? "Hired"
-          : "In progress",
-    submittedAt: row.submitted_at,
-  }));
+  return rows.map((row) => {
+    const bar = trackBar({
+      stages: stageNameList(row.stages),
+      stageName: row.stage_name,
+      category: row.category,
+      lifecycle: row.lifecycle,
+    });
+    return {
+      id: row.id,
+      companyName: row.company_name,
+      companySlug: row.company_slug,
+      jobTitle: row.job_title,
+      status: row.lifecycle === "ACTIVE" ? row.category : row.lifecycle,
+      label: bar.label,
+      stageName: row.stage_name,
+      steps: bar.steps,
+      index: bar.index,
+      stopped: bar.stopped,
+      hired: bar.hired,
+      submittedAt: row.submitted_at,
+    };
+  });
 }
 
 export async function getMyApplication(userId: string, applicationId: string) {
@@ -467,9 +482,16 @@ export async function getMyApplication(userId: string, applicationId: string) {
     job_title: string;
     lifecycle: string;
     category: string;
+    stage_name: string;
+    stages: unknown;
     timezone: string;
   }>`
-    select a.id, c.name as company_name, j.title as job_title, a.lifecycle, s.category, c.timezone
+    select a.id, c.name as company_name, j.title as job_title, a.lifecycle, s.category, s.name as stage_name, c.timezone,
+      coalesce((
+        select json_agg(json_build_object('name', ps.name) order by ps.position)::text
+        from pipeline_stages ps
+        where ps.company_id = a.company_id and ps.job_id = a.job_id and ps.archived = false
+      ), '[]') as stages
     from applications a
     join companies c on c.id = a.company_id
     join jobs j on j.id = a.job_id
@@ -478,6 +500,12 @@ export async function getMyApplication(userId: string, applicationId: string) {
   `;
   const application = rows[0];
   if (!application) throw new Error("Not found.");
+  const bar = trackBar({
+    stages: stageNameList(application.stages),
+    stageName: application.stage_name,
+    category: application.category,
+    lifecycle: application.lifecycle,
+  });
   const assignments = await sql`
     select g.id, g.status, s.name, v.duration_seconds, v.instructions, v.proctored, g.multiplier_basis_points, g.extra_seconds,
       to_char(g.start_by at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as start_by,
@@ -503,8 +531,18 @@ export async function getMyApplication(userId: string, applicationId: string) {
   const messages = await listMyMail(userId, applicationId);
   return {
     application: {
-      ...application,
-      label: application.lifecycle === "REJECTED" ? "Not moving forward" : application.lifecycle === "WITHDRAWN" ? "Withdrawn" : application.lifecycle === "HIRED" ? "Hired" : "In progress",
+      id: application.id,
+      company_name: application.company_name,
+      job_title: application.job_title,
+      lifecycle: application.lifecycle,
+      category: application.category,
+      stage_name: application.stage_name,
+      timezone: application.timezone,
+      label: bar.label,
+      steps: bar.steps,
+      index: bar.index,
+      stopped: bar.stopped,
+      hired: bar.hired,
     },
     assignments,
     offers,

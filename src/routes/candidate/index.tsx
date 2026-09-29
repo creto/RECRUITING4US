@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { candidateTask, exportMine, listMyApplications, listMyDesk, replyToIntent } from "@/server/talent.functions";
-import { AppLink, Button, Empty, Gate, Loading, PageTitle, refreshPage, useAuthed, when, Wordmark } from "@/components/talent/kit";
+import { AppLink, Button, Empty, Gate, Loading, MailCard, PageTitle, refreshPage, StageBar, useAuthed, when, Wordmark } from "@/components/talent/kit";
 import { UserButton } from "@/lib/auth/gates";
 import { useState } from "react";
 
@@ -16,7 +16,10 @@ function Portal() {
       <main className="mx-auto max-w-3xl px-4 py-8">
         <div className="flex items-center justify-between">
           <Link to="/"><Wordmark /></Link>
-          <UserButton />
+          <div className="flex items-center gap-4">
+            <Link to="/track" className="text-sm text-link">Application status</Link>
+            <UserButton />
+          </div>
         </div>
         <PageTitle title="Your applications" lede="You only see applications tied to your signed-in email. Internal notes and other candidates stay hidden." />
         <Button type="button" variant="secondary" className="mb-4" onClick={() => {
@@ -40,13 +43,13 @@ function Portal() {
             {task.status !== "DONE" ? <Button type="button" variant="secondary" onClick={() => candidateTask({ data: { taskId: task.id } }).then(() => refreshPage())}>Mark done</Button> : null}
           </p>
         ))}
-        {(desk.data?.mail ?? []).map((message: any) => (
-          <form key={message.id} className="mb-3 rounded-md border border-line p-3 text-sm" onSubmit={(event) => {
+        {(desk.data?.mail ?? []).map((message: { id: string; subject: string; body: string; intent_id: string; company_name?: string; mail_from_name?: string; mail_footer?: string; accent?: string }) => (
+          <form key={message.id} className="mb-3 space-y-2 text-sm" onSubmit={(event) => {
             event.preventDefault();
             replyToIntent({ data: { intentId: message.intent_id, body: reply } }).then((row) => setNote(row.note)).catch(() => setNote("The reply was not saved."));
           }}>
             <p className="font-medium">{message.subject}</p>
-            <p className="whitespace-pre-wrap">{message.body}</p>
+            <MailCard name={message.mail_from_name || message.company_name || "Message"} body={message.body} footer={message.mail_footer} accent={message.accent} />
             <textarea className="mt-2 min-h-16 w-full rounded-md border border-line p-2" value={reply} onChange={(event) => setReply(event.target.value)} aria-label="Reply" />
             <Button type="submit" className="mt-2" variant="secondary">Save reply</Button>
           </form>
@@ -60,6 +63,7 @@ function Portal() {
               <AppLink className="block rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4" href={`/candidate/applications/${item.id}`}>
                 <span className="text-xl">{item.jobTitle}</span>
                 <span className="mt-1 block text-sm text-muted">{item.companyName} · {item.label} · {when(item.submittedAt)}</span>
+                <StageBar steps={item.steps ?? []} index={item.hired ? (item.steps ?? []).length : item.index ?? 0} stopped={item.stopped} />
               </AppLink>
             </li>
           ))}

@@ -5,11 +5,11 @@ import { calendarTokenForm, integrationHealth, interpretBoardResponse, interpret
 import { buildSlots, claimSlot, moveBooking, zonedTimeToUtc } from "./booking.ts";
 import { applyDocument, applyOpChain, canSeeNote } from "./collab.ts";
 import { boardStatus, canConvert, campaignAfterBounce, campaignAfterReply } from "./crm.ts";
-import { chooseMailApplication, classifySandboxAddress, deliveryLabel, nextState, renderTokens, retryDelayMinutes, stripQuotedReply, webhookFresh } from "./delivery.ts";
+import { brandHtml, brandPlain, chooseMailApplication, classifySandboxAddress, deliveryLabel, nextState, renderTokens, retryDelayMinutes, stripQuotedReply, webhookFresh } from "./delivery.ts";
 import { crc32, extractOffice, sniffResume } from "./docx.ts";
 import { disposeCase, signalChangesScore, similarityOpensCase, similarityPercent } from "./integrity.ts";
 import { explainCutoff, invitesAfterRerank, normalizeStages, personalityCannotGate, rankCutoff, STANDARD_PLAN } from "./plans.ts";
-import { classifySmtpCode, pullSmtpReplies } from "./smtp.ts";
+import { buildRfc822, classifySmtpCode, pullSmtpReplies } from "./smtp.ts";
 import { gradeCases } from "./score.ts";
 
 describe("delivery", () => {
@@ -44,6 +44,29 @@ describe("delivery", () => {
     ]);
     assert.equal("id" in many, false);
     if ("error" in many) assert.match(many.error, /a · Engineer · Ada/);
+    const branded = brandPlain("Hello Ada", { companyName: "Northstar", fromName: "Northstar Hiring", footer: "Reply to this note.", logoUrl: "", accent: "#cefa90" });
+    assert.match(branded, /^Northstar Hiring/);
+    assert.match(branded, /Reply to this note\.$/);
+    const html = brandHtml("Hello <Ada>", { companyName: "Northstar", fromName: "", footer: "", logoUrl: "https://cdn.example/logo.png", accent: "#cefa90" }, false);
+    assert.match(html, /Hello \u0026lt;Ada\u0026gt;/);
+    assert.doesNotMatch(html, /Hello <Ada>/);
+    assert.match(html, />Message</);
+    assert.match(html, /border-radius:24px/);
+    const plain = buildRfc822({ from: "jobs@example.com", to: "ada@example.com", cc: "", subject: "Hello", body: "Hi", messageId: "m1@recruit4us" });
+    assert.match(plain, /Content-Type: text\/plain/);
+    assert.doesNotMatch(plain, /multipart/);
+    const rich = buildRfc822({
+      from: "jobs@example.com",
+      to: "ada@example.com",
+      cc: "",
+      subject: "Hello",
+      body: "Hi",
+      messageId: "m1@recruit4us",
+      fromName: "Northstar",
+      html: "<p>Hi</p>",
+    });
+    assert.match(rich, /From: "Northstar" <jobs@example.com>/);
+    assert.match(rich, /multipart\/alternative/);
   });
 });
 

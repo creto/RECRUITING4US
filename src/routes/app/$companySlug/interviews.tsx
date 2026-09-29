@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { cancelInterview, createSlot, feedbackFor, interviewIcs, listInterviews, listScoreboard, listSlots, refreshCalendar, submitFeedback } from "@/server/talent.functions";
+import { cancelInterview, createSlot, feedbackFor, interviewIcs, listInterviews, listScoreboard, listSlots, refreshCalendar, scheduleInterview, submitFeedback } from "@/server/talent.functions";
 import { RATINGS } from "@/domain/scorecard";
 import { Alert, AppLink, Button, Empty, Field, inputClass, Loading, PageTitle, refreshPage, useAuthed, when } from "@/components/talent/kit";
 
@@ -75,6 +75,41 @@ function Interviews() {
             <li key={String(slot.id)}>{when(String(slot.starts_at), String(slot.timezone))} · {slot.claimed_application_id ? "Claimed" : "Open"}</li>
           ))}
         </ul>
+      </form>
+      <form className="mt-8 grid gap-2 rounded-[24px] border border-line bg-white p-4 shadow-[0_8px_24px_rgba(20,34,27,0.04)] md:grid-cols-2" onSubmit={(event) => {
+        event.preventDefault();
+        const data = new FormData(event.currentTarget);
+        const applicationId = String(data.get("applicationId") ?? "").trim();
+        const candidateName = String(data.get("candidateName") ?? "").trim();
+        if (candidateName.length < 2 && applicationId.length < 8) {
+          setError("Give a candidate name or an application id.");
+          return;
+        }
+        scheduleInterview({
+          data: {
+            slug: companySlug,
+            applicationId,
+            candidateName,
+            title: String(data.get("title") ?? "Interview"),
+            localStart: String(data.get("start")),
+            localEnd: String(data.get("end")),
+            timezone: String(data.get("timezone")),
+            location: String(data.get("location") ?? ""),
+            meetingUrl: String(data.get("url") ?? ""),
+          },
+        }).then(() => refreshPage()).catch((err: Error) => setError(err.message));
+      }}>
+        <h2 className="text-2xl md:col-span-2">Schedule one</h2>
+        <p className="text-sm text-muted md:col-span-2">A name is used only when one active application matches. An application id is used as written.</p>
+        <Field label="Candidate name"><input name="candidateName" className={inputClass} placeholder="Exact name" /></Field>
+        <Field label="Application id"><input name="applicationId" className={inputClass} placeholder="Or paste an application id" /></Field>
+        <Field label="Title"><input name="title" className={inputClass} defaultValue="Interview" required /></Field>
+        <Field label="Timezone"><input name="timezone" className={inputClass} defaultValue="America/New_York" required /></Field>
+        <Field label="Local start"><input name="start" className={inputClass} placeholder="2026-10-06T10:00" required /></Field>
+        <Field label="Local end"><input name="end" className={inputClass} placeholder="2026-10-06T11:00" required /></Field>
+        <Field label="Location"><input name="location" className={inputClass} /></Field>
+        <Field label="Meeting URL"><input name="url" className={inputClass} /></Field>
+        <Button type="submit">Schedule</Button>
       </form>
           </div>
         </div>

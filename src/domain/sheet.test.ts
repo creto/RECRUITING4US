@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { applicantNotice, applicationReceipt, applicationSheetCsv, cvResultLabel } from "./sheet.ts";
+import { applicantNotice, applicationReceipt, applicationSheetCsv, cvResultLabel, trackBar, trackQuery } from "./sheet.ts";
 
 describe("application sheet", () => {
   it("builds a receipt and a CSV row for the essay", () => {
@@ -50,5 +50,21 @@ describe("application sheet", () => {
     assert.equal(notice.title, "Form complete");
     assert.equal(notice.lines.some((line) => /SQL|missing/i.test(line)), false);
     assert.equal(notice.lines.some((line) => line.includes("not emailed")), true);
+    const byEmail = trackQuery("Ada@Example.com");
+    assert.deepEqual(byEmail, { email: "ada@example.com" });
+    assert.deepEqual(trackQuery("R-abc1234z"), { receipt: "ABC1234Z" });
+    assert.deepEqual(trackQuery("app-12345678"), { id: "app-12345678" });
+    const bar = trackBar({
+      stages: ["Applied", "Interview", "Offer"],
+      stageName: "Interview",
+      category: "INTERVIEW",
+      lifecycle: "ACTIVE",
+    });
+    assert.equal(bar.index, 1);
+    assert.equal(bar.label, "Interview");
+    assert.equal(bar.stopped, false);
+    const stopped = trackBar({ stages: ["Applied", "Interview"], stageName: "Applied", category: "APPLIED", lifecycle: "REJECTED" });
+    assert.equal(stopped.stopped, true);
+    assert.equal(stopped.label, "Not moving forward");
   });
 });

@@ -202,17 +202,23 @@ export async function listMyMail(userId: string, applicationId: string) {
     body: string;
     from_name: string;
     author: string;
+    company_name: string;
+    mail_from_name: string;
+    mail_footer: string;
+    accent: string;
     at: string;
   }>`
-    select id, subject, body, from_name, author,
-      to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as at
-    from mail_messages
-    where company_id = ${owned.company_id} and application_id = ${applicationId}
+    select m.id, m.subject, m.body, m.from_name, m.author,
+      co.name as company_name, co.mail_from_name, co.mail_footer, co.embed_accent as accent,
+      to_char(m.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as at
+    from mail_messages m
+    join companies co on co.id = m.company_id
+    where m.company_id = ${owned.company_id} and m.application_id = ${applicationId}
       and (
-        (author = 'STAFF' and lower(to_email) = lower(${owned.email}))
-        or (author = 'CANDIDATE' and lower(from_email) = lower(${owned.email}))
+        (m.author = 'STAFF' and lower(m.to_email) = lower(${owned.email}))
+        or (m.author = 'CANDIDATE' and lower(m.from_email) = lower(${owned.email}))
       )
-    order by created_at
+    order by m.created_at
   `;
 }
 

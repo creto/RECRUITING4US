@@ -22,9 +22,10 @@ import {
   openHire,
   openLive,
   queuePlatformMail,
+  readFile,
   rejudgeSubmission,
 } from "@/server/talent.functions";
-import { Alert, Button, Field, inputClass, Loading, PageTitle, money, refreshPage, useAuthed, when } from "@/components/talent/kit";
+import { Alert, Button, Field, inputClass, Loading, MailCard, PageTitle, money, refreshPage, useAuthed, useCompanyWorkspace, when } from "@/components/talent/kit";
 import { RichMailEditor } from "@/components/talent/mail-compose";
 import { plainToEditorHtml } from "@/domain/mail-html";
 
@@ -56,7 +57,7 @@ function ApplicationPage() {
   const tabs = ["Overview", "Assessments", "Interviews", "Offers", "Mail", "Workbench", "Activity"];
   return (
     <div>
-      <PageTitle title={app.name || "Candidate"} lede={`${app.job_title} · ${app.stage_name} · version ${app.version}`} />
+      <PageTitle title={app.name || "Candidate"} lede={`${app.job_title} · ${app.stage_name} · ${app.id}`} />
       <div className="mb-4 flex gap-2 overflow-x-auto" role="tablist">
         {tabs.map((item) => (
           <button key={item} type="button" role="tab" aria-selected={tab === item} className={`min-h-11 rounded-md px-3 text-sm ${tab === item ? "bg-accent text-accent-ink" : "border border-line bg-surface"}`} onClick={() => setTab(item)}>{item}</button>
@@ -69,11 +70,40 @@ function ApplicationPage() {
             <p>{app.email || "Email hidden for this role"}</p>
             <p className="text-muted">Source {app.source} · submitted {when(app.submitted_at)}</p>
             <p>Lifecycle: {app.lifecycle}</p>
+            {(state.data.answers ?? []).length ? (
+              <ul className="space-y-1 border-t border-line pt-3">
+                {state.data.answers.map((row: { field_id: string; value: unknown }) => (
+                  <li key={row.field_id}><span className="text-muted">{row.field_id}</span> · {typeof row.value === "string" ? row.value : JSON.stringify(row.value)}</li>
+                ))}
+              </ul>
+            ) : null}
             <CvScreen
               screen={state.data.screen}
               files={state.data.files}
+              cvText={state.data.profile?.cvText ?? ""}
               canAssign={Boolean(state.data.canAssign)}
               onRun={() => run(() => rescreenCv({ data: { slug: companySlug, applicationId } }))}
+              onOpen={async (fileId) => {
+                try {
+                  const file = await readFile({ data: { slug: companySlug, fileId } });
+                  const binary = atob(file.dataBase64);
+                  const bytes = new Uint8Array(binary.length);
+                  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+                  const blob = new Blob([bytes], { type: file.mime || "application/octet-stream" });
+                  const url = URL.createObjectURL(blob);
+                  const viewable = file.mime === "application/pdf" || file.mime.startsWith("text/") || file.mime.startsWith("image/");
+                  if (viewable) {
+                    window.open(url, "_blank", "noopener");
+                    return;
+                  }
+                  const anchor = document.createElement("a");
+                  anchor.href = url;
+                  anchor.download = file.name;
+                  anchor.click();
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "Could not open the CV.");
+                }
+              }}
             />
             {state.data.profile ? (
               <div className="mt-3 border-t border-line pt-3">
@@ -258,8 +288,10 @@ function ApplicationPage() {
 function CvScreen({
   screen,
   files,
+  cvText,
   canAssign,
   onRun,
+  onOpen,
 }: {
   screen: {
     fit: string;
@@ -269,9 +301,11 @@ function CvScreen({
     matchedPreferred: string[];
     reasons: string[];
   } | null;
-  files: { id: string; display_name: string; scan_state: string }[];
+  files: { id: string; display_name: string; scan_state: string; size_bytes?: number }[];
+  cvText: string;
   canAssign: boolean;
   onRun: () => void;
+  onOpen: (fileId: string) => Promise<void>;
 }) {
   const label = !screen
     ? "Not screened yet."
@@ -288,8 +322,18 @@ function CvScreen({
       <p className="text-muted">Looks for this job’s must-have words in the CV. It is not a model score, and it does not read photos, schools, or age.</p>
       <p>{label}</p>
       {files.length ? files.map((file) => (
-        <p key={file.id} className="text-muted">{file.display_name} · file check {file.scan_state}</p>
+        <div key={file.id} className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-muted">{file.display_name} · file check {file.scan_state}</span>
+          {file.scan_state === "CLEAN" ? (
+            <Button type="button" variant="secondary" onClick={() => { void onOpen(file.id); }}>Open CV</Button>
+          ) : (
+            <span className="text-muted">Not available until the file check is clean.</span>
+          )}
+        </div>
       )) : <p className="text-muted">No CV uploaded.</p>}
+      {cvText ? (
+        <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-md border border-line bg-bg p-3 text-sm">{cvText}</pre>
+      ) : null}
       {screen ? (
         <>
           <p>Found: {screen.matchedRequired.length ? screen.matchedRequired.join(", ") : "none"}</p>
@@ -395,18 +439,22 @@ function scoreLine(item: {
 }
 
 function MailTab({ slug, applicationId, canEmail, onError }: { slug: string; applicationId: string; canEmail: boolean; onError: (value: string) => void }) {
+  const workspace = useCompanyWorkspace();
   const [subject, setSubject] = useState("Update on {{job_title}}");
   const [body, setBody] = useState(() => plainToEditorHtml("Hello {{candidate_name}},\n\nThis note is queued for delivery. Stored in this workspace is not the same as delivered.\n\n{{recruiter_name}}"));
   if (!canEmail) return <p className="text-sm">Your role cannot send mail.</p>;
+  const companyName = workspace.data?.company.name ?? "Company";
   return (
-    <form className="grid gap-2" onSubmit={(event) => {
+    <form className="grid gap-3" onSubmit={(event) => {
       event.preventDefault();
       queuePlatformMail({ data: { slug, applicationId, kind: "FOLLOW_UP", subject, body, idempotencyKey: crypto.randomUUID() } })
-        .then(() => onError("Queued. Open Delivery to see stored, accepted, delivered, bounced, or failed. The in-product copy is a separate channel."))
+        .then(() => onError("Queued. The applicant receives this card. Open Delivery to see stored, accepted, delivered, bounced, or failed."))
         .catch((err: Error) => onError(err.message));
     }}>
       <Field label="Subject"><input className={inputClass} value={subject} onChange={(event) => setSubject(event.target.value)} /></Field>
       <Field label="Message"><RichMailEditor value={body} onChange={setBody} /></Field>
+      <MailCard name={companyName} body={body} />
+      <p className="text-sm text-muted">This is the card that goes out. The name, logo, and footer from Settings are added when it sends. Tokens such as {"{{candidate_name}}"} are filled in first.</p>
       <Button type="submit">Queue outside message</Button>
     </form>
   );

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { getMyApplication, replyToMail, requestDeletion, startAttempt, withdrawMine } from "@/server/talent.functions";
-import { Alert, AppLink, Button, Field, Gate, inputClass, Loading, money, PageTitle, refreshPage, useAuthed, when } from "@/components/talent/kit";
+import { Alert, AppLink, Button, Field, Gate, inputClass, Loading, MailCard, money, PageTitle, refreshPage, StageBar, useAuthed, when } from "@/components/talent/kit";
 import { examPaper } from "@/components/talent/exam-shell";
 
 export const Route = createFileRoute("/candidate/applications/$applicationId")({ component: Mine });
@@ -22,6 +22,11 @@ function Mine() {
         {state.data ? (
           <>
             <PageTitle title={state.data.application.job_title} lede={`${state.data.application.company_name} · ${state.data.application.label}`} />
+            <StageBar
+              steps={state.data.application.steps ?? []}
+              index={state.data.application.hired ? (state.data.application.steps ?? []).length : state.data.application.index ?? 0}
+              stopped={state.data.application.stopped}
+            />
             <section className="space-y-3">
               <h2 className="text-2xl">Assessments</h2>
               <p className="text-sm text-muted">{state.data.runner.reason}</p>
@@ -51,11 +56,15 @@ function Mine() {
               <h2 className="text-2xl">Messages</h2>
               <p className="text-sm text-muted">Written in RECRUIT4US. They were not delivered by an outside mail server. A reply is stored for the recruiter the same way.</p>
               {(state.data.messages ?? []).length === 0 ? <p className="text-sm">No messages yet.</p> : null}
-              {(state.data.messages ?? []).map((message: { id: string; subject: string; body: string; from_name: string; author: string; at: string }) => (
-                <article key={message.id} className="rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4 text-sm">
+              {(state.data.messages ?? []).map((message: { id: string; subject: string; body: string; from_name: string; author: string; at: string; company_name?: string; mail_from_name?: string; mail_footer?: string; accent?: string }) => (
+                <article key={message.id} className="text-sm">
                   <p className="font-medium">{message.subject}</p>
-                  <p className="text-muted">{message.author === "CANDIDATE" ? "You" : message.from_name || "Recruiter"} · {when(message.at)}</p>
-                  <p className="mt-2 whitespace-pre-wrap">{message.body}</p>
+                  <p className="mb-2 text-muted">{message.author === "CANDIDATE" ? "You" : message.from_name || "Recruiter"} · {when(message.at)}</p>
+                  {message.author === "CANDIDATE" ? (
+                    <p className="whitespace-pre-wrap rounded-[24px] border border-line bg-white p-4 shadow-[0_8px_24px_rgba(20,34,27,0.04)]">{message.body}</p>
+                  ) : (
+                    <MailCard name={message.mail_from_name || message.company_name || message.from_name} body={message.body} footer={message.mail_footer} accent={message.accent} />
+                  )}
                 </article>
               ))}
               <form className="space-y-2" onSubmit={(event) => { event.preventDefault(); replyToMail({ data: { applicationId, body: reply } }).then(() => { setReply(""); refreshPage(); }).catch((err) => setError(err.message)); }}>

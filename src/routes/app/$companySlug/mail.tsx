@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { deleteTemplate, listInbox, listMailbox, listTemplates, saveTemplate } from "@/server/talent.functions";
-import { Alert, AppLink, Button, Empty, Field, inputClass, Loading, PageTitle, refreshPage, useAuthed, when } from "@/components/talent/kit";
+import { Alert, AppLink, Button, Empty, Field, inputClass, Loading, MailCard, PageTitle, refreshPage, useAuthed, useCompanyWorkspace, when } from "@/components/talent/kit";
 import { RichMailEditor, SafeMailBody } from "@/components/talent/mail-compose";
 
 export const Route = createFileRoute("/app/$companySlug/mail")({ component: Mail });
@@ -16,11 +16,19 @@ function Mail() {
   const [body, setBody] = useState("");
   const [editing, setEditing] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
-
+  const [person, setPerson] = useState("");
+  const [status, setStatus] = useState("");
+  const [kind, setKind] = useState("");
+  const workspace = useCompanyWorkspace();
   if ((templates.loading && !templates.data) || templates.isPending) return <Loading />;
+  const messages = filterMail(box.data?.messages ?? [], person, status, "");
+  const intents = filterMail(delivery.data?.intents ?? [], person, status, kind);
+  const replies = filterMail(delivery.data?.inbound ?? [], person, "", "");
+  const statuses = uniqueValues([...(box.data?.messages ?? []), ...(delivery.data?.intents ?? [])], "status");
+  const kinds = uniqueValues(delivery.data?.intents ?? [], "kind");
   return (
     <div>
-      <PageTitle title="Mail" lede="Templates and the mailbox for this company. Delivery events live on the Delivery tab." />
+      <PageTitle title="Mail" lede="Templates and the mailbox for this company. A queued message is sent as the same card as the apply form: company name, the message in a field, and the footer from Settings. Delivery events live on the Delivery tab." />
       {templates.error ? <Alert>{templates.error}</Alert> : null}
       {error ? <div className="mb-3"><Alert>{error}</Alert></div> : null}
       <p className="mb-4 text-sm text-muted">{templates.data?.note}</p>
@@ -55,17 +63,20 @@ function Mail() {
             <Field label="Message">
               <RichMailEditor key={editing ?? "new"} value={body} onChange={setBody} required />
             </Field>
+            {body.trim() ? <MailCard name={workspace.data?.company.name ?? "Company"} body={body} /> : null}
             <Button type="submit">{editing ? "Save template" : "Add template"}</Button>
           </form>
         </section>
         <section>
           <h2 className="text-2xl">Inside this product</h2>
-          <p className="mt-1 text-sm text-muted">These rows are the in-product copy. They are not provider delivery.</p>
+          <p className="mt-1 text-sm text-muted">These rows are the in-product copy. They are not provider delivery. The latest 80 are listed. Narrow them instead of reading the whole queue.</p>
+          <MailNarrow person={person} status={status} kind={kind} statuses={statuses} kinds={kinds} onPerson={setPerson} onStatus={setStatus} onKind={setKind} />
           {box.loading && !box.data ? <Loading /> : null}
           {box.error ? <Alert>{box.error}</Alert> : null}
           {(box.data?.messages ?? []).length === 0 ? <Empty title="No candidate mail yet" body="Open an application and use the Email tab." /> : null}
+          {box.data?.messages?.length && messages.length === 0 ? <p className="mt-3 text-sm text-muted">Nothing matches that filter.</p> : null}
           <ul className="mt-3 space-y-2">
-            {(box.data?.messages ?? []).map((message) => (
+            {messages.map((message) => (
               <li key={message.id} className="rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-3 text-sm">
                 <p className="font-medium">{message.subject}</p>
                 <p className="text-muted">
@@ -92,18 +103,20 @@ function Mail() {
         {delivery.data?.sender ? <p className="text-sm">From {delivery.data.sender}. {delivery.data.externalBlocked ? "External delivery is blocked." : "SMTP is configured. Watch the state, not the send button."}</p> : <p className="text-sm">No verified sender is configured. External delivery is blocked.</p>}
         <ul className="mt-3 space-y-2">
           {(delivery.data?.intents ?? []).length === 0 ? <li className="text-sm text-muted">Nothing is queued.</li> : null}
-          {(delivery.data?.intents ?? []).map((row: any) => (
+          {intents.length === 0 && (delivery.data?.intents ?? []).length > 0 ? <li className="text-sm text-muted">Nothing in the queue matches that filter.</li> : null}
+          {intents.map((row: any) => (
             <li key={String(row.id)} className="rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-3 text-sm">
               <p className="font-medium">{String(row.subject)}</p>
               <p>{String(row.status)} · {String(row.state_label)}</p>
-              <p className="text-muted">To {String(row.to_email)} · {String(row.kind)} · attempts {String(row.attempt_count)} · {String(row.provider)}</p>
+              <p className="text-muted">To {String(row.to_email)}{row.candidate_name ? ` · ${String(row.candidate_name)}` : ""}{row.job_title ? ` · ${String(row.job_title)}` : ""} · {String(row.kind)} · attempts {String(row.attempt_count)} · {String(row.provider)}</p>
               {row.last_error ? <p className="text-muted">{String(row.last_error)}</p> : null}
             </li>
           ))}
         </ul>
         <h3 className="mt-4 text-xl">Replies</h3>
         <ul className="mt-2 space-y-2">
-          {(delivery.data?.inbound ?? []).map((row: any) => (
+          {(delivery.data?.inbound ?? []).length > 0 && replies.length === 0 ? <li className="text-sm text-muted">No reply matches that person.</li> : null}
+          {replies.map((row: any) => (
             <li key={String(row.id)} className="rounded-md border border-line p-3 text-sm">
               <p>{row.matched ? "Matched" : "Quarantined"} · {String(row.from_email)}</p>
               <SafeMailBody body={String(row.body)} className="text-sm" />
@@ -112,6 +125,64 @@ function Mail() {
           ))}
         </ul>
       </section>
+    </div>
+  );
+}
+
+function filterMail<T extends Record<string, unknown>>(rows: T[], person: string, status: string, kind: string): T[] {
+  const needle = person.trim().toLowerCase();
+  return rows.filter((row) => {
+    if (status && String(row.status ?? "") !== status) return false;
+    if (kind && String(row.kind ?? "") !== kind) return false;
+    if (!needle) return true;
+    const hay = [row.candidate_name, row.to_email, row.from_email, row.subject, row.job_title, row.application_id]
+      .map((value) => String(value ?? ""))
+      .join(" ")
+      .toLowerCase();
+    return hay.includes(needle);
+  });
+}
+
+function uniqueValues(rows: Record<string, unknown>[], key: string): string[] {
+  return [...new Set(rows.map((row) => String(row[key] ?? "")).filter(Boolean))].sort();
+}
+
+function MailNarrow({
+  person,
+  status,
+  kind,
+  statuses,
+  kinds,
+  onPerson,
+  onStatus,
+  onKind,
+}: {
+  person: string;
+  status: string;
+  kind: string;
+  statuses: string[];
+  kinds: string[];
+  onPerson: (value: string) => void;
+  onStatus: (value: string) => void;
+  onKind: (value: string) => void;
+}) {
+  return (
+    <div className="mt-3 grid gap-2 md:grid-cols-3">
+      <Field label="Person, email, or job">
+        <input className={inputClass} value={person} placeholder="Ada, or an email" onChange={(event) => onPerson(event.target.value)} />
+      </Field>
+      <Field label="Status">
+        <select className={inputClass} value={status} onChange={(event) => onStatus(event.target.value)}>
+          <option value="">All statuses</option>
+          {statuses.map((value) => <option key={value} value={value}>{value}</option>)}
+        </select>
+      </Field>
+      <Field label="Kind">
+        <select className={inputClass} value={kind} onChange={(event) => onKind(event.target.value)}>
+          <option value="">All kinds</option>
+          {kinds.map((value) => <option key={value} value={value}>{value}</option>)}
+        </select>
+      </Field>
     </div>
   );
 }

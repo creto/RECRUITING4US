@@ -66,7 +66,8 @@ export async function scheduleInterview(
   userId: string,
   input: {
     slug: string;
-    applicationId: string;
+    applicationId?: string;
+    candidateName?: string;
     title: string;
     localStart: string;
     localEnd: string;
@@ -79,19 +80,24 @@ export async function scheduleInterview(
   assertSameSiteRequest();
   const actor = await requireActor(userId, input.slug);
   allow(actor, "interview.manage");
+  const { resolveApplicationId } = await import("./platform.server");
+  const applicationId = await resolveApplicationId(actor.companyId, {
+    applicationId: input.applicationId,
+    candidateName: input.candidateName,
+  });
   const start = zonedLocalToUtc(input.localStart, input.timezone);
   const end = zonedLocalToUtc(input.localEnd, input.timezone);
   if (end.getTime() <= start.getTime()) throw new Error("The interview must end after it starts.");
   const sql = await db();
   const apps = await sql<{ id: string }>`
-    select id from applications where id = ${input.applicationId} and company_id = ${actor.companyId} and lifecycle = 'ACTIVE'
+    select id from applications where id = ${applicationId} and company_id = ${actor.companyId} and lifecycle = 'ACTIVE'
   `;
   if (!apps[0]) throw new Error("Not found.");
   const jobs = await sql<{ scorecard_attributes: unknown }>`
     select j.scorecard_attributes
     from applications a
     join jobs j on j.id = a.job_id and j.company_id = a.company_id
-    where a.id = ${input.applicationId} and a.company_id = ${actor.companyId}
+    where a.id = ${applicationId} and a.company_id = ${actor.companyId}
   `;
   const focus = focusAttributes(attributesOrDefault(jobs[0]?.scorecard_attributes), input.focusIds);
   if ("error" in focus) throw new Error(focus.error);
@@ -107,7 +113,7 @@ export async function scheduleInterview(
     insert into interviews (
       id, company_id, application_id, title, starts_at, ends_at, timezone, location, meeting_url, ics_uid, focus_attributes
     ) values (
-      ${id}, ${actor.companyId}, ${input.applicationId}, ${input.title.trim()}, ${start.toISOString()},
+      ${id}, ${actor.companyId}, ${applicationId}, ${input.title.trim()}, ${start.toISOString()},
       ${end.toISOString()}, ${input.timezone}, ${input.location}, ${input.meetingUrl}, ${uid},
       ${json(focus.attributes)}::jsonb
     )
@@ -117,7 +123,7 @@ export async function scheduleInterview(
     values (${nid()}, ${actor.companyId}, ${id}, ${actor.userId})
   `;
   const people = await sql<{ email: string }>`
-    select c.email from applications a join candidates c on c.id = a.candidate_id where a.id = ${input.applicationId}
+    select c.email from applications a join candidates c on c.id = a.candidate_id where a.id = ${applicationId}
   `;
   if (people[0]) {
     await sql`
@@ -133,7 +139,7 @@ export async function scheduleInterview(
   try {
     const { queueMail } = await import("./platform.server");
     await queueMail(userId, input.slug, {
-      applicationId: input.applicationId,
+      applicationId,
       kind: "INTERVIEW",
       subject: "Interview for {{job_title}}",
       body: `Hello {{candidate_name}},\n\n${input.title.trim()} is on the schedule. Open your candidate home for the time. A calendar file is available. An outside calendar is updated only when one is connected.\n\n{{recruiter_name}}`,
@@ -458,6 +464,7 @@ export async function listOffers(userId: string, slug: string) {
   const sql = await db();
   const rows = await sql<{
     id: string;
+    application_id: string;
     status: string;
     current_revision: number;
     title: string;
@@ -466,7 +473,7 @@ export async function listOffers(userId: string, slug: string) {
     candidate_name: string;
     job_title: string;
   }>`
-    select o.id, o.status, o.current_revision, r.title, r.salary_minor, r.currency,
+    select o.id, o.application_id, o.status, o.current_revision, r.title, r.salary_minor, r.currency,
       c.name as candidate_name, j.title as job_title
     from offers o
     join offer_revisions r on r.offer_id = o.id and r.revision = o.current_revision
@@ -481,18 +488,23 @@ export async function listOffers(userId: string, slug: string) {
 
 export async function createOffer(
   userId: string,
-  input: { slug: string; applicationId: string; title: string; salaryMinor: number; currency: string; startDate: string; message: string },
+  input: { slug: string; applicationId?: string; candidateName?: string; title: string; salaryMinor: number; currency: string; startDate: string; message: string },
 ) {
   assertSameSiteRequest();
   const actor = await requireActor(userId, input.slug);
   allow(actor, "offer.manage");
+  const { resolveApplicationId } = await import("./platform.server");
+  const applicationId = await resolveApplicationId(actor.companyId, {
+    applicationId: input.applicationId,
+    candidateName: input.candidateName,
+  });
   const sql = await db();
-  const apps = await sql`select id from applications where id = ${input.applicationId} and company_id = ${actor.companyId}`;
+  const apps = await sql`select id from applications where id = ${applicationId} and company_id = ${actor.companyId}`;
   if (!apps[0]) throw new Error("Not found.");
   const offerId = nid();
   await sql`
     insert into offers (id, company_id, application_id, status, current_revision)
-    values (${offerId}, ${actor.companyId}, ${input.applicationId}, 'PENDING_APPROVAL', 1)
+    values (${offerId}, ${actor.companyId}, ${applicationId}, 'PENDING_APPROVAL', 1)
   `;
   await sql`
     insert into offer_revisions (id, company_id, offer_id, revision, title, salary_minor, currency, start_date, message, created_by)

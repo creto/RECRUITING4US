@@ -5,7 +5,7 @@ export type ExtractResult = {
   reason: string;
 };
 
-const MAX_UNCOMPRESSED = 1_500_000;
+const MAX_UNCOMPRESSED = 20_000_000;
 const MAX_ENTRIES = 40;
 
 function crc32(bytes: Uint8Array): number {

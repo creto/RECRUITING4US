@@ -44,13 +44,17 @@ function Settings() {
       {tab === "Company" ? (
         status.loading && !status.data ? <Loading /> :
         <CompanySettings
-          key={`${status.data?.companyName ?? ""}:${status.data?.headline ?? ""}:${status.data?.embed.background ?? ""}:${status.data?.embed.ink ?? ""}:${status.data?.embed.accent ?? ""}:${status.data?.embed.accentInk ?? ""}`}
+          key={`${status.data?.companyName ?? ""}:${status.data?.headline ?? ""}:${status.data?.embed.background ?? ""}:${status.data?.embed.ink ?? ""}:${status.data?.embed.accent ?? ""}:${status.data?.embed.accentInk ?? ""}:${status.data?.mail?.fromName ?? ""}:${status.data?.mail?.logoUrl ?? ""}:${status.data?.mail?.hasLogo ? "1" : "0"}`}
           companySlug={companySlug}
           companyName={status.data?.companyName ?? ""}
           timezone={status.data?.timezone ?? "America/New_York"}
           retentionDays={status.data?.retentionDays ?? 365}
           headline={status.data?.headline ?? ""}
           embed={embedTheme(status.data?.embed)}
+          mailFromName={status.data?.mail?.fromName ?? ""}
+          mailFooter={status.data?.mail?.footer ?? ""}
+          mailLogoUrl={status.data?.mail?.logoUrl ?? ""}
+          hasLogo={Boolean(status.data?.mail?.hasLogo)}
           onError={setError}
         />
       ) : null}
@@ -148,6 +152,10 @@ function CompanySettings({
   retentionDays,
   headline,
   embed,
+  mailFromName,
+  mailFooter,
+  mailLogoUrl,
+  hasLogo,
   onError,
 }: {
   companySlug: string;
@@ -156,10 +164,20 @@ function CompanySettings({
   retentionDays: number;
   headline: string;
   embed: EmbedTheme;
+  mailFromName: string;
+  mailFooter: string;
+  mailLogoUrl: string;
+  hasLogo: boolean;
   onError: (message: string) => void;
 }) {
   const [colors, setColors] = useState<EmbedTheme>(embed);
   const [line, setLine] = useState(headline);
+  const [fromName, setFromName] = useState(mailFromName);
+  const [footer, setFooter] = useState(mailFooter);
+  const [logoUrl, setLogoUrl] = useState(mailLogoUrl);
+  const [logoFile, setLogoFile] = useState<{ mime: string; bytes: string } | null>(null);
+  const [clearLogo, setClearLogo] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
   const swatch = companyCssVars(colors);
   const textContrast = contrastRatio(colors.ink, colors.background);
   const buttonContrast = contrastRatio(colors.accentInk, colors.accent);
@@ -181,10 +199,74 @@ function CompanySettings({
           embedInk: colors.ink,
           embedAccent: colors.accent,
           embedAccentInk: colors.accentInk,
+          mailFromName: fromName,
+          mailFooter: footer,
+          mailLogoUrl: logoUrl,
+          mailLogoMime: logoFile?.mime ?? "",
+          mailLogoBytes: logoFile?.bytes ?? "",
+          clearLogo: clearLogo && !logoFile,
         },
       }).then(() => refreshPage()).catch((err) => onError(err instanceof Error ? err.message : "Could not save."));
     }}>
       <Field label="Name"><input name="name" className={inputClass} defaultValue={companyName} placeholder="Company name" required /></Field>
+      <fieldset className="space-y-3 rounded-md border border-line p-4">
+        <legend className="px-1 text-sm font-medium">Email</legend>
+        <p className="text-sm text-muted">This name, logo, and footer are added when a queued message is sent. A blank name uses the company name. The header uses this company’s button color.</p>
+        <Field label="From name">
+          <input className={inputClass} value={fromName} maxLength={80} placeholder={companyName || "Company"} onChange={(event) => setFromName(event.target.value)} />
+        </Field>
+        <Field label="Footer">
+          <textarea className={`${inputClass} min-h-20 py-2`} value={footer} maxLength={400} placeholder="Optional line under the message" onChange={(event) => setFooter(event.target.value)} />
+        </Field>
+        <Field label="Logo URL">
+          <input className={inputClass} value={logoUrl} maxLength={300} placeholder="https://…" onChange={(event) => setLogoUrl(event.target.value)} />
+        </Field>
+        <Field label="Logo file">
+          <input
+            className={inputClass}
+            type="file"
+            accept="image/png,image/jpeg,.png,.jpg,.jpeg"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              setLogoError(null);
+              if (!file) {
+                setLogoFile(null);
+                return;
+              }
+              const ext = file.name.toLowerCase().split(".").pop();
+              const mime = ext === "png" ? "image/png" : ext === "jpg" || ext === "jpeg" ? "image/jpeg" : "";
+              if (!mime || file.size > 120_000) {
+                setLogoFile(null);
+                setLogoError("The logo must be a PNG or JPEG under 120 KB.");
+                return;
+              }
+              const reader = new FileReader();
+              reader.onload = () => {
+                const encoded = String(reader.result ?? "");
+                const bytes = encoded.includes(",") ? encoded.split(",")[1] ?? "" : encoded;
+                setLogoFile({ mime, bytes });
+                setClearLogo(false);
+              };
+              reader.readAsDataURL(file);
+            }}
+          />
+        </Field>
+        {hasLogo || logoFile ? (
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={clearLogo} onChange={(event) => setClearLogo(event.target.checked)} />
+            Remove the saved logo
+          </label>
+        ) : null}
+        {logoError ? <p className="text-sm text-warn">{logoError}</p> : null}
+        <div className="rounded-[24px] border border-line bg-white p-4">
+          {logoFile ? <img src={`data:${logoFile.mime};base64,${logoFile.bytes}`} alt="" className="mb-2 max-h-16" /> : null}
+          <p className="text-2xl">{fromName.trim() || companyName || "Company"}</p>
+          <p className="mb-1 mt-3 text-sm font-medium">Message</p>
+          <div className="rounded-xl border border-line px-3 py-2 text-sm">Hello candidate,</div>
+          {footer.trim() ? <p className="mt-3 text-sm text-muted">{footer.trim()}</p> : null}
+          <div className="mt-3 h-2 rounded-full" style={{ background: colors.accent }} />
+        </div>
+      </fieldset>
       <Field label="Timezone"><input name="timezone" className={inputClass} defaultValue={timezone} /></Field>
       <Field label="Retention days"><input name="retention" className={inputClass} type="number" min={30} max={3650} defaultValue={retentionDays} /></Field>
       <fieldset className="space-y-3 rounded-md border border-line p-4">

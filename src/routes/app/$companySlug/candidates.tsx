@@ -122,7 +122,11 @@ function Candidates() {
             <li key={person.id} className="rounded-[24px] border border-line bg-white p-4 shadow-[0_8px_24px_rgba(20,34,27,0.04)]">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-lg">{person.name}</h3>
+                  {lines[0] ? (
+                    <AppLink href={`/app/${companySlug}/applications/${lines[0].id}`} className="text-lg font-medium">{person.name}</AppLink>
+                  ) : (
+                    <h3 className="text-lg">{person.name}</h3>
+                  )}
                   <p className="text-sm text-muted">{person.email}</p>
                 </div>
                 <div className="flex flex-wrap gap-2 text-xs">
@@ -137,8 +141,9 @@ function Candidates() {
                 <ul className="mt-3 space-y-2">
                   {lines.map((line) => (
                     <li key={line.id} className="flex flex-wrap items-center gap-2 text-sm">
-                      <AppLink href={`/app/${companySlug}/applications/${line.id}`} className="font-mono text-xs text-link">{line.id}</AppLink>
-                      <span className="text-muted">{line.title}{line.lifecycle && line.lifecycle !== "ACTIVE" ? ` · ${line.lifecycle}` : ""}</span>
+                      <AppLink href={`/app/${companySlug}/applications/${line.id}`} className="font-medium text-link">{line.title || "Application"}</AppLink>
+                      <span className="font-mono text-xs text-muted">{line.id}</span>
+                      {line.lifecycle && line.lifecycle !== "ACTIVE" ? <span className="text-muted">{line.lifecycle}</span> : null}
                       <Button type="button" variant="ghost" className="min-h-9 px-3" onClick={() => copyId(line.id)}>Copy id</Button>
                     </li>
                   ))}

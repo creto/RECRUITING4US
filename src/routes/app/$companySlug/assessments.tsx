@@ -203,6 +203,30 @@ function Assessments() {
         ))}
       </ul>
       <section className="mt-8 rounded-[24px] border border-line bg-white p-4 shadow-[0_8px_24px_rgba(20,34,27,0.04)]">
+        <h2 className="text-2xl">Create an assessment</h2>
+        <p className="mt-1 text-sm text-muted">Pick question versions in the bank further down, then save a draft. Publishing pins those versions. Later edits do not change an assignment that already exists. {picked.length} selected.</p>
+        <form className="mt-3 grid gap-3 md:grid-cols-2" onSubmit={saveAssessment}>
+          <Field label="Name"><input className={inputClass} value={name} onChange={(event) => setName(event.target.value)} required minLength={2} /></Field>
+          <Field label="Time limit (minutes)">
+            <input className={inputClass} type="number" min={1} max={240} value={minutes} onChange={(event) => setMinutes(Number(event.target.value))} />
+          </Field>
+          <label className="flex min-h-11 items-center gap-2 text-sm">
+            <input type="checkbox" checked={proctored} onChange={(event) => setProctored(event.target.checked)} />
+            Proctor the exam (camera on, focus and clipboard noted, no video stored)
+          </label>
+          <label className="flex min-h-11 items-center gap-2 text-sm">
+            <input type="checkbox" checked={autoSend} onChange={(event) => setAutoSend(event.target.checked)} />
+            Send automatically when a CV is a fit
+          </label>
+          <Field label="Draw this many questions (blank uses all)">
+            <input className={inputClass} type="number" min={1} value={poolPick} onChange={(event) => setPoolPick(event.target.value)} />
+          </Field>
+          <div className="flex items-end">
+            <Button type="submit">Save draft</Button>
+          </div>
+        </form>
+      </section>
+      <section className="mt-8 rounded-[24px] border border-line bg-white p-4 shadow-[0_8px_24px_rgba(20,34,27,0.04)]">
         <h2 className="text-2xl">Send to one application</h2>
         <p className="mt-1 text-sm text-muted">Paste an application id from Candidates. Only a published exam can be sent. The candidate can start any time in the next 14 days. Opening the notice does not start the timer.</p>
         <form className="mt-3 grid gap-3 md:grid-cols-2" onSubmit={sendOne}>
@@ -350,26 +374,6 @@ function Assessments() {
           </Field>
           <GradingPreview type={type} points={points} options={options} correctIds={correctIds} expected={expected} tolerance={tolerance} relTolerance={relTolerance} />
           <Button type="submit" variant="secondary">Save question</Button>
-        </form>
-        <form className="mt-8 space-y-3" onSubmit={saveAssessment}>
-          <h3 className="text-xl">New draft assessment</h3>
-          <p className="text-sm text-muted">Check the questions above. Publishing pins those versions. Later edits do not change an assignment that already exists.</p>
-          <Field label="Name"><input className={inputClass} value={name} onChange={(event) => setName(event.target.value)} required minLength={2} /></Field>
-          <Field label="Time limit (minutes)">
-            <input className={inputClass} type="number" min={1} max={240} value={minutes} onChange={(event) => setMinutes(Number(event.target.value))} />
-          </Field>
-          <label className="flex min-h-11 items-center gap-2 text-sm">
-            <input type="checkbox" checked={proctored} onChange={(event) => setProctored(event.target.checked)} />
-            Proctor the exam (camera on, focus and clipboard noted, no video stored)
-          </label>
-          <label className="flex min-h-11 items-center gap-2 text-sm">
-            <input type="checkbox" checked={autoSend} onChange={(event) => setAutoSend(event.target.checked)} />
-            Send automatically when a CV is a fit
-          </label>
-          <Field label="Draw this many questions (blank uses all)">
-            <input className={inputClass} type="number" min={1} value={poolPick} onChange={(event) => setPoolPick(event.target.value)} />
-          </Field>
-          <Button type="submit">Save draft</Button>
         </form>
       </section>
       {error ? <div className="mt-3"><Alert>{error}</Alert></div> : null}
