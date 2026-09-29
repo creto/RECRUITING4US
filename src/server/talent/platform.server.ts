@@ -11,7 +11,7 @@ import { normalizeEmail, roleHas } from "@/domain/rules";
 import { enterTenant } from "@/lib/tenant";
 import { allow, audit, db, json, mapDbError, nid, requireActor, requireUser, type Actor } from "./db.server";
 import { judgeIsolated, JUDGE_RUNTIME } from "./runner.server";
-import { sendSmtp, smtpConfigFromEnv } from "./smtp.server";
+import { removeResendSuppression, resendApiKeyFromEnv, sendSmtp, smtpConfigFromEnv } from "./smtp.server";
 import { QUESTION_CORPUS } from "./question-corpus";
 import { storeFileBytes } from "./object-store.server";
 
@@ -172,6 +172,13 @@ export async function listInbox(userId: string, slug: string) {
     [actor.companyId],
   );
   const config = smtpConfigFromEnv();
+  const suppressions = await sql<{ email: string; reason: string }>`
+    select email, reason from mail_suppressions
+    where company_id = ${actor.companyId}
+    order by email
+    limit 100
+  `;
+  const resendReady = Boolean(resendApiKeyFromEnv());
   return {
     note: mode.note,
     provider: mode.provider,
@@ -182,6 +189,8 @@ export async function listInbox(userId: string, slug: string) {
       : "External delivery is blocked until MAIL_SMTP_HOST, MAIL_SMTP_PORT, and MAIL_FROM are set. Optional: MAIL_SMTP_USER, MAIL_SMTP_PASSWORD, MAIL_INBOUND_SECRET.",
     intents: intents.map((row) => ({ ...row, state_label: deliveryLabel(String(row.status ?? "")) })),
     inbound,
+    suppressions,
+    resendReady,
     secretConfigured: Boolean(process.env.MAIL_INBOUND_SECRET),
   };
 }
@@ -301,6 +310,41 @@ export async function suppressAddress(userId: string, slug: string, email: strin
   `;
   await audit(actor, "mail.suppress", "suppression", normalized, reason.slice(0, 200));
   return { email: normalized };
+}
+
+export async function unsuppressEmail(userId: string, slug: string, email: string) {
+  assertSameSiteRequest();
+  const actor = await requireActor(userId, slug);
+  allow(actor, "application.note");
+  const sql = await db();
+  const normalized = normalizeEmail(email);
+  if (!normalized.includes("@")) throw new Error("Enter a valid email address.");
+  await sql`
+    delete from mail_suppressions
+    where company_id = ${actor.companyId} and email = ${normalized}
+  `;
+  const provider = await removeResendSuppression(normalized);
+  const requeued = await sql<{ id: string }>`
+    update message_intents set
+      status = 'QUEUED',
+      last_error = '',
+      scheduled_for = now()
+    where company_id = ${actor.companyId}
+      and lower(to_email) = ${normalized}
+      and status = 'SUPPRESSED'
+    returning id
+  `;
+  await audit(actor, "mail.unsuppress", "suppression", normalized, provider.detail.slice(0, 200));
+  await drainMail(actor.companyId);
+  return {
+    email: normalized,
+    localCleared: true,
+    requeued: requeued.length,
+    provider,
+    note: provider.attempted
+      ? provider.detail
+      : "Cleared in this workspace. Set RESEND_API_KEY on Vercel to also clear Resend’s list, then retry send.",
+  };
 }
 
 export async function receiveMailEvent(input: { body: string; timestamp: string; signature: string | null }) {

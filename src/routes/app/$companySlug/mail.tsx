@@ -1,9 +1,15 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { deleteTemplate, listInbox, listMailbox, listTemplates, saveTemplate } from "@/server/talent.functions";
+import { deleteTemplate, listInbox, listMailbox, listTemplates, saveTemplate, unsuppressEmail } from "@/server/talent.functions";
 import { Alert, AppLink, Button, Empty, Field, inputClass, Loading, PageTitle, refreshPage, useAuthed, when } from "@/components/talent/kit";
 
 export const Route = createFileRoute("/app/$companySlug/mail")({ component: Mail });
+
+function looksSuppressed(row: { status?: unknown; last_error?: unknown; state_label?: unknown }) {
+  const status = String(row.status ?? "");
+  const err = `${row.last_error ?? ""} ${row.state_label ?? ""}`.toLowerCase();
+  return status === "SUPPRESSED" || status === "BOUNCED" || status === "COMPLAINED" || err.includes("suppress");
+}
 
 function Mail() {
   const { companySlug } = Route.useParams();
@@ -15,6 +21,7 @@ function Mail() {
   const [body, setBody] = useState("");
   const [editing, setEditing] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
 
   if ((templates.loading && !templates.data) || templates.isPending) return <Loading />;
   return (
@@ -97,6 +104,29 @@ function Mail() {
               <p>{String(row.status)} · {String(row.state_label)}</p>
               <p className="text-muted">To {String(row.to_email)} · {String(row.kind)} · attempts {String(row.attempt_count)} · {String(row.provider)}</p>
               {row.last_error ? <p className="text-muted">{String(row.last_error)}</p> : null}
+              {looksSuppressed(row) ? (
+                <div className="mt-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={busy === String(row.to_email)}
+                    onClick={() => {
+                      const email = String(row.to_email);
+                      setBusy(email);
+                      setError(null);
+                      unsuppressEmail({ data: { slug: companySlug, email } })
+                        .then((result) => {
+                          setError(result.note ?? "Address unsuppressed.");
+                          refreshPage();
+                        })
+                        .catch((err: Error) => setError(err.message))
+                        .finally(() => setBusy(null));
+                    }}
+                  >
+                    {busy === String(row.to_email) ? "Working…" : "Unsuppress"}
+                  </Button>
+                </div>
+              ) : null}
             </li>
           ))}
         </ul>

@@ -11,10 +11,21 @@ export type SmtpConfig = {
   secure: boolean;
 };
 
+/** Bare address for SMTP MAIL FROM. Strips display-name / angle brackets so we never send <<addr>>. */
+export function normalizeMailFrom(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  const angled = trimmed.match(/<\s*([^<>@\s]+@[^<>@\s]+)\s*>/);
+  if (angled?.[1]) return angled[1].trim().toLowerCase();
+  const bare = trimmed.replace(/^<|>$/g, "").trim();
+  const email = bare.match(/([^\s<>]+@[^\s<>]+)/);
+  return (email?.[1] ?? bare).trim().toLowerCase();
+}
+
 export function smtpConfigFromEnv(): SmtpConfig | null {
   const host = process.env.MAIL_SMTP_HOST?.trim() ?? "";
-  const from = process.env.MAIL_FROM?.trim() ?? "";
-  if (!host || !from) return null;
+  const from = normalizeMailFrom(process.env.MAIL_FROM ?? "");
+  if (!host || !from || !from.includes("@")) return null;
   const port = Number(process.env.MAIL_SMTP_PORT ?? 587);
   return {
     host,
@@ -192,5 +203,63 @@ export async function sendSmtp(
   } catch (error) {
     const text = error instanceof Error ? error.message : "SMTP failed.";
     return { result: "failed", detail: redactSecrets(text, secrets) };
+  }
+}
+
+/** Prefer RESEND_API_KEY; fall back to MAIL_SMTP_PASSWORD when it looks like a Resend key (re_…). */
+export function resendApiKeyFromEnv(): string {
+  const dedicated = (process.env.RESEND_API_KEY ?? "").trim();
+  if (dedicated) return dedicated;
+  const smtp = (process.env.MAIL_SMTP_PASSWORD ?? "").trim();
+  return smtp.startsWith("re_") ? smtp : "";
+}
+
+/**
+ * Remove an address from Resend's account suppression list.
+ * Uses RESEND_API_KEY, or MAIL_SMTP_PASSWORD when it is a Resend API key (re_…).
+ * A missing key or a 404 (not suppressed there) is not a hard failure for local unsuppress.
+ */
+export async function removeResendSuppression(email: string): Promise<{
+  attempted: boolean;
+  removed: boolean;
+  detail: string;
+}> {
+  const apiKey = resendApiKeyFromEnv();
+  if (!apiKey) {
+    return {
+      attempted: false,
+      removed: false,
+      detail: "RESEND_API_KEY (or MAIL_SMTP_PASSWORD as the Resend key) is not set on the host. Local suppression was still cleared. Set RESEND_API_KEY on Vercel to clear the provider list.",
+    };
+  }
+  const encoded = encodeURIComponent(email.trim().toLowerCase());
+  try {
+    const response = await fetch(`https://api.resend.com/suppressions/${encoded}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
+    });
+    if (response.ok || response.status === 404) {
+      return {
+        attempted: true,
+        removed: response.ok,
+        detail: response.ok
+          ? "Removed from the Resend suppression list."
+          : "Not present on the Resend suppression list (already clear there).",
+      };
+    }
+    const body = await response.text().catch(() => "");
+    const safe = body.replace(/re_[A-Za-z0-9_]+/g, "re_***").slice(0, 200);
+    return {
+      attempted: true,
+      removed: false,
+      detail: `Resend returned ${response.status}${safe ? `: ${safe}` : ""}. Local suppression was still cleared.`,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Resend request failed.";
+    return {
+      attempted: true,
+      removed: false,
+      detail: `${message} Local suppression was still cleared.`,
+    };
   }
 }

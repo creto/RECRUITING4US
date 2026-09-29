@@ -22,6 +22,7 @@ import {
   openHire,
   openLive,
   queuePlatformMail,
+  unsuppressEmail,
   rejudgeSubmission,
 } from "@/server/talent.functions";
 import { Alert, Button, Field, inputClass, Loading, PageTitle, money, refreshPage, useAuthed, when } from "@/components/talent/kit";
@@ -235,7 +236,7 @@ function ApplicationPage() {
         </div>
       ) : null}
       {tab === "Mail" ? (
-        <MailTab slug={companySlug} applicationId={applicationId} canEmail={Boolean(state.data.canEmail)} onError={setError} />
+        <MailTab slug={companySlug} applicationId={applicationId} canEmail={Boolean(state.data.canEmail)} onError={setError} candidateEmail={String(app.email ?? "")} />
       ) : null}
       {tab === "Workbench" ? (
         <Workbench slug={companySlug} applicationId={applicationId} onError={setError} />
@@ -392,21 +393,53 @@ function scoreLine(item: {
   return `${origin}: ${shown}.${release}`;
 }
 
-function MailTab({ slug, applicationId, canEmail, onError }: { slug: string; applicationId: string; canEmail: boolean; onError: (value: string) => void }) {
+function MailTab({ slug, applicationId, canEmail, onError, candidateEmail }: { slug: string; applicationId: string; canEmail: boolean; onError: (value: string) => void; candidateEmail?: string }) {
   const [subject, setSubject] = useState("Update on {{job_title}}");
   const [body, setBody] = useState("Hello {{candidate_name}},\n\nThis note is queued for delivery. Stored in this workspace is not the same as delivered.\n\n{{recruiter_name}}");
+  const [mailNote, setMailNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   if (!canEmail) return <p className="text-sm">Your role cannot send mail.</p>;
+  const suppressedNote = Boolean(mailNote && /suppress/i.test(mailNote));
   return (
-    <form className="grid gap-2" onSubmit={(event) => {
-      event.preventDefault();
-      queuePlatformMail({ data: { slug, applicationId, kind: "FOLLOW_UP", subject, body, idempotencyKey: crypto.randomUUID() } })
-        .then(() => onError("Queued. Open Delivery to see stored, accepted, delivered, bounced, or failed. The in-product copy is a separate channel."))
-        .catch((err: Error) => onError(err.message));
-    }}>
-      <Field label="Subject"><input className={inputClass} value={subject} onChange={(event) => setSubject(event.target.value)} /></Field>
-      <Field label="Message"><textarea className={`${inputClass} min-h-28 py-2`} value={body} onChange={(event) => setBody(event.target.value)} /></Field>
-      <Button type="submit">Queue outside message</Button>
-    </form>
+    <div className="grid gap-2">
+      <form className="grid gap-2" onSubmit={(event) => {
+        event.preventDefault();
+        queuePlatformMail({ data: { slug, applicationId, kind: "FOLLOW_UP", subject, body, idempotencyKey: crypto.randomUUID() } })
+          .then(() => {
+            const note = "Queued. Open Delivery to see stored, accepted, delivered, bounced, or failed. The in-product copy is a separate channel.";
+            setMailNote(note);
+            onError(note);
+          })
+          .catch((err: Error) => {
+            setMailNote(err.message);
+            onError(err.message);
+          });
+      }}>
+        <Field label="Subject"><input className={inputClass} value={subject} onChange={(event) => setSubject(event.target.value)} /></Field>
+        <Field label="Message"><textarea className={`${inputClass} min-h-28 py-2`} value={body} onChange={(event) => setBody(event.target.value)} /></Field>
+        <Button type="submit">Queue outside message</Button>
+      </form>
+      {suppressedNote && candidateEmail ? (
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            unsuppressEmail({ data: { slug, email: candidateEmail } })
+              .then((result) => {
+                const note = result.note ?? "Address unsuppressed. You can retry send.";
+                setMailNote(note);
+                onError(note);
+              })
+              .catch((err: Error) => onError(err.message))
+              .finally(() => setBusy(false));
+          }}
+        >
+          {busy ? "Working…" : "Unsuppress"}
+        </Button>
+      ) : null}
+    </div>
   );
 }
 
