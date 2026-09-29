@@ -24,8 +24,9 @@ export function normalizeMailFrom(raw: string): string {
 
 export function smtpConfigFromEnv(): SmtpConfig | null {
   const host = process.env.MAIL_SMTP_HOST?.trim() ?? "";
-  const from = normalizeMailFrom(process.env.MAIL_FROM ?? "");
-  if (!host || !from || !from.includes("@")) return null;
+  const from = process.env.MAIL_FROM?.trim() ?? "";
+  const envelope = normalizeMailFrom(from);
+  if (!host || !envelope || !envelope.includes("@")) return null;
   const port = Number(process.env.MAIL_SMTP_PORT ?? 587);
   return {
     host,
@@ -119,7 +120,7 @@ async function afterHello(
     const auth = await io.read();
     if (auth.code !== 235) throw new Error(`Authentication was refused with ${auth.code}.`);
   }
-  io.write(`MAIL FROM:<${config.from}>`);
+  io.write(`MAIL FROM:<${normalizeMailFrom(config.from)}>`);
   const from = await io.read();
   if (from.code < 200 || from.code >= 300) throw new Error(`MAIL FROM was refused with ${from.code}.`);
   for (const recipient of message.to) {

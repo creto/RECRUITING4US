@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import net from "node:net";
 import { describe, it } from "node:test";
-import { sendSmtp } from "./smtp.server.ts";
+import { normalizeMailFrom, sendSmtp } from "./smtp.server.ts";
 import { interpretBoardResponse, parseOAuthToken } from "../../domain/platform/adapters.ts";
 import { postForm, postJson } from "./outbound.server.ts";
 
@@ -62,6 +62,28 @@ describe("smtp contract", () => {
     );
     assert.equal(bounced.result, "bounced");
     await new Promise((resolve) => server.close(resolve));
+  });
+});
+
+
+describe("normalizeMailFrom", () => {
+  it("extracts bare email from display-name angle brackets", () => {
+    assert.equal(
+      normalizeMailFrom("RECRUIT4US <noreply@recruit.tiglobal.com.co>"),
+      "noreply@recruit.tiglobal.com.co",
+    );
+  });
+
+  it("lowercases and strips stray outer brackets", () => {
+    assert.equal(normalizeMailFrom("<Jobs@Example.COM>"), "jobs@example.com");
+  });
+
+  it("returns bare address unchanged aside from case", () => {
+    assert.equal(normalizeMailFrom("noreply@recruit.tiglobal.com.co"), "noreply@recruit.tiglobal.com.co");
+  });
+
+  it("returns empty for blank input", () => {
+    assert.equal(normalizeMailFrom("   "), "");
   });
 });
 
