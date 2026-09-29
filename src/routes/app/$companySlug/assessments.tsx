@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { DEFAULT_TEXT_RUBRIC, explainAuthorQuestion, gradingGuide } from "@/domain/rules";
-import { archiveAssessment, createAssessment, createQuestion, listAssessments, listQuestions, previewAssessment, publishAssessment, sendAssessmentToFits, updateAssessmentDelivery } from "@/server/talent.functions";
+import { archiveAssessment, assignAssessment, createAssessment, createQuestion, listAssessments, listQuestions, previewAssessment, publishAssessment, sendAssessmentToFits, updateAssessmentDelivery } from "@/server/talent.functions";
 import { ExamPreview, type AssessmentPreview } from "@/components/talent/exam-preview";
 import { examPaper } from "@/components/talent/exam-shell";
 import { Alert, Button, Empty, Field, inputClass, Loading, PageTitle, refreshPage, useAuthed } from "@/components/talent/kit";
@@ -44,6 +44,8 @@ function Assessments() {
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [bankFilter, setBankFilter] = useState<"all" | "bank" | "other">("all");
+  const [sendApplicationId, setSendApplicationId] = useState("");
+  const [sendAssessmentId, setSendAssessmentId] = useState("");
   const preview = useAuthed(
     () => previewAssessment({ data: { slug: companySlug, assessmentId: previewId ?? "" } }) as Promise<AssessmentPreview>,
     [companySlug, previewId],
@@ -53,6 +55,34 @@ function Assessments() {
   if (tests.loading || tests.isPending) return <Loading />;
 
   const choice = type === "single" || type === "multi";
+  const published = (tests.data ?? []).filter((test: { published?: unknown; archived?: unknown }) => test.archived !== true && Number(test.published) > 0);
+
+  async function sendOne(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setNote(null);
+    if (sendApplicationId.trim().length < 8 || !sendAssessmentId) {
+      setError("Paste an application id and choose a published assessment.");
+      return;
+    }
+    try {
+      const result = await assignAssessment({
+        data: {
+          slug: companySlug,
+          applicationId: sendApplicationId.trim(),
+          assessmentId: sendAssessmentId,
+          startBy: new Date(Date.now() + 14 * 86400000).toISOString(),
+          multiplierBasisPoints: 10000,
+          extraSeconds: 0,
+        },
+      });
+      setNote(`Sent. Assignment ${result.assignmentId}. The candidate can start within 14 days.`);
+      setSendApplicationId("");
+      refreshPage();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not send the assessment.");
+    }
+  }
 
   async function saveQuestion(event: FormEvent) {
     event.preventDefault();
@@ -172,6 +202,27 @@ function Assessments() {
           </li>
         ))}
       </ul>
+      <section className="mt-8 rounded-[24px] border border-line bg-white p-4 shadow-[0_8px_24px_rgba(20,34,27,0.04)]">
+        <h2 className="text-2xl">Send to one application</h2>
+        <p className="mt-1 text-sm text-muted">Paste an application id from Candidates. Only a published exam can be sent. The candidate can start any time in the next 14 days. Opening the notice does not start the timer.</p>
+        <form className="mt-3 grid gap-3 md:grid-cols-2" onSubmit={sendOne}>
+          <Field label="Application id">
+            <input className={inputClass} value={sendApplicationId} onChange={(event) => setSendApplicationId(event.target.value)} placeholder="Application id" />
+          </Field>
+          <Field label="Published assessment">
+            <select className={inputClass} value={sendAssessmentId} onChange={(event) => setSendAssessmentId(event.target.value)}>
+              <option value="">Choose</option>
+              {published.map((test: { id?: string; name?: string }) => (
+                <option key={String(test.id)} value={String(test.id)}>{String(test.name)}</option>
+              ))}
+            </select>
+          </Field>
+          {published.length === 0 ? <p className="text-sm text-muted md:col-span-2">Publish an assessment before sending it.</p> : null}
+          <div>
+            <Button type="submit" disabled={published.length === 0}>Send assessment</Button>
+          </div>
+        </form>
+      </section>
       <section className="mt-8">
         <h2 className="text-2xl">How questions are graded</h2>
         <p className="mt-1 text-sm text-muted">These are the only three graders. A section that still needs a person stays pending. Pending is not zero, and a failed scorer does not invent a zero.</p>

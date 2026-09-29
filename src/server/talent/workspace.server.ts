@@ -837,6 +837,38 @@ export async function bulkMove(
   };
 }
 
+function applicationLines(value: unknown): { id: string; title: string; lifecycle: string }[] {
+  let parsed: unknown = value;
+  if (typeof value === "string") {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return [];
+    }
+    if (typeof parsed === "string") {
+      try {
+        parsed = JSON.parse(parsed);
+      } catch {
+        return [];
+      }
+    }
+  }
+  if (!Array.isArray(parsed)) return [];
+  const lines: { id: string; title: string; lifecycle: string }[] = [];
+  for (const item of parsed) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as { id?: unknown; title?: unknown; lifecycle?: unknown };
+    const id = typeof row.id === "string" ? row.id : "";
+    if (id.length < 8) continue;
+    lines.push({
+      id,
+      title: typeof row.title === "string" ? row.title : "",
+      lifecycle: typeof row.lifecycle === "string" ? row.lifecycle : "",
+    });
+  }
+  return lines;
+}
+
 export async function listCandidates(
   userId: string,
   input: { slug: string; query?: string; source?: string; tag?: string; location?: string; education?: string; criteria?: string },
@@ -870,6 +902,7 @@ export async function listCandidates(
     indexed_text: string | null;
     answers_text: string | null;
     knockout: string | null;
+    application_lines: unknown;
   }>`
     select c.id, c.name, c.email, c.source,
       (select count(*) from applications a where a.candidate_id = c.id and a.company_id = c.company_id) as applications,
@@ -890,7 +923,13 @@ export async function listCandidates(
         select a.rejection_reason from applications a
         where a.candidate_id = c.id and a.company_id = c.company_id and a.rejection_reason like 'Knockout:%'
         order by a.submitted_at desc limit 1
-      ) as knockout
+      ) as knockout,
+      (
+        select coalesce(json_agg(json_build_object('id', a.id, 'title', j.title, 'lifecycle', a.lifecycle) order by a.submitted_at desc)::text, '[]')
+        from applications a
+        join jobs j on j.company_id = a.company_id and j.id = a.job_id
+        where a.candidate_id = c.id and a.company_id = c.company_id
+      ) as application_lines
     from candidates c
     left join lateral (
       select p.titles, p.skills, p.education, p.locations, p.history, p.years, p.indexed_text
@@ -916,7 +955,8 @@ export async function listCandidates(
   const education = (input.education ?? "").trim();
   const criteria = (input.criteria ?? "").trim();
   return rows.filter((row) => {
-    const haystack = `${row.name}\n${row.email}\n${row.indexed_text ?? ""}\n${row.answers_text ?? ""}`;
+    const lines = applicationLines(row.application_lines);
+    const haystack = `${row.name}\n${row.email}\n${row.indexed_text ?? ""}\n${row.answers_text ?? ""}\n${lines.map((line) => line.id).join(" ")}`;
     if (compiled && "match" in compiled && !compiled.match(haystack)) return false;
     if (location && !termPresent(`${stringList(row.locations).join(" ")} ${haystack}`, location)) return false;
     if (education && !termPresent(`${stringList(row.education).join(" ")} ${haystack}`, education)) return false;
@@ -937,6 +977,7 @@ export async function listCandidates(
     years: row.years == null ? null : Number(row.years),
     indexed: Boolean(row.indexed_text),
     knockout: row.knockout,
+    applicationsList: applicationLines(row.application_lines),
   }));
 }
 
@@ -1507,6 +1548,107 @@ export async function importCsv(userId: string, input: { slug: string; csv: stri
   }
   if (input.commit) await audit(actor, "import.csv", "company", actor.companyId, "Candidate import finished.");
   return { report, committed: input.commit };
+}
+
+export async function addCandidateManual(
+  userId: string,
+  input: { slug: string; name: string; email: string; jobId?: string },
+) {
+  assertSameSiteRequest();
+  const actor = await requireActor(userId, input.slug);
+  allow(actor, "candidate.export");
+  const name = input.name.trim().replace(/\s+/g, " ");
+  const rawEmail = input.email.trim();
+  const email = normalizeEmail(rawEmail);
+  if (name.length < 2) throw new Error("Write a name.");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("That email is not usable.");
+  const sql = await db();
+  const jobId = (input.jobId ?? "").trim();
+  let stageId = "";
+  let revisionId: string | null = null;
+  if (jobId) {
+    if (jobId.length < 8) throw new Error("That job was not found.");
+    const jobs = await sql<{ id: string; published_revision_id: string | null }>`
+      select id, published_revision_id from jobs
+      where company_id = ${actor.companyId} and id = ${jobId}
+    `;
+    if (!jobs[0]) throw new Error("That job was not found.");
+    revisionId = jobs[0].published_revision_id || null;
+    const stages = await sql<{ id: string }>`
+      select id from pipeline_stages
+      where company_id = ${actor.companyId} and job_id = ${jobId} and archived = false
+      order by position asc
+      limit 1
+    `;
+    if (!stages[0]) throw new Error("That job has no stage to place an application.");
+    stageId = stages[0].id;
+  }
+  await sql`
+    insert into candidates (id, company_id, name, email, email_normalized, source)
+    values (${nid()}, ${actor.companyId}, ${name}, ${rawEmail}, ${email}, 'MANUAL')
+    on conflict (company_id, email_normalized) do nothing
+  `;
+  const people = await sql<{ id: string }>`
+    select id from candidates where company_id = ${actor.companyId} and email_normalized = ${email}
+  `;
+  const candidateId = people[0]?.id;
+  if (!candidateId) throw new Error("The person could not be stored.");
+  let applicationId: string | null = null;
+  let alreadyActive = false;
+  if (jobId && stageId) {
+    const active = await sql<{ id: string }>`
+      select id from applications
+      where company_id = ${actor.companyId} and job_id = ${jobId}
+        and candidate_id = ${candidateId} and lifecycle = 'ACTIVE'
+    `;
+    if (active[0]) {
+      applicationId = active[0].id;
+      alreadyActive = true;
+    } else {
+      applicationId = nid();
+      try {
+        await sql`
+          insert into applications (
+            id, company_id, job_id, candidate_id, job_revision_id, current_stage_id, lifecycle, source
+          ) values (
+            ${applicationId}, ${actor.companyId}, ${jobId}, ${candidateId}, ${revisionId}, ${stageId}, 'ACTIVE', 'MANUAL'
+          )
+        `;
+        await sql`
+          insert into stage_events (id, company_id, application_id, to_stage_id, to_lifecycle, actor_user_id, reason)
+          values (${nid()}, ${actor.companyId}, ${applicationId}, ${stageId}, 'ACTIVE', ${actor.userId}, 'Added by a recruiter')
+        `;
+      } catch (error) {
+        const again = await sql<{ id: string }>`
+          select id from applications
+          where company_id = ${actor.companyId} and job_id = ${jobId}
+            and candidate_id = ${candidateId} and lifecycle = 'ACTIVE'
+        `;
+        if (!again[0]) mapDbError(error);
+        applicationId = again[0]!.id;
+        alreadyActive = true;
+      }
+      if (!alreadyActive && applicationId) {
+        try {
+          await rememberEvent(actor.companyId, "APPLICATION_SUBMITTED", applicationId, {
+            applicationId,
+            jobId,
+            source: "MANUAL",
+          });
+        } catch {
+          // The application is stored even if a workflow does not run.
+        }
+      }
+    }
+  }
+  await audit(
+    actor,
+    "candidate.manual",
+    "candidate",
+    candidateId,
+    applicationId ? `Manual application ${applicationId}` : "Manual candidate without an application.",
+  );
+  return { candidateId, applicationId, alreadyActive };
 }
 
 export async function saveView(userId: string, input: { slug: string; name: string; filters: { field: string; op: string; value: string }[] }) {

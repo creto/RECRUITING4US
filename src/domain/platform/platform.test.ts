@@ -5,7 +5,7 @@ import { calendarTokenForm, integrationHealth, interpretBoardResponse, interpret
 import { buildSlots, claimSlot, moveBooking, zonedTimeToUtc } from "./booking.ts";
 import { applyDocument, applyOpChain, canSeeNote } from "./collab.ts";
 import { boardStatus, canConvert, campaignAfterBounce, campaignAfterReply } from "./crm.ts";
-import { classifySandboxAddress, deliveryLabel, nextState, renderTokens, retryDelayMinutes, stripQuotedReply, webhookFresh } from "./delivery.ts";
+import { chooseMailApplication, classifySandboxAddress, deliveryLabel, nextState, renderTokens, retryDelayMinutes, stripQuotedReply, webhookFresh } from "./delivery.ts";
 import { crc32, extractOffice, sniffResume } from "./docx.ts";
 import { disposeCase, signalChangesScore, similarityOpensCase, similarityPercent } from "./integrity.ts";
 import { explainCutoff, invitesAfterRerank, normalizeStages, personalityCannotGate, rankCutoff, STANDARD_PLAN } from "./plans.ts";
@@ -31,6 +31,19 @@ describe("delivery", () => {
     assert.equal(stripQuotedReply("Thanks\n\nOn Monday Ada wrote:\n> old"), "Thanks");
     assert.equal(webhookFresh(1_700_000_000_000, 1_700_000_100), true);
     assert.equal(webhookFresh(1_700_000_000_000, 1_700_000_900), false);
+    const only = chooseMailApplication([{ id: "app-1", lifecycle: "ACTIVE", title: "Engineer", name: "Ada" }]);
+    assert.deepEqual(only, { id: "app-1" });
+    const oneActive = chooseMailApplication([
+      { id: "closed", lifecycle: "REJECTED", title: "Old", name: "Ada" },
+      { id: "open", lifecycle: "ACTIVE", title: "Engineer", name: "Ada" },
+    ]);
+    assert.deepEqual(oneActive, { id: "open" });
+    const many = chooseMailApplication([
+      { id: "a", lifecycle: "ACTIVE", title: "Engineer", name: "Ada" },
+      { id: "b", lifecycle: "ACTIVE", title: "Designer", name: "Ada" },
+    ]);
+    assert.equal("id" in many, false);
+    if ("error" in many) assert.match(many.error, /a · Engineer · Ada/);
   });
 });
 

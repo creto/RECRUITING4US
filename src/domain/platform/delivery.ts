@@ -125,3 +125,21 @@ export function webhookFresh(nowMs: number, timestampSec: number, skewSec = 300)
   if (!Number.isFinite(timestampSec)) return false;
   return Math.abs(nowMs / 1000 - timestampSec) <= skewSec;
 }
+
+export type MailApplicationHit = {
+  id: string;
+  lifecycle: string;
+  title: string;
+  name: string;
+};
+
+/** One clear application, or a list the recruiter can copy an id from. Never guess among several. */
+export function chooseMailApplication(rows: MailApplicationHit[]): { id: string } | { error: string } {
+  if (rows.length === 0) return { error: "No application matches that name." };
+  const active = rows.filter((row) => row.lifecycle === "ACTIVE");
+  const pool = active.length === 1 ? active : rows.length === 1 ? rows : active.length > 1 ? active : rows;
+  if (pool.length === 1) return { id: pool[0]!.id };
+  const shown = pool.slice(0, 8).map((row) => `${row.id} · ${row.title} · ${row.name}`).join("; ");
+  const more = pool.length > 8 ? ` (+${pool.length - 8} more)` : "";
+  return { error: `More than one application matches that name. Use an application id: ${shown}${more}` };
+}

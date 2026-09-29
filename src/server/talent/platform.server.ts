@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { assertSameSiteRequest } from "@/lib/auth/isolation.server";
 import { estimateComplexity } from "@/domain/judge";
 import { applyDocument, applyOpChain, canSeeNote, type Edit } from "@/domain/platform/collab";
-import { classifySandboxAddress, deliveryLabel, isTerminal, nextState, renderTokens, retryDelayMinutes, stripQuotedReply, webhookFresh, type DeliveryState } from "@/domain/platform/delivery";
+import { classifySandboxAddress, chooseMailApplication, deliveryLabel, isTerminal, nextState, renderTokens, retryDelayMinutes, stripQuotedReply, webhookFresh, type DeliveryState } from "@/domain/platform/delivery";
 import { extractOffice } from "@/domain/platform/docx";
 import { disposeCase, similarityOpensCase, similarityPercent, signalChangesScore } from "@/domain/platform/integrity";
 import { candidateCases, type Grade } from "@/domain/platform/score";
@@ -163,6 +163,11 @@ export async function listInbox(userId: string, slug: string) {
      from inbound_messages where company_id = $1 order by created_at desc limit 40`,
     [actor.companyId],
   );
+  const suppressions = await sql.query<Record<string, unknown>>(
+    `select email, reason, ${AT} as created_at
+     from mail_suppressions where company_id = $1 order by created_at desc limit 80`,
+    [actor.companyId],
+  );
   const config = smtpConfigFromEnv();
   return {
     note: mode.note,
@@ -174,6 +179,7 @@ export async function listInbox(userId: string, slug: string) {
       : "External delivery is blocked until MAIL_SMTP_HOST, MAIL_SMTP_PORT, and MAIL_FROM are set. Optional: MAIL_SMTP_USER, MAIL_SMTP_PASSWORD, MAIL_INBOUND_SECRET.",
     intents: intents.map((row) => ({ ...row, state_label: deliveryLabel(String(row.status ?? "")) })),
     inbound,
+    suppressions,
     secretConfigured: Boolean(process.env.MAIL_INBOUND_SECRET),
   };
 }
@@ -237,6 +243,47 @@ export async function queueMail(userId: string, slug: string, input: {
   }
 }
 
+export async function queueNamedMail(userId: string, slug: string, input: {
+  applicationId?: string;
+  candidateName?: string;
+  kind: string;
+  subject: string;
+  body: string;
+  cc: string;
+  bcc: string;
+  idempotencyKey: string;
+}) {
+  assertSameSiteRequest();
+  const actor = await requireActor(userId, slug);
+  allow(actor, "application.note");
+  const applicationId = (input.applicationId ?? "").trim();
+  const name = (input.candidateName ?? "").trim();
+  if (applicationId.length >= 8) {
+    const sql = await db();
+    const hit = await sql<{ id: string }>`
+      select id from applications where company_id = ${actor.companyId} and id = ${applicationId}
+    `;
+    if (!hit[0]) throw new Error("No application matches that id.");
+    return queueMail(userId, slug, { ...input, applicationId: hit[0].id });
+  }
+  if (name.length < 2) throw new Error("Give an application id or a candidate name.");
+  const sql = await db();
+  const key = name.toLowerCase().replace(/\s+/g, " ");
+  const rows = await sql<{ id: string; lifecycle: string; title: string; name: string }>`
+    select a.id, a.lifecycle, j.title, c.name
+    from applications a
+    join candidates c on c.company_id = a.company_id and c.id = a.candidate_id
+    join jobs j on j.company_id = a.company_id and j.id = a.job_id
+    where a.company_id = ${actor.companyId}
+      and lower(regexp_replace(trim(c.name), '\\s+', ' ', 'g')) = ${key}
+    order by a.submitted_at desc
+    limit 30
+  `;
+  const chosen = chooseMailApplication(rows);
+  if ("error" in chosen) throw new Error(chosen.error);
+  return queueMail(userId, slug, { ...input, applicationId: chosen.id });
+}
+
 export async function queueProspectMail(userId: string, slug: string, input: {
   email: string;
   name: string;
@@ -292,6 +339,22 @@ export async function suppressAddress(userId: string, slug: string, email: strin
     on conflict (company_id, email) do update set reason = excluded.reason
   `;
   await audit(actor, "mail.suppress", "suppression", normalized, reason.slice(0, 200));
+  return { email: normalized };
+}
+
+export async function unsuppressAddress(userId: string, slug: string, email: string) {
+  assertSameSiteRequest();
+  const actor = await requireActor(userId, slug);
+  allow(actor, "application.note");
+  const sql = await db();
+  const normalized = normalizeEmail(email);
+  const removed = await sql<{ email: string }>`
+    delete from mail_suppressions
+    where company_id = ${actor.companyId} and email = ${normalized}
+    returning email
+  `;
+  if (!removed[0]) throw new Error("That address is not suppressed.");
+  await audit(actor, "mail.unsuppress", "suppression", normalized, "Suppression removed.");
   return { email: normalized };
 }
 

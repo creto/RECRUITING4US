@@ -307,6 +307,19 @@ export const importCsv = createServerFn({ method: "POST" })
     return api.importCsv(userId, data);
   });
 
+export const addCandidateManual = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    slug: Slug,
+    name: z.string().trim().min(2).max(120),
+    email: z.string().trim().max(200),
+    jobId: z.string().max(80).optional(),
+  }))
+  .handler(async ({ context, data }) => {
+    const api = await import("./talent/workspace.server");
+    return api.addCandidateManual(context.userId, data);
+  });
+
 export const listPublicJobs = createServerFn({ method: "POST" })
   .validator(z.object({
     companySlug: Slug,
@@ -1102,8 +1115,9 @@ export const saveSandbox = createServerFn({ method: "POST" }).middleware([authMi
 export const attachSandbox = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ slug: Slug, assessmentId: z.string().max(80), sandboxId: z.string().max(80) })).handler(async ({ context, data }) => (await import("./talent/ops.server")).attachSandbox(context.userId, data));
 
 export const listInbox = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ slug: Slug })).handler(async ({ context, data }) => (await import("./talent/platform.server")).listInbox(context.userId, data.slug) as any);
-export const queuePlatformMail = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ slug: Slug, applicationId: z.string().min(8).max(80), kind: z.string().max(40), subject: z.string().max(200), body: z.string().max(8000), cc: z.string().max(500).optional(), bcc: z.string().max(500).optional(), idempotencyKey: z.string().min(8).max(80) })).handler(async ({ context, data }) => (await import("./talent/platform.server")).queueMail(context.userId, data.slug, { ...data, cc: data.cc ?? "", bcc: data.bcc ?? "" }) as any);
+export const queuePlatformMail = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ slug: Slug, applicationId: z.string().max(80).optional(), candidateName: z.string().max(120).optional(), kind: z.string().max(40), subject: z.string().max(200), body: z.string().max(8000), cc: z.string().max(500).optional(), bcc: z.string().max(500).optional(), idempotencyKey: z.string().min(8).max(80) })).handler(async ({ context, data }) => (await import("./talent/platform.server")).queueNamedMail(context.userId, data.slug, { ...data, cc: data.cc ?? "", bcc: data.bcc ?? "" }) as any);
 export const suppressAddress = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ slug: Slug, email: z.string().max(200), reason: z.string().max(200) })).handler(async ({ context, data }) => (await import("./talent/platform.server")).suppressAddress(context.userId, data.slug, data.email, data.reason) as any);
+export const unsuppressAddress = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ slug: Slug, email: z.string().max(200) })).handler(async ({ context, data }) => (await import("./talent/platform.server")).unsuppressAddress(context.userId, data.slug, data.email) as any);
 export const listCodingQuestions = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ slug: Slug })).handler(async ({ context, data }) => (await import("./talent/platform.server")).listQuestions(context.userId, data.slug) as any);
 export const importQuestionCatalog = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ slug: Slug })).handler(async ({ context, data }) => (await import("./talent/platform.server")).importQuestionCatalog(context.userId, data.slug) as any);
 export const inviteToCode = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ slug: Slug, applicationId: z.string().min(8).max(80), questionId: z.string().min(8).max(80) })).handler(async ({ context, data }) => (await import("./talent/platform.server")).inviteToCode(context.userId, data.slug, data.applicationId, data.questionId) as any);
