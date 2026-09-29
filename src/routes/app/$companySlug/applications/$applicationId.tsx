@@ -471,7 +471,7 @@ function Workbench({ slug, applicationId, onError }: { slug: string; application
         <Button type="button" onClick={() => openLive({ data: { slug, applicationId, title: "Technical interview", prompt: "Write solve() and talk through it." } }).then((row) => setRoom(row.token)).catch((err: Error) => onError(err.message))}>Open live room</Button>
         <Button type="button" variant="secondary" onClick={() => openHire({ data: { slug, applicationId, note: "Opened from the application", location: "", roleTitle: "" } }).then(() => onError("Onboarding opened, or it was already there.")).catch((err: Error) => onError(err.message))}>Open onboarding</Button>
       </div>
-      {room ? <p>Live room token {room}. The meeting link, if you add one later, is an outside call.</p> : null}
+      {room ? <p>Live pad is open. <a className="text-link" href={`/live/${room}`}>Watch it live</a>. Share that page with the candidate. You see their typing, how many screens are connected, tab changes, and copied or pasted text. The meeting link, if you add one later, is an outside call.</p> : null}
       <form className="flex flex-wrap gap-2" onSubmit={(event) => {
         event.preventDefault();
         const questionId = String(new FormData(event.currentTarget).get("questionId") ?? "");

@@ -1141,6 +1141,11 @@ export const runCode = createServerFn({ method: "POST" }).middleware([authMiddle
 export const listCodeResults = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ slug: Slug, applicationId: z.string().min(8).max(80) })).handler(async ({ context, data }) => (await import("./talent/platform.server")).listCodeResults(context.userId, data.slug, data.applicationId) as any);
 export const openLive = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ slug: Slug, applicationId: z.string().min(8).max(80), title: z.string().max(120), prompt: z.string().max(8000), meetingUrl: z.string().max(300).optional() })).handler(async ({ context, data }) => (await import("./talent/platform.server")).openLive(context.userId, data.slug, data.applicationId, data.title, data.prompt, data.meetingUrl ?? "") as any);
 export const readLive = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ token: z.string().uuid() })).handler(async ({ context, data }) => (await import("./talent/platform.server")).readLive(context.userId, data.token) as any);
+export const noteLiveSignal = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
+  token: z.string().uuid(),
+  kind: z.enum(["SCREENS", "LEFT_APP", "RETURNED", "LEFT_WINDOW", "COPY", "PASTE"]),
+  detail: z.string().max(240),
+})).handler(async ({ context, data }) => (await import("./talent/platform.server")).noteLiveSignal(context.userId, data.token, data.kind, data.detail));
 export const rejudgeSubmission = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ slug: Slug, submissionId: z.string().min(8).max(80) })).handler(async ({ context, data }) => (await import("./talent/platform.server")).rejudgeSubmission(context.userId, data.slug, data.submissionId) as any);
 export const syncLive = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
   token: z.string().uuid(),

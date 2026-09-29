@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { assertSameSiteRequest } from "@/lib/auth/isolation.server";
 import { estimateComplexity } from "@/domain/judge";
+import { describeLiveSignal, liveSignalKind } from "@/domain/live-watch";
 import { applyDocument, applyOpChain, canSeeNote, type Edit } from "@/domain/platform/collab";
 import { classifySandboxAddress, chooseMailApplication, deliveryLabel, isTerminal, nextState, renderTokens, retryDelayMinutes, stripQuotedReply, webhookFresh, brandHtml, brandPlain, type DeliveryState, type MailBrand } from "@/domain/platform/delivery";
 import { htmlToPlain, looksLikeHtml, prepareMailBody } from "@/domain/mail-html";
@@ -870,6 +871,15 @@ export async function readLive(userId: string, token: string) {
     where company_id = ${who.companyId} and session_id = ${who.sessionId}
     order by created_at limit 200
   `;
+  const signals = who.role === "INTERVIEWER"
+    ? await sql<{ kind: string; detail: string; at: string }>`
+        select kind, detail, to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as at
+        from live_signals
+        where company_id = ${who.companyId} and session_id = ${who.sessionId}
+        order by created_at desc
+        limit 40
+      `
+    : [];
   return {
     role: who.role,
     title: session.title,
@@ -888,7 +898,30 @@ export async function readLive(userId: string, token: string) {
     boardRevision: session.board_revision,
     people,
     chat: chat.filter((line) => canSeeNote(who.role, line.private_note)),
+    signals: signals.map((row) => ({ kind: row.kind, label: describeLiveSignal(row.kind, row.detail), at: row.at })),
   };
+}
+
+export async function noteLiveSignal(userId: string, token: string, kind: string, detail: string) {
+  assertSameSiteRequest();
+  const who = await liveRole(userId, token);
+  const allowed = liveSignalKind(kind);
+  if (!allowed || who.role !== "CANDIDATE") return { stored: false };
+  const text = detail.replace(/\s+/g, " ").trim().slice(0, 240);
+  const sql = await db();
+  const recent = await sql<{ id: string }>`
+    select id from live_signals
+    where company_id = ${who.companyId} and session_id = ${who.sessionId}
+      and kind = ${allowed} and detail = ${text}
+      and created_at > now() - interval '3 seconds'
+    limit 1
+  `;
+  if (recent[0]) return { stored: false };
+  await sql`
+    insert into live_signals (id, company_id, session_id, author, kind, detail)
+    values (${nid()}, ${who.companyId}, ${who.sessionId}, ${who.name}, ${allowed}, ${text})
+  `;
+  return { stored: true };
 }
 
 export async function syncLive(userId: string, token: string, input: {
