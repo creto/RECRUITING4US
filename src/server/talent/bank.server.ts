@@ -65,6 +65,8 @@ type PreviewQuestion = {
 export async function previewAssessment(userId: string, input: { slug: string; assessmentId: string }) {
   const actor = await requireActor(userId, input.slug);
   await ensureCodingBank(actor.companyId);
+  const { ensureReadCodeBank } = await import("./read-code.server");
+  await ensureReadCodeBank(actor.companyId);
   const { ensurePersonalityAssessment } = await import("./personality.server");
   await ensurePersonalityAssessment(actor.companyId);
   const { ensureMentalMath } = await import("./mental.server");

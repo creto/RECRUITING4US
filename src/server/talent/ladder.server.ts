@@ -34,6 +34,8 @@ export async function ensureLadder(companyId: string, jobId: string) {
   const { ensurePersonalityAssessment } = await import("./personality.server");
   const { ensureMentalMath } = await import("./mental.server");
   await ensureCodingBank(companyId);
+  const { ensureReadCodeBank } = await import("./read-code.server");
+  await ensureReadCodeBank(companyId);
   await ensurePersonalityAssessment(companyId);
   await ensureMentalMath(companyId);
   await ensureStages(companyId, jobId);

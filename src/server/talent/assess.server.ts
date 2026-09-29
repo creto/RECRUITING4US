@@ -35,6 +35,7 @@ import { proctorKind } from "@/domain/proctor";
 import { enterTenant } from "@/lib/tenant";
 import { allow, audit, canonical, db, dbNow, json, mapDbError, nid, requireActor, requireUser, sha256, withTransaction } from "./db.server";
 import { ensureCodingBank, flag } from "./bank.server";
+import { ensureReadCodeBank } from "./read-code.server";
 import { candidateItem, answerComplete, coerceAnswer, orderedOptions } from "@/domain/candidate-view";
 import { readPersonality, scorePersonality, type PersonalityResult } from "@/domain/personality";
 import { ensureReview, rememberEvent } from "./workflows.server";
@@ -44,6 +45,7 @@ const HUMAN_TYPES = new Set(["text", "code", "file", "sql", "spreadsheet", "reco
 export async function listAssessments(userId: string, slug: string) {
   const actor = await requireActor(userId, slug);
   await ensureCodingBank(actor.companyId);
+  await ensureReadCodeBank(actor.companyId);
   const { ensurePersonalityAssessment } = await import("./personality.server");
   await ensurePersonalityAssessment(actor.companyId);
   const { ensureMentalMath } = await import("./mental.server");
@@ -113,6 +115,7 @@ export async function listQuestions(userId: string, slug: string) {
   const actor = await requireActor(userId, slug);
   allow(actor, "assessment.author");
   await ensureCodingBank(actor.companyId);
+  await ensureReadCodeBank(actor.companyId);
   const sql = await db();
   const rows = await sql<{
     id: string;

@@ -43,7 +43,7 @@ function Assessments() {
   const [autoSend, setAutoSend] = useState(true);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
-  const [bankFilter, setBankFilter] = useState<"all" | "bank" | "other">("all");
+  const [bankFilter, setBankFilter] = useState<"all" | "bank" | "read" | "other">("all");
   const [sendApplicationId, setSendApplicationId] = useState("");
   const [sendAssessmentId, setSendAssessmentId] = useState("");
   const preview = useAuthed(
@@ -240,21 +240,24 @@ function Assessments() {
           })}
         </div>
         <h2 className="mt-8 text-2xl">Question bank</h2>
-        <p className="mt-1 text-sm text-muted">The coding bank is 50 original problems, 25 medium and 25 hard. A timed exam draws one of each. They are not copied from LeetCode or any other site.</p>
+        <p className="mt-1 text-sm text-muted">The coding bank is 50 original write-code problems. The read-code bank is 500 original multiple-choice snippets. Neither set is copied from LeetCode, HackerRank, or another proprietary bank.</p>
         {questions.loading ? <Loading /> : null}
         {questions.error ? <p className="text-sm text-muted">Question authoring is limited to assessment authors. {questions.error}</p> : null}
         <div className="mt-3 flex flex-wrap gap-2">
-          {(["all", "bank", "other"] as const).map((value) => (
+          {(["all", "bank", "read", "other"] as const).map((value) => (
             <Button key={value} type="button" variant={bankFilter === value ? "secondary" : "ghost"} onClick={() => setBankFilter(value)}>
-              {value === "all" ? "All" : value === "bank" ? "Coding bank" : "Other questions"}
+              {value === "all" ? "All" : value === "bank" ? "Coding bank" : value === "read" ? "Read-code bank" : "Other questions"}
             </Button>
           ))}
         </div>
         <ul className="mt-3 space-y-2">
           {(questions.data ?? []).filter((question: any) => {
-            const tagged = String(question.tags).startsWith("coding-bank");
-            if (bankFilter === "bank") return tagged;
-            if (bankFilter === "other") return !tagged;
+            const tags = String(question.tags);
+            const coding = tags.startsWith("coding-bank");
+            const reading = tags.startsWith("read-code");
+            if (bankFilter === "bank") return coding;
+            if (bankFilter === "read") return reading;
+            if (bankFilter === "other") return !coding && !reading;
             return true;
           }).map((question: any) => (
             <li key={String(question.version_id)} className={`${examPaper} rounded-[24px] border border-[#d7e1da] p-4 text-sm`}>
