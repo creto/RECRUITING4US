@@ -46,4 +46,4 @@ Pushes use one idempotency key per application. Without the token, the handoff i
 
 ## Code judge
 
-JavaScript runs as `unshare --user --map-root-user --net --mount --pid --fork --mount-proc`, then Node `--permission` with a 64 MB heap. Before the program starts, tmpfs covers `/workspace`, `/home`, `/root`, `/etc`, and `/tmp`. The parent passes only `PATH`. A missing `unshare` refuses the run. This is not a hypervisor. Supported language: JavaScript. Python is not executed. Infrastructure failure is not a score of zero.
+JavaScript runs as `unshare --user --map-root-user --net --mount --pid --fork --mount-proc`, then Node `--permission` with a 64 MB heap. Before the program starts, tmpfs covers `/workspace`, `/home`, `/root`, `/etc`, and `/tmp`. The parent passes only `PATH`. A missing `unshare`, or a host that refuses a user namespace, does not run the source. The attempt is `REFUSED`, not a score of zero. GitHub-hosted runners are in that second group, so the product suite skips the jail cases there and still checks the refusal. This is not a hypervisor. Supported language: JavaScript. Python is not executed. Infrastructure failure is not a score of zero.

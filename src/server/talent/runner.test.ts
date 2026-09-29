@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { answersMatch, dedupeCases } from "../../domain/judge.ts";
-import { judgeIsolated, runIsolated } from "./runner.server.ts";
+import { isolateAvailable, judgeIsolated, runIsolated } from "./runner.server.ts";
 
 const reference = `
 function dedupe(events, windowMs) {
@@ -25,7 +25,20 @@ dedupe([
 `;
 
 describe("isolated runner", () => {
-  it("runs a reference solution outside the application process", async () => {
+  const jail = isolateAvailable();
+  const skipWithoutJail = jail ? false : "unshare cannot start a jail on this host";
+
+  it("does not execute source when the jail cannot start", { skip: jail ? "the jail is available, so execution is covered below" : false }, async () => {
+    const result = await runIsolated("console.log('ran')");
+    assert.equal(result.status, "REFUSED");
+    assert.equal(result.available, false);
+    assert.equal(result.outputExcerpt, "");
+    const judged = await judgeIsolated("function solve(){ return 1 }", "solve", [[]]);
+    assert.equal(judged.status, "REFUSED");
+    assert.equal(judged.results.length, 0);
+  });
+
+  it("runs a reference solution outside the application process", { skip: skipWithoutJail }, async () => {
     const result = await runIsolated(reference);
     assert.equal(result.available, true);
     assert.equal(result.timedOut, false);
@@ -33,7 +46,7 @@ describe("isolated runner", () => {
     assert.match(result.outputExcerpt, /\[0,6,11\]/);
   });
 
-  it("does not let the program read the filesystem, open a socket, spawn, or see secrets", async () => {
+  it("does not let the program read the filesystem, open a socket, spawn, or see secrets", { skip: skipWithoutJail }, async () => {
     const result = await runIsolated(`require("fs").readFileSync("/etc/passwd","utf8")`);
     assert.equal(result.status, "FAILED");
     assert.doesNotMatch(result.outputExcerpt, /root:/);
@@ -47,7 +60,7 @@ describe("isolated runner", () => {
     assert.match(secret.outputExcerpt, /hidden/);
   });
 
-  it("stops a runaway program and truncates huge output", { timeout: 10000 }, async () => {
+  it("stops a runaway program and truncates huge output", { timeout: 10000, skip: skipWithoutJail }, async () => {
     const hung = await runIsolated("while (true) {}");
     assert.equal(hung.status, "TIMED_OUT");
     assert.equal(hung.timedOut, true);
@@ -58,7 +71,7 @@ describe("isolated runner", () => {
     assert.ok(noisy.outputExcerpt.length <= 4000);
   });
 
-  it("checks a reference solution against an edge and a random window", async () => {
+  it("checks a reference solution against an edge and a random window", { skip: skipWithoutJail }, async () => {
     const edge = await runIsolated(`
       function dedupe(events, windowMs) {
         const last = new Map();
@@ -107,7 +120,7 @@ describe("isolated runner", () => {
     assert.match(random.outputExcerpt, new RegExp(JSON.stringify(expected).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   });
 
-  it("judges a correct dedupe above a wrong one without eval in this process", async () => {
+  it("judges a correct dedupe above a wrong one without eval in this process", { skip: skipWithoutJail }, async () => {
     const cases = dedupeCases();
     const good = await judgeIsolated(`
       function deduplicateEvents(events, windowMs) {
@@ -131,7 +144,7 @@ describe("isolated runner", () => {
     assert.equal(JSON.stringify(good).includes("HIDDEN_SENTINEL"), false);
   });
 
-  it("keeps compile failures, memory pressure, and host files out of a score", async () => {
+  it("keeps compile failures, memory pressure, and host files out of a score", { skip: skipWithoutJail }, async () => {
     const previous = process.env.MAIL_SMTP_PASSWORD;
     process.env.MAIL_SMTP_PASSWORD = "super-secret-mail";
     const leaked = await runIsolated("console.log(process.env.MAIL_SMTP_PASSWORD || 'hidden')");
