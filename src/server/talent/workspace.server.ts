@@ -1797,14 +1797,14 @@ export async function submitApplication(input: ApplyInput) {
   if (!job || job.status !== "PUBLISHED" || !job.stage_id) {
     throw new Error("This job is not accepting applications.");
   }
-  const email = normalizeEmail(input.email);
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid email address.");
   let sessionEmail: string | null = null;
   if (input.sessionUserId) {
     const user = await requireUser(input.sessionUserId);
     sessionEmail = user.emailNormalized;
-    if (sessionEmail !== email) throw new Error("Apply with the email on your account.");
   }
+  // Signed-in applies always use the account email (form field is locked in the UI).
+  const email = normalizeEmail(sessionEmail ?? input.email);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid email address.");
   const recent = await sql<{ n: number }>`
     select count(*) as n from applications a
     join candidates c on c.id = a.candidate_id
