@@ -13,7 +13,7 @@ export function flag(value: unknown): boolean {
   return value === true || value === "t" || value === "true";
 }
 
-/** Idempotent. Publishes the original 50-problem coding bank for human review. */
+/** Idempotent. Publishes the 500-problem coding bank and a pooled write-code assessment. */
 export async function ensureCodingBank(companyId: string) {
   const sql = await db();
   for (const item of CODING_BANK) {
@@ -28,7 +28,7 @@ export async function ensureCodingBank(companyId: string) {
     `;
     const questionId = found[0]?.id;
     if (!questionId) continue;
-    const points = item.difficulty === "hard" ? 3 : 2;
+    const points = item.difficulty === "hard" ? 3 : item.difficulty === "medium" ? 2 : 1;
     await sql`
       insert into question_versions (
         id, company_id, question_id, version_number, prompt, payload, key_payload, rubric, points
@@ -51,6 +51,95 @@ export async function ensureCodingBank(companyId: string) {
       and q.logical_key like 'bank:%'
       and coalesce(v.payload->>'judged', '') <> 'false'
   `;
+  await ensureCodingExam(companyId);
+}
+
+const CODING_EXAM_NAME = "Assessment · Coding problems";
+const CODING_EXAM_DESCRIPTION =
+  "Five hundred original write-code problems. A timed paper draws two easy, two medium, and one hard problem. Answers are stored for a person to grade. These prompts were written for this bank.";
+const CODING_EXAM_INSTRUCTIONS =
+  "Ninety minutes. Two easy problems, two medium problems, and one hard problem are drawn from the bank and stay fixed for this attempt. They are not auto-judged. A person scores them.";
+
+async function ensureCodingExam(companyId: string) {
+  const sql = await db();
+  const assessmentId = bankId(companyId, "assessment");
+  const versionId = bankId(companyId, "version");
+  const sections = [
+    { key: "easy", title: "Easy", pick: 2, points: 1, weight: 2000 },
+    { key: "medium", title: "Medium", pick: 2, points: 2, weight: 4000 },
+    { key: "hard", title: "Hard", pick: 1, points: 3, weight: 4000 },
+  ] as const;
+  await sql`
+    insert into assessments (id, company_id, name, description, auto_send)
+    values (${assessmentId}, ${companyId}, ${CODING_EXAM_NAME}, ${CODING_EXAM_DESCRIPTION}, false)
+    on conflict (id) do nothing
+  `;
+  await sql`
+    update assessments set name = ${CODING_EXAM_NAME}, description = ${CODING_EXAM_DESCRIPTION}
+    where id = ${assessmentId} and company_id = ${companyId}
+  `;
+  await sql`
+    insert into assessment_versions (
+      id, company_id, assessment_id, version_number, status, duration_seconds,
+      instructions, score_release, published_at, content_hash, proctored
+    ) values (
+      ${versionId}, ${companyId}, ${assessmentId}, 1, 'PUBLISHED', ${90 * 60},
+      ${CODING_EXAM_INSTRUCTIONS}, 'AGGREGATE', now(), 'coding-500', false
+    )
+    on conflict (id) do nothing
+  `;
+  await sql`
+    update assessment_versions
+    set instructions = ${CODING_EXAM_INSTRUCTIONS}, duration_seconds = ${90 * 60}, content_hash = 'coding-500'
+    where id = ${versionId} and company_id = ${companyId}
+  `;
+  for (let index = 0; index < sections.length; index += 1) {
+    const section = sections[index]!;
+    const sectionId = bankId(companyId, `section:${section.key}`);
+    await sql`
+      insert into assessment_sections (
+        id, company_id, version_id, title, position, weight_basis_points, pool_pick, instructions
+      ) values (
+        ${sectionId}, ${companyId}, ${versionId}, ${section.title}, ${index}, ${section.weight}, ${section.pick},
+        ${"Items in this section are drawn once and stay fixed for the attempt."}
+      )
+      on conflict (id) do nothing
+    `;
+    await sql`
+      update assessment_sections
+      set title = ${section.title}, pool_pick = ${section.pick}, weight_basis_points = ${section.weight}, position = ${index}
+      where id = ${sectionId} and company_id = ${companyId}
+    `;
+    const questions = await sql<{ id: string; logical_key: string }>`
+      select v.id, q.logical_key
+      from questions q
+      join question_versions v on v.question_id = q.id and v.company_id = q.company_id and v.version_number = 1
+      where q.company_id = ${companyId} and q.logical_key like 'bank:%'
+        and v.payload->>'difficulty' = ${section.key}
+      order by q.logical_key
+    `;
+    const have = await sql<{ n: number }>`
+      select count(*) as n from assessment_items
+      where company_id = ${companyId} and section_id = ${sectionId}
+    `;
+    if (Number(have[0]?.n ?? 0) !== questions.length) {
+      await sql`
+        delete from assessment_items
+        where company_id = ${companyId} and section_id = ${sectionId}
+      `;
+    }
+    for (let position = 0; position < questions.length; position += 1) {
+      const question = questions[position]!;
+      await sql`
+        insert into assessment_items (id, company_id, section_id, question_version_id, points, position)
+        values (
+          ${bankId(companyId, `item:${section.key}:${question.logical_key}`)},
+          ${companyId}, ${sectionId}, ${question.id}, ${section.points}, ${position}
+        )
+        on conflict (id) do nothing
+      `;
+    }
+  }
 }
 
 type PreviewQuestion = {

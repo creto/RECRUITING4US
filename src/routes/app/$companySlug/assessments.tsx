@@ -160,7 +160,7 @@ function Assessments() {
 
   return (
     <div>
-      <PageTitle title="Assessments" lede="Open Preview to take the paper with its time limit. Automatic send assigns a published exam when a CV is a fit. The coding bank is 50 original medium and hard problems, not items copied from another site. Code is stored for a person to grade." />
+      <PageTitle title="Assessments" lede="Open Preview to take the paper with its time limit. Automatic send assigns a published exam when a CV is a fit. The coding bank is 500 original write-code problems across easy, medium, and hard. They are not items copied from another site. Code is stored for a person to grade." />
       {tests.error ? <Alert>{tests.error}</Alert> : null}
       {note ? <p className="mb-3 text-sm text-ok">{note}</p> : null}
       {previewId ? (
@@ -264,7 +264,7 @@ function Assessments() {
           })}
         </div>
         <h2 className="mt-8 text-2xl">Question bank</h2>
-        <p className="mt-1 text-sm text-muted">The coding bank is 50 original write-code problems. The read-code bank is 500 original multiple-choice snippets. Neither set is copied from LeetCode, HackerRank, or another proprietary bank.</p>
+        <p className="mt-1 text-sm text-muted">The coding bank is 500 original write-code problems, easy, medium, and hard. The read-code bank is 500 original multiple-choice snippets. Neither set is copied from LeetCode, HackerRank, or another proprietary bank.</p>
         {questions.loading ? <Loading /> : null}
         {questions.error ? <p className="text-sm text-muted">Question authoring is limited to assessment authors. {questions.error}</p> : null}
         <div className="mt-3 flex flex-wrap gap-2">

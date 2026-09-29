@@ -140,19 +140,30 @@ async function ensurePaper(
       values (${sectionId}, ${companyId}, ${versionId}, ${section.title}, ${index}, ${section.weight}, ${section.pick})
       on conflict (id) do nothing
     `;
-    const items = await sql<{ id: string }>`
-      select v.id from questions q
+    const items = await sql<{ id: string; logical_key: string }>`
+      select v.id, q.logical_key from questions q
       join question_versions v on v.question_id = q.id and v.company_id = q.company_id
       where q.company_id = ${companyId} and q.logical_key like 'bank:%'
         and v.payload->>'difficulty' = ${section.key}
       order by q.logical_key
     `;
+    const have = await sql<{ n: number }>`
+      select count(*) as n from assessment_items
+      where company_id = ${companyId} and section_id = ${sectionId}
+    `;
+    if (Number(have[0]?.n ?? 0) !== items.length) {
+      await sql`
+        delete from assessment_items
+        where company_id = ${companyId} and section_id = ${sectionId}
+      `;
+    }
     for (let position = 0; position < items.length; position += 1) {
+      const item = items[position]!;
       await sql`
         insert into assessment_items (id, company_id, section_id, question_version_id, points, position)
         values (
-          ${ladderId(companyId, `${key}-item-${section.key}-${position}`)},
-          ${companyId}, ${sectionId}, ${items[position]!.id}, ${section.points}, ${position}
+          ${ladderId(companyId, `${key}-item-${section.key}-${item.logical_key}`)},
+          ${companyId}, ${sectionId}, ${item.id}, ${section.points}, ${position}
         )
         on conflict (id) do nothing
       `;

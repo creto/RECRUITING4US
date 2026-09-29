@@ -1,4 +1,5 @@
-export type CodingDifficulty = "medium" | "hard";
+import { CODING_EXTRA } from "./coding-bank-extra.ts";
+export type CodingDifficulty = "easy" | "medium" | "hard";
 
 export type CodingProblem = {
   key: string;
@@ -32,7 +33,7 @@ Use the language of the editor. A correct result for the stated rules is what a 
   };
 }
 
-/** Original medium and hard coding prompts. Not copied from a public problem set. */
+/** Original easy, medium, and hard coding prompts. Not copied from a public problem set. */
 export const CODING_BANK: readonly CodingProblem[] = [
   problem("warehouse-pair", "medium", "Crate pair", "cratePair(weights: number[], capacity: number): [number, number] | null",
     "Return the indexes of two different crates whose weights add up to capacity. If several pairs work, return the one with the smaller first index, then the smaller second index. Return null when none exist.",
@@ -185,4 +186,5 @@ export const CODING_BANK: readonly CodingProblem[] = [
   problem("skyline", "hard", "Skyline", "skyline(buildings: [number, number, number][]): [number, number][]",
     "Each building is [left, right, height], with left < right. Return the skyline as [x, height] points where the running height changes, from left to right.",
     "skyline([[2, 9, 10], [3, 7, 15], [5, 12, 12]]) returns [[2, 10], [3, 15], [7, 12], [12, 0]]."),
+  ...CODING_EXTRA,
 ];
