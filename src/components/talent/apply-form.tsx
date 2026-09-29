@@ -28,12 +28,9 @@ export function ApplyForm({
   const [done, setDone] = useState<{ title: string; lines: string[] } | null>(null);
 
   useEffect(() => {
-    if (user?.primaryEmail) setEmail(user.primaryEmail);
+    if (user?.primaryEmail) setEmail((current) => current || user.primaryEmail || "");
     if (user?.displayName) setName((current) => current || user.displayName || "");
   }, [user]);
-
-  const accountEmail = user?.primaryEmail?.trim() || "";
-  const submitEmail = accountEmail || email;
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -46,10 +43,10 @@ export function ApplyForm({
     try {
       const result = user
         ? await submitApplicationAuthed({
-            data: { companySlug, jobSlug, name, email: submitEmail, phone, answers, idempotencyKey: crypto.randomUUID(), resume, source },
+            data: { companySlug, jobSlug, name, email, phone, answers, idempotencyKey: crypto.randomUUID(), resume, source },
           })
         : await submitApplicationPublic({
-            data: { companySlug, jobSlug, name, email: submitEmail, phone, answers, idempotencyKey: crypto.randomUUID(), resume, source },
+            data: { companySlug, jobSlug, name, email, phone, answers, idempotencyKey: crypto.randomUUID(), resume, source },
           });
       setDone(applicantNotice({
         alreadyApplied: result.alreadyApplied,
@@ -76,25 +73,7 @@ export function ApplyForm({
     <form className="space-y-3 rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4" onSubmit={submit}>
       <h2 className="text-2xl">Apply</h2>
       <Field label="Name"><input className={inputClass} value={name} onChange={(event) => setName(event.target.value)} required autoComplete="name" /></Field>
-      <Field label="Email">
-        <input
-          className={inputClass}
-          type="email"
-          value={accountEmail || email}
-          onChange={(event) => {
-            if (!accountEmail) setEmail(event.target.value);
-          }}
-          required
-          autoComplete="email"
-          readOnly={Boolean(accountEmail)}
-          aria-readonly={Boolean(accountEmail)}
-        />
-        {accountEmail ? (
-          <span className="mt-1 block text-xs text-muted">
-            Signed in as {accountEmail}. Applications use this address. Sign out to apply with a different email.
-          </span>
-        ) : null}
-      </Field>
+      <Field label="Email"><input className={inputClass} type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" /></Field>
       <Field label="Phone (optional)"><input className={inputClass} value={phone} onChange={(event) => setPhone(event.target.value)} autoComplete="tel" /></Field>
       {fields.map((field) => (
         <Field key={field.id} label={field.required ? `${field.label} (required)` : field.label}>

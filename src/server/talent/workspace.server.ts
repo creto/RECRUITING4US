@@ -1802,8 +1802,8 @@ export async function submitApplication(input: ApplyInput) {
     const user = await requireUser(input.sessionUserId);
     sessionEmail = user.emailNormalized;
   }
-  // Signed-in applies always use the account email (form field is locked in the UI).
-  const email = normalizeEmail(sessionEmail ?? input.email);
+  // Careers apply uses the form email (candidates can be signed in as guest/demo).
+  const email = normalizeEmail(input.email);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid email address.");
   const recent = await sql<{ n: number }>`
     select count(*) as n from applications a
