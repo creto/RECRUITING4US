@@ -33,7 +33,15 @@ async function companyOf(fn: "app_company_for_code" | "app_company_for_live" | "
   return found[0]?.company_id ?? null;
 }
 
-async function drain(actor: Actor) {
+/**
+ * Drain due message_intents for one company (QUEUED/DEFERRED with scheduled_for <= now).
+ * Shared by the web request path and scripts/outbox-worker.mjs.
+ *
+ * Follow-up (Fase C P0-2): claim still flips status to SENDING without an
+ * outbox-style lease / SKIP LOCKED, so parallel web+worker instances can race.
+ */
+export async function drainMail(companyId: string) {
+  enterTenant({ companyId, publicSlug: "" });
   const sql = await db();
   const mode = mailMode();
   const queued = await sql<{
@@ -49,7 +57,7 @@ async function drain(actor: Actor) {
   }>`
     select id, status, to_email, cc, bcc, subject, body, attempt_count, thread_token
     from message_intents
-    where company_id = ${actor.companyId}
+    where company_id = ${companyId}
       and status in ('QUEUED', 'DEFERRED')
       and (scheduled_for is null or scheduled_for <= now())
     order by created_at
@@ -58,13 +66,13 @@ async function drain(actor: Actor) {
   for (const row of queued) {
     const locked = await sql<{ id: string }>`
       update message_intents set status = 'SENDING'
-      where company_id = ${actor.companyId} and id = ${row.id} and status in ('QUEUED', 'DEFERRED')
+      where company_id = ${companyId} and id = ${row.id} and status in ('QUEUED', 'DEFERRED')
       returning id
     `;
     if (!locked[0]) continue;
     const suppressed = await sql<{ email: string }>`
       select email from mail_suppressions
-      where company_id = ${actor.companyId} and email = ${normalizeEmail(row.to_email)}
+      where company_id = ${companyId} and email = ${normalizeEmail(row.to_email)}
     `;
     const attemptNo = row.attempt_count + 1;
     let providerResult: "accepted" | "delivered" | "stored" | "deferred" | "bounced" | "failed" = "stored";
@@ -101,29 +109,29 @@ async function drain(actor: Actor) {
         provider_message_id = ${providerId},
         last_error = ${finalDetail},
         scheduled_for = case when ${step.retry} then now() + make_interval(mins => ${delay}) else scheduled_for end
-      where company_id = ${actor.companyId} and id = ${row.id}
+      where company_id = ${companyId} and id = ${row.id}
     `;
     await sql`
       insert into delivery_attempts (id, company_id, intent_id, attempt_no, provider, state, detail)
-      values (${nid()}, ${actor.companyId}, ${row.id}, ${attemptNo}, ${mode.provider}, ${step.state}, ${finalDetail})
+      values (${nid()}, ${companyId}, ${row.id}, ${attemptNo}, ${mode.provider}, ${step.state}, ${finalDetail})
     `;
     if (step.state === "STORED" && mode.provider === "sandbox") {
       await sql`
         insert into sandbox_mailbox (id, company_id, intent_id, to_email, subject, body)
-        values (${nid()}, ${actor.companyId}, ${row.id}, ${row.to_email}, ${row.subject}, ${row.body})
+        values (${nid()}, ${companyId}, ${row.id}, ${row.to_email}, ${row.subject}, ${row.body})
       `;
     }
     if (step.state === "BOUNCED") {
       await sql`
         insert into mail_suppressions (company_id, email, reason)
-        values (${actor.companyId}, ${normalizeEmail(row.to_email)}, 'bounce')
+        values (${companyId}, ${normalizeEmail(row.to_email)}, 'bounce')
         on conflict (company_id, email) do nothing
       `;
       await sql`
         update campaign_enrollments set status = 'BOUNCED'
-        where company_id = ${actor.companyId} and status in ('QUEUED', 'SENT')
+        where company_id = ${companyId} and status in ('QUEUED', 'SENT')
           and prospect_id in (
-            select id from prospects where company_id = ${actor.companyId} and email = ${normalizeEmail(row.to_email)}
+            select id from prospects where company_id = ${companyId} and email = ${normalizeEmail(row.to_email)}
           )
       `;
     }
@@ -149,7 +157,7 @@ async function smtpSend(row: { id: string; to_email: string; cc: string; bcc: st
 export async function listInbox(userId: string, slug: string) {
   const actor = await requireActor(userId, slug);
   allow(actor, "application.note");
-  await drain(actor);
+  await drainMail(actor.companyId);
   const sql = await db();
   const mode = mailMode();
   const intents = await sql.query<Record<string, unknown>>(
@@ -230,7 +238,7 @@ export async function queueMail(userId: string, slug: string, input: {
       returning id
     `;
     await audit(actor, "mail.queue", "message_intent", inserted[0]?.id ?? id, `Queued ${input.kind} to ${app.email}`);
-    await drain(actor);
+    await drainMail(actor.companyId);
     return { id: inserted[0]?.id ?? id, duplicate: !inserted[0], note: mailMode().note };
   } catch (error) {
     mapDbError(error);
@@ -276,7 +284,7 @@ export async function queueProspectMail(userId: string, slug: string, input: {
     returning id
   `;
   await audit(actor, "mail.queue", "message_intent", inserted[0]?.id ?? id, `Queued ${input.kind} to ${to}`);
-  await drain(actor);
+  await drainMail(actor.companyId);
   return { id: inserted[0]?.id ?? id, duplicate: !inserted[0], note: mailMode().note };
 }
 

@@ -4,9 +4,9 @@ The app starts with `npm run dev`, which loads environment from the platform wra
 
 ## Dispatch
 
-Outbox rows are leased (`lease_until`, `attempts`) inside the same transaction as the domain write, then applied in the web process. Receipts stop a repeated action. Queries are serialized so the single preview connection does not interleave that transaction. This is not Redis and not a second OS process.
+Outbox rows are leased (`lease_until`, `attempts`, `FOR UPDATE SKIP LOCKED`) inside the web process after domain writes and on workspace maintenance, then applied with workflow receipts. Queries are serialized so the single preview connection does not interleave that transaction. This is not Redis and not BullMQ.
 
-`node scripts/outbox-worker.mjs` explains that and exits. If `DATABASE_URL` is set it only prints the pending count. It does not mark rows processed, because rule execution lives in the web process.
+When `DATABASE_URL` points at shared Postgres, `npm run outbox:worker` runs a long-lived Node process that discovers companies with pending outbox rows or due `message_intents` (`app_companies_needing_drain`) and drains them with the same helpers as the web path (`drain` / `drainMail`). Keep the web-path drain for low latency; the worker covers idle tenants. Without `DATABASE_URL` the worker exits: preview data lives in the web process and is not visible to a second process. Use the same `MAIL_SMTP_*` / `MAIL_FROM` values as the web app when the worker should send mail.
 
 ## Health
 

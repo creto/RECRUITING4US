@@ -38,7 +38,18 @@ Guest sign-in stays. "Continue without an account" creates a real user named Gue
 
 Mail, files, and errors stay as adapters. SMTP sends only when `MAIL_SMTP_HOST` and `MAIL_FROM` are set. New résumé bytes go to S3 or R2 only when the bucket variables are set; otherwise they stay in `file_objects`. `SENTRY_DSN` and `VITE_SENTRY_DSN` are detected by `GET /api/health` and do not send until `setErrorSink` / `setServerErrorSink` are given a client. Live and ready probes stay at `/api/health/live` and `/api/health/ready`.
 
+## Background drain worker
+
+On a durable deploy with shared Postgres, run a second process that drains idle tenants:
+
+```sh
+npm run outbox:worker
+```
+
+It needs `DATABASE_URL` (required) and the same mail variables as the web app when sending (`MAIL_SMTP_HOST`, `MAIL_SMTP_PORT`, `MAIL_FROM`, optional `MAIL_SMTP_USER`, `MAIL_SMTP_PASSWORD`, `MAIL_INBOUND_SECRET`). Optional `OUTBOX_POLL_MS` (default 5000). The web process still drains on write and workspace load for low latency. Do not add Redis for this.
+
 ## Host chrome
+
 
 `public/manifest.webmanifest`, `public/favicon.svg`, and `public/license.txt` are the product. `public/__grok/`, `scripts/grok-pwa-*`, and the preview bridge are the host frame. They stay in this repository so the preview can wrap the app. They are not the RECRUIT4US name, icon, or license.
 
