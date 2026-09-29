@@ -179,7 +179,7 @@ function buildBank(): ReadCodeItem[] {
     const useAnd = n % 2 === 0;
     const code = useAnd ? `console.log(${left} && ${right});` : `console.log(${left} || ${right});`;
     const expected = String(useAnd ? (left ? right : left) : left || right);
-    const labels = distractors(expected, [right, left, true, false]);
+    const labels = distractors(expected, [right, left, "true", "false"]);
     out.push(item(`shortcircuit-${n}`, "medium", `Short circuit ${n}`, ["booleans", "coercion"], "What does it print?", code, labels, 0));
   }
 
