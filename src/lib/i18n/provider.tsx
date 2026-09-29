@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { readClientLocale, writeStoredLocale } from "./storage.ts";
 import { translateText, type Locale } from "./translate.ts";
-
-const KEY = "recruit4us-locale";
 
 const LocaleContext = createContext<{ locale: Locale; setLocale: (locale: Locale) => void }>({
   locale: "en",
@@ -13,15 +12,14 @@ export function useLocale() {
 }
 
 export function LocaleProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>("en");
-
-  useEffect(() => {
-    const saved = window.localStorage.getItem(KEY);
-    if (saved === "es" || saved === "en") setLocaleState(saved);
-  }, []);
+  const [locale, setLocaleState] = useState<Locale>(readClientLocale);
 
   function setLocale(next: Locale) {
-    window.localStorage.setItem(KEY, next);
+    try {
+      writeStoredLocale(next, window.localStorage);
+    } catch {
+      /* ignore quota / private mode */
+    }
     setLocaleState(next);
   }
 
@@ -123,6 +121,23 @@ function LocaleApply({ locale }: { locale: Locale }) {
     }
 
     run();
+
+    // SPA navigations insert new English nodes; re-apply when Spanish is active.
+    if (locale !== "es") return;
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(run, 50);
+    };
+
+    const observer = new MutationObserver(schedule);
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      if (timer) clearTimeout(timer);
+      observer.disconnect();
+    };
   }, [locale]);
 
   return null;
