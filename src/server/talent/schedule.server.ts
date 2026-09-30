@@ -137,12 +137,14 @@ export async function scheduleInterview(
   }
   await audit(actor, "interview.schedule", "interview", id, "Interview scheduled.");
   try {
-    const { queueMail } = await import("./platform.server");
+    const { appLink, queueMail } = await import("./platform.server");
+    const where = input.location.trim();
+    const meet = /^https?:\/\//i.test(input.meetingUrl.trim()) ? `\n${input.meetingUrl.trim()}` : "";
     await queueMail(userId, input.slug, {
       applicationId,
       kind: "INTERVIEW",
       subject: "Interview for {{job_title}}",
-      body: `Hello {{candidate_name}},\n\n${input.title.trim()} is on the schedule. Open your candidate home for the time. A calendar file is available. An outside calendar is updated only when one is connected.\n\n{{recruiter_name}}`,
+      body: `Hello {{candidate_name}},\n\n{{company_name}} scheduled ${input.title.trim()} for {{job_title}}.\n\nWhen: ${input.localStart} to ${input.localEnd} (${input.timezone}).${where ? `\nWhere: ${where}.` : ""}${meet}\n\nThe time is also on your application page.\n${appLink(`/candidate/applications/${applicationId}`)}\n\n{{recruiter_name}}`,
       cc: "",
       bcc: "",
       idempotencyKey: `interview:${id}`,
@@ -578,12 +580,12 @@ export async function sendOffer(userId: string, input: { slug: string; offerId: 
   }
   await rememberEvent(actor.companyId, "OFFER_SENT", input.offerId, { applicationId: offer.application_id });
   try {
-    const { queueMail } = await import("./platform.server");
+    const { appLink, queueMail } = await import("./platform.server");
     await queueMail(userId, input.slug, {
       applicationId: offer.application_id,
       kind: "OFFER",
       subject: "An offer is ready, {{candidate_name}}",
-      body: "Hello {{candidate_name}},\n\nAn offer for {{job_title}} is ready in your candidate home. Read that revision before you respond.\n\n{{company_name}}",
+      body: `Hello {{candidate_name}},\n\n{{company_name}} sent an offer for {{job_title}}. Read that revision before you respond. This email does not accept the offer.\n\n${appLink(`/candidate/offers/${input.offerId}`)}\n\n{{company_name}}`,
       cc: "",
       bcc: "",
       idempotencyKey: `offer:${input.offerId}:${offer.current_revision}`,

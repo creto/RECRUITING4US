@@ -1,5 +1,6 @@
 import { CODING_LANGUAGE_IDS } from "@/domain/coding-languages";
 import { orderedOptions } from "@/domain/candidate-view";
+import { assessmentNotice } from "@/domain/mail";
 import { DEFAULT_TEXT_RUBRIC } from "@/domain/rules";
 import { assertSameSiteRequest } from "@/lib/auth/isolation.server";
 import { enterTenant } from "@/lib/tenant";
@@ -338,17 +339,22 @@ export async function sendAssessmentToFits(userId: string, input: { slug: string
   `;
   const version = versions[0];
   if (!version) throw new Error("Publish the assessment before sending it.");
-  const fits = await sql<{ application_id: string; email: string }>`
-    select a.id as application_id, c.email
+  const fits = await sql<{ application_id: string; email: string; candidate_name: string; job_title: string }>`
+    select a.id as application_id, c.email, c.name as candidate_name, j.title as job_title
     from cv_screens sc
     join applications a on a.id = sc.application_id and a.company_id = sc.company_id
     join candidates c on c.id = a.candidate_id and c.company_id = a.company_id
+    join jobs j on j.id = a.job_id and j.company_id = a.company_id
     where sc.company_id = ${actor.companyId}
       and sc.fit = 'GOOD'
       and a.lifecycle = 'ACTIVE'
   `;
   let sent = 0;
   const startBy = new Date(Date.now() + 14 * 86400000).toISOString();
+  const minutes = Math.max(1, Math.round(version.duration_seconds / 60));
+  const startLabel = `${startBy.slice(0, 16).replace("T", " ")} UTC`;
+  const { queueMail, publicAppOrigin } = await import("./platform.server");
+  const inviteOrigin = (process.env.BETTER_AUTH_URL ?? process.env.APP_ORIGIN ?? "").trim().replace(/\/$/, "") || publicAppOrigin();
   for (const fit of fits) {
     const existing = await sql<{ id: string }>`
       select id from assignments
@@ -359,7 +365,7 @@ export async function sendAssessmentToFits(userId: string, input: { slug: string
     if (existing[0]) continue;
     const id = nid();
     const inviteToken = crypto.randomUUID();
-    const inviteHref = assessmentInviteHref(inviteToken, (process.env.BETTER_AUTH_URL ?? "").trim().replace(/\/$/, ""));
+    const inviteHref = assessmentInviteHref(inviteToken, inviteOrigin);
     await sql`
       insert into assignments (
         id, company_id, application_id, assessment_version_id, status, start_by,
@@ -369,15 +375,39 @@ export async function sendAssessmentToFits(userId: string, input: { slug: string
         ${version.duration_seconds}, 10000, 0, ${inviteToken}
       )
     `;
+    const plain = (value: string) => value.replace(/[{}]/g, "").replace(/\s+/g, " ").trim();
+    const body = assessmentNotice({
+      greeting: `Hello ${plain(fit.candidate_name)},`,
+      company: plain(actor.companyName),
+      job: plain(fit.job_title),
+      recruiter: plain(actor.name),
+      assessment: version.name,
+      minutes,
+      startLabel,
+      link: inviteHref,
+    });
     await sql`
       insert into mail_messages (id, company_id, to_email, subject, body, status, related_id)
       values (
         ${nid()}, ${actor.companyId}, ${fit.email},
         ${"Assessment: " + version.name},
-        ${"A recruiter sent this assessment because the CV was a fit. Opening this message does not start the timer. This message was captured inside RECRUIT4US and was not delivered by an outside mail server. Invite: " + inviteHref},
+        ${body},
         'CAPTURED', ${id}
       )
     `;
+    try {
+      await queueMail(userId, input.slug, {
+        applicationId: fit.application_id,
+        kind: "ASSESSMENT",
+        subject: "Assessment for {{job_title}}",
+        body,
+        cc: "",
+        bcc: "",
+        idempotencyKey: `assessment:${id}`,
+      });
+    } catch {
+      // The assignment is already stored. Delivery state stays on the mail queue.
+    }
     await rememberEvent(actor.companyId, "ASSESSMENT_ASSIGNED", id, {
       applicationId: fit.application_id,
       assignmentId: id,

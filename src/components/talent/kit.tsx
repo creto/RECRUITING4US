@@ -204,6 +204,29 @@ export function StageBar({ steps, index, stopped }: { steps: string[]; index: nu
   );
 }
 
+function linkText(text: string): ReactNode {
+  const parts = text.split(/(https?:\/\/[^\s]+)/g);
+  return parts.map((part, index) => {
+    if (index % 2 === 0) return part;
+    let url = part;
+    let tail = "";
+    while (/[.,);]$/.test(url)) {
+      tail = url.slice(-1) + tail;
+      url = url.slice(0, -1);
+    }
+    const local = /^http:\/\/(localhost|127\.0\.0\.1)(?::\d+)?(?:\/|$)/i.test(url);
+    if (!/^https:\/\//i.test(url) && !local) return part;
+    return (
+      <span key={index}>
+        <a className="font-medium text-link underline" href={url} rel="noreferrer">
+          {url}
+        </a>
+        {tail}
+      </span>
+    );
+  });
+}
+
 /** The card an applicant receives: company name, the message in a field, then the footer. */
 export function MailCard({ name, body, footer, accent }: { name: string; body: string; footer?: string; accent?: string }) {
   const title = name.trim() || "Message";
@@ -226,7 +249,7 @@ export function MailCard({ name, body, footer, accent }: { name: string; body: s
             dangerouslySetInnerHTML={{ __html: sanitizeMailHtml(shown) }}
           />
         ) : (
-          <div className="whitespace-pre-wrap rounded-xl border border-line px-3.5 py-3 text-base leading-normal">{shown || " "}</div>
+          <div className="whitespace-pre-wrap rounded-xl border border-line px-3.5 py-3 text-base leading-normal">{linkText(shown || " ")}</div>
         )}
         {foot ? <p className="mt-4 text-[13px] text-muted">{foot}</p> : null}
       </div>

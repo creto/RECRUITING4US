@@ -53,6 +53,16 @@ describe("delivery", () => {
     assert.doesNotMatch(html, /Hello <Ada>/);
     assert.match(html, />Message</);
     assert.match(html, /border-radius:24px/);
+    assert.match(html, /font-family:Arial,Helvetica,sans-serif/);
+    assert.doesNotMatch(html, /Georgia|,serif|Times/);
+    assert.match(html, /background:#cefa90/);
+    const linked = brandHtml("See the page\nhttps://jobs.example/candidate/applications/abc", { companyName: "Northstar", fromName: "", footer: "", logoUrl: "", accent: "#cefa90" }, false);
+    assert.match(linked, /href="https:\/\/jobs\.example\/candidate\/applications\/abc"/);
+    assert.match(linked, /Open your application/);
+    assert.match(linked, /See the page/);
+    const exercise = brandHtml("https://jobs.example/code/token", { companyName: "Northstar", fromName: "", footer: "", logoUrl: "", accent: "#14221b" }, false);
+    assert.match(exercise, /Open the coding exercise/);
+    assert.match(exercise, /color:#ffffff/);
     const plain = buildRfc822({ from: "jobs@example.com", to: "ada@example.com", cc: "", subject: "Hello", body: "Hi", messageId: "m1@recruit4us" });
     assert.match(plain, /Content-Type: text\/plain/);
     assert.doesNotMatch(plain, /multipart/);

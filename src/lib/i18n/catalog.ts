@@ -370,4 +370,5 @@ export const ES: Record<string, string> = {
   "An S3 or R2 bucket is configured. New files are stored there. A refused upload is not saved. This is not verified until a file is actually stored.": "Hay un bucket de S3 o R2 configurado. Los archivos nuevos se guardan ahí. Una subida rechazada no se guarda. Esto no está verificado hasta que un archivo se guarde de verdad.",
   "Object storage": "Almacenamiento de objetos",
   Notices: "Avisos",
+  "This is the card that goes out. The name, logo, and footer from Settings are added when it sends. Tokens such as {{candidate_name}} are filled in first. A web address on its own line becomes a button.": "Esta es la tarjeta que se envía. El nombre, el logo y el pie de Settings se agregan al salir. Los tokens como {{candidate_name}} se rellenan primero. Una dirección web en su propia línea se vuelve un botón.",
 };

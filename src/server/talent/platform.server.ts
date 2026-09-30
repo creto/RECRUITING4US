@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { getRequest } from "@tanstack/react-start/server";
 import { assertSameSiteRequest } from "@/lib/auth/isolation.server";
 import { estimateComplexity } from "@/domain/judge";
 import { describeLiveSignal, liveSignalKind } from "@/domain/live-watch";
@@ -19,6 +20,35 @@ import { QUESTION_CORPUS } from "./question-corpus";
 import { storeFileBytes } from "./object-store.server";
 
 const AT = `to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
+
+/** Public origin for links inside mail. Prefers the request URL, and a forwarded host only when this process is bound locally. */
+export function publicAppOrigin(): string {
+  try {
+    const req = getRequest();
+    const url = new URL(req.url);
+    let host = url.host;
+    let proto = url.protocol.replace(":", "");
+    const internal = /^(0\.0\.0\.0|127\.0\.0\.1|\[::1\]|localhost)(?::\d+)?$/.test(host);
+    if (internal) {
+      const forwardedHost = req.headers.get("x-forwarded-host")?.split(",")[0]?.trim() ?? "";
+      const forwardedProto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() ?? "";
+      if (/^[A-Za-z0-9.-]+(?::\d+)?$/.test(forwardedHost)) host = forwardedHost;
+      if (forwardedProto === "https" || forwardedProto === "http") proto = forwardedProto;
+    }
+    if (proto !== "https" && proto !== "http") return "";
+    if (!/^[A-Za-z0-9.-]+(?::\d+)?$/.test(host)) return "";
+    if (proto === "http" && !/^(localhost|127\.0\.0\.1)(?::\d+)?$/.test(host)) return "";
+    return `${proto}://${host}`;
+  } catch {
+    return "";
+  }
+}
+
+export function appLink(path: string): string {
+  const origin = publicAppOrigin();
+  const clean = path.startsWith("/") ? path : `/${path}`;
+  return origin ? `${origin}${clean}` : clean;
+}
 
 function mailMode(): { provider: "sandbox" | "smtp"; note: string } {
   if (smtpConfigFromEnv()) {
@@ -739,7 +769,7 @@ export async function inviteToCode(userId: string, slug: string, applicationId: 
     applicationId,
     kind: "ASSESSMENT",
     subject: "Coding exercise for {{job_title}}",
-    body: `Hello {{candidate_name}},\n\nPlease open the coding exercise "${question.title}" from your candidate home. The link expires in seven days. Sample cases are visible. Hidden cases are not.\n\n{{company_name}}`,
+    body: `Hello {{candidate_name}},\n\n{{company_name}} sent the coding exercise "${question.title.replace(/[{}]/g, "").replace(/\s+/g, " ").trim().slice(0, 120)}" for {{job_title}}.\n\nThe link expires in seven days. Sample cases are visible. Hidden cases are not.\n\n${appLink(`/code/${token}`)}\n\n{{recruiter_name}}`,
     cc: "",
     bcc: "",
     idempotencyKey: `code:${inviteId}`,

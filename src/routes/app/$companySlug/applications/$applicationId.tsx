@@ -507,7 +507,7 @@ function MailTab({ slug, applicationId, defaultTo, canEmail, onError }: { slug: 
       <Field label="Subject"><input className={inputClass} value={subject} onChange={(event) => setSubject(event.target.value)} /></Field>
       <Field label="Message"><RichMailEditor key={editorKey} value={body} onChange={setBody} /></Field>
       <MailCard name={companyName} body={body} />
-      <p className="text-sm text-muted">This is the card that goes out. The name, logo, and footer from Settings are added when it sends. Tokens such as {"{{candidate_name}}"} are filled in first.</p>
+      <p className="text-sm text-muted">This is the card that goes out. The name, logo, and footer from Settings are added when it sends. Tokens such as {"{{candidate_name}}"} are filled in first. A web address on its own line becomes a button.</p>
       <Button type="submit" disabled={pendingId !== null}>Queue outside message</Button>
     </form>
   );

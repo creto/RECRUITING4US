@@ -20,6 +20,7 @@ import {
 } from "@/domain/rules";
 import { runnerAvailability } from "@/domain/edge";
 import { stageNameList, trackBar } from "@/domain/sheet";
+import { assessmentNotice } from "@/domain/mail";
 import {
   answersMatch,
   casesForQuestion,
@@ -62,17 +63,6 @@ function publicAppOrigin(): string {
 function newInviteToken(): string {
   return crypto.randomUUID();
 }
-
-function assessmentInviteMailBody(token: string, intro: string): string {
-  const href = assessmentInviteHref(token, publicAppOrigin());
-  return `${intro}\n\nOpen your assessment invite (enter the invited email and your application id; opening the message does not start the timer):\n${href}\n\n{{company_name}}`;
-}
-
-function assessmentInviteCapturedBody(token: string, intro: string): string {
-  const href = assessmentInviteHref(token, publicAppOrigin());
-  return `${intro} Invite: ${href}`;
-}
-
 
 const bankEnsureAt = new Map<string, number>();
 
@@ -487,38 +477,53 @@ export async function assignAssessment(
       ${versions[0].duration_seconds}, ${input.multiplierBasisPoints}, ${input.extraSeconds}, ${inviteToken}
     )
   `;
-  const people = await sql<{ email: string; name: string }>`
-    select c.email, s.name from applications a
-    join candidates c on c.id = a.candidate_id
+  const people = await sql<{ email: string; name: string; candidate_name: string; job_title: string }>`
+    select c.email, s.name, c.name as candidate_name, j.title as job_title
+    from applications a
+    join candidates c on c.id = a.candidate_id and c.company_id = a.company_id
+    join jobs j on j.id = a.job_id and j.company_id = a.company_id
     join assessment_versions v on v.id = ${versions[0].id}
     join assessments s on s.id = v.assessment_id
     where a.id = ${input.applicationId}
   `;
   const invitePath = assessmentInvitePath(inviteToken);
+  const minutes = Math.max(1, Math.round(versions[0].duration_seconds / 60));
+  const startLabel = `${startBy.toISOString().slice(0, 16).replace("T", " ")} UTC`;
   if (people[0]) {
+    const { queueMail, publicAppOrigin: requestOrigin } = await import("./platform.server");
+    const plain = (value: string) => value.replace(/[{}]/g, "").replace(/\s+/g, " ").trim();
+    const body = assessmentNotice({
+      greeting: `Hello ${plain(people[0].candidate_name)},`,
+      company: plain(actor.companyName),
+      job: plain(people[0].job_title),
+      recruiter: plain(actor.name),
+      assessment: people[0].name,
+      minutes,
+      startLabel,
+      link: assessmentInviteHref(inviteToken, publicAppOrigin() || requestOrigin()),
+    });
     await sql`
       insert into mail_messages (id, company_id, to_email, subject, body, status, related_id)
       values (
         ${nid()}, ${actor.companyId}, ${people[0].email},
         ${"Assessment: " + people[0].name},
-        ${assessmentInviteCapturedBody(inviteToken, "You have an assessment to complete before the start-by time. An outside email is queued separately and is not delivered unless a mail provider is configured.")},
+        ${body},
         'CAPTURED', ${id}
       )
     `;
-  }
-  try {
-    const { queueMail } = await import("./platform.server");
-    await queueMail(userId, input.slug, {
-      applicationId: input.applicationId,
-      kind: "ASSESSMENT",
-      subject: "Assessment: " + (people[0]?.name ?? "assignment"),
-      body: assessmentInviteMailBody(inviteToken, "Hello {{candidate_name}},\n\nYou have an assessment to complete before the start-by time."),
-      cc: "",
-      bcc: "",
-      idempotencyKey: `assessment:${id}`,
-    });
-  } catch {
-    // Assignment is already stored. Mail failure is visible in the delivery log.
+    try {
+      await queueMail(userId, input.slug, {
+        applicationId: input.applicationId,
+        kind: "ASSESSMENT",
+        subject: "Assessment for {{job_title}}",
+        body,
+        cc: "",
+        bcc: "",
+        idempotencyKey: `assessment:${id}`,
+      });
+    } catch {
+      // The assignment is already stored. Delivery state stays on the mail queue.
+    }
   }
   await rememberEvent(actor.companyId, "ASSESSMENT_ASSIGNED", id, {
     applicationId: input.applicationId,

@@ -160,6 +160,106 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "\u0026quot;");
 }
 
+const MAIL_FONT = "Arial,Helvetica,sans-serif";
+
+function accentColor(value: string): string {
+  return /^#[0-9a-fA-F]{6}$/.test(value) ? value : "#cefa90";
+}
+
+function inkOn(hex: string): string {
+  const n = Number.parseInt(hex.slice(1), 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  const light = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return light > 0.62 ? "#14221b" : "#ffffff";
+}
+
+/** https, or http only on localhost. Anything else stays plain text. */
+export function safeMailUrl(value: string): string | null {
+  const text = value.trim().replace(/[.,);]+$/, "");
+  if (!/^https?:\/\/[^\s<>"']+$/.test(text)) return null;
+  try {
+    const url = new URL(text);
+    if (url.protocol === "https:") return url.toString();
+    if (url.protocol === "http:" && (url.hostname === "localhost" || url.hostname === "127.0.0.1")) return url.toString();
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function mailLinkLabel(url: string): string {
+  if (url.includes("/code/")) return "Open the coding exercise";
+  if (url.includes("/candidate/offers/")) return "Review the offer";
+  if (url.includes("/candidate/")) return "Open your application";
+  return "Open this link";
+}
+
+function mailButton(url: string): string {
+  const href = escapeHtml(url);
+  const label = escapeHtml(mailLinkLabel(url));
+  return `<a href="${href}" style="display:inline-block;background:#14221b;color:#cefa90;font-family:${MAIL_FONT};font-size:15px;font-weight:700;line-height:1.2;text-decoration:none;padding:12px 18px;border-radius:999px">${label}</a><br /><a href="${href}" style="color:#146c43;font-family:${MAIL_FONT};font-size:12px;line-height:1.4;word-break:break-all">${href}</a>`;
+}
+
+function linkifyRaw(line: string): string {
+  const parts = line.split(/(https?:\/\/[^\s]+)/g);
+  return parts
+    .map((part, index) => {
+      if (index % 2 === 0) return escapeHtml(part);
+      let url = part;
+      let tail = "";
+      while (/[.,);]$/.test(url)) {
+        tail = url.slice(-1) + tail;
+        url = url.slice(0, -1);
+      }
+      const safe = safeMailUrl(url);
+      if (!safe) return escapeHtml(part);
+      const href = escapeHtml(safe);
+      return `<a href="${href}" style="color:#146c43;font-family:${MAIL_FONT};font-weight:700;text-decoration:underline">${href}</a>${escapeHtml(tail)}`;
+    })
+    .join("");
+}
+
+function linkifyEscaped(text: string): string {
+  return text.replace(/https?:\/\/[^\s<]+/g, (raw) => {
+    let url = raw;
+    let tail = "";
+    while (/[.,);]$/.test(url)) {
+      tail = url.slice(-1) + tail;
+      url = url.slice(0, -1);
+    }
+    const safe = safeMailUrl(url.replace(/\u0026amp;/g, "\u0026"));
+    if (!safe) return raw;
+    const href = escapeHtml(safe);
+    return `<a href="${href}" style="color:#146c43;font-family:${MAIL_FONT};font-weight:700;text-decoration:underline">${href}</a>${tail}`;
+  });
+}
+
+function plainMessageHtml(body: string): string {
+  return body
+    .trim()
+    .split("\n")
+    .map((line) => {
+      if (line.trim() === "") return "<br />";
+      const only = !/\s/.test(line.trim()) ? safeMailUrl(line.trim()) : null;
+      if (only) return `<p style="margin:16px 0 12px">${mailButton(only)}</p>`;
+      return `<p style="margin:0 0 12px;font-family:${MAIL_FONT};font-size:16px;line-height:1.55;color:#14221b">${linkifyRaw(line)}</p>`;
+    })
+    .join("");
+}
+
+function richMessageHtml(body: string): string {
+  const linked = body.trim().replace(/>([^<]+)</g, (full, text: string) => {
+    if (safeMailUrl(text.trim()) && !/\s/.test(text.trim().replace(/[.,);]+$/, ""))) {
+      return `>${mailButton(safeMailUrl(text.trim())!)}<`;
+    }
+    if (!/https?:\/\//.test(text)) return full;
+    return `>${linkifyEscaped(text)}<`;
+  });
+  return linked.replace(/<a\b(?![^>]*\bstyle=)([^>]*)>/gi, `<a$1 style="color:#146c43;font-family:${MAIL_FONT};font-weight:700;text-decoration:underline">`);
+}
+
 /** Plain copy the mailbox stores: company name, the message, then the footer. */
 export function brandPlain(body: string, brand: MailBrand): string {
   const name = (brand.fromName || brand.companyName).trim();
@@ -169,23 +269,19 @@ export function brandPlain(body: string, brand: MailBrand): string {
   return `${head}${body.trim()}${foot}`.trim();
 }
 
-/** HTML the provider receives. Same card as the apply form: name, then the message in a field. */
+/** HTML the provider receives. Same card as the apply form, in a sans-serif with the company color. */
 export function brandHtml(body: string, brand: MailBrand, logoCid: boolean, rich = false): string {
+  const accent = accentColor(brand.accent);
+  const headerInk = inkOn(accent);
   const name = escapeHtml((brand.fromName || brand.companyName).trim() || "Message");
-  const accent = /^#[0-9a-fA-F]{6}$/.test(brand.accent) ? brand.accent : "#14221b";
   const logo = logoCid
     ? `<img src="cid:logo@recruit4us" alt="" width="120" style="display:block;max-width:120px;height:auto;margin:0 0 12px" />`
     : /^https:\/\//i.test(brand.logoUrl)
       ? `<img src="${escapeHtml(brand.logoUrl)}" alt="" width="120" style="display:block;max-width:120px;height:auto;margin:0 0 12px" />`
       : "";
-  const paragraphs = rich
-    ? body.trim()
-    : escapeHtml(body.trim())
-        .split("\n")
-        .map((line) => (line === "" ? "<br />" : `<p style="margin:0 0 12px">${line}</p>`))
-        .join("");
+  const message = rich ? richMessageHtml(body) : plainMessageHtml(body);
   const footer = brand.footer.trim()
-    ? `<p style="margin:16px 0 0;color:#5c6b63;font-size:13px">${escapeHtml(brand.footer.trim())}</p>`
+    ? `<p style="margin:16px 0 0;color:#5c6b63;font-family:${MAIL_FONT};font-size:13px;line-height:1.45">${escapeHtml(brand.footer.trim())}</p>`
     : "";
-  return `<!DOCTYPE html><html><body style="margin:0;background:#f4f7f5;color:#14221b;font-family:Figtree,Georgia,serif"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px"><table role="presentation" width="560" style="max-width:560px;background:#ffffff;border:1px solid #d7e1da;border-radius:24px"><tr><td style="padding:16px 16px 4px">${logo}<p style="margin:0;font-size:24px;line-height:1.2">${name}</p></td></tr><tr><td style="padding:8px 16px 16px"><p style="margin:0 0 6px;font-size:14px;font-weight:600">Message</p><div style="border:1px solid #d7e1da;border-radius:12px;padding:12px 14px;font-size:16px;line-height:1.5">${paragraphs}</div>${footer}</td></tr><tr><td style="height:8px;background:${accent};border-radius:0 0 24px 24px;font-size:0;line-height:0">&nbsp;</td></tr></table></td></tr></table></body></html>`;
+  return `<!DOCTYPE html><html><body style="margin:0;background:#e7eee9;color:#14221b;font-family:${MAIL_FONT}"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#e7eee9;font-family:${MAIL_FONT}"><tr><td align="center" style="padding:32px 16px;font-family:${MAIL_FONT}"><table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #d7e1da;border-radius:24px;font-family:${MAIL_FONT}"><tr><td style="height:8px;background:${accent};border-radius:24px 24px 0 0;font-size:0;line-height:0">&nbsp;</td></tr><tr><td style="padding:22px 22px 8px;background:${accent};font-family:${MAIL_FONT};color:${headerInk}">${logo}<p style="margin:0;font-family:${MAIL_FONT};font-size:24px;line-height:1.2;font-weight:700;color:${headerInk}">${name}</p></td></tr><tr><td style="padding:18px 22px 8px;font-family:${MAIL_FONT}"><p style="margin:0 0 8px;font-family:${MAIL_FONT};font-size:12px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:#3d5c16">Message</p><div style="border:1px solid #d7e1da;border-radius:12px;background:#f7faf8;padding:14px 16px;font-family:${MAIL_FONT};font-size:16px;line-height:1.55;color:#14221b">${message}</div>${footer}</td></tr><tr><td style="height:8px;background:${accent};border-radius:0 0 24px 24px;font-size:0;line-height:0">&nbsp;</td></tr></table></td></tr></table></body></html>`;
 }

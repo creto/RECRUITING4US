@@ -67,3 +67,26 @@ export function mailText(value: string, min: number, max: number, label: string)
   if (text.length > max) return { error: `${label} is too long.` };
   return { text };
 }
+
+/** Outbound copy for an assigned assessment. The link must be on its own line so the mail card turns it into a button. */
+export function assessmentNotice(input: { assessment: string; minutes: number; startLabel: string; link: string; greeting?: string; company?: string; job?: string; recruiter?: string }): string {
+  const assessment = input.assessment.replace(/[{}]/g, "").replace(/\s+/g, " ").trim().slice(0, 120) || "an assessment";
+  const minutes = Math.max(1, Math.round(input.minutes));
+  const hello = input.greeting ?? "Hello {{candidate_name}},";
+  const company = input.company ?? "{{company_name}}";
+  const job = input.job ?? "{{job_title}}";
+  const recruiter = input.recruiter ?? "{{recruiter_name}}";
+  return [
+    hello,
+    "",
+    `${company} asked you to complete ${assessment} for ${job}.`,
+    "",
+    `Time limit: ${minutes} minutes.`,
+    `Start by: ${input.startLabel}.`,
+    "Opening this email does not start the timer. On the page, enter the invited email and your application id. The timer starts when you press Start.",
+    "",
+    input.link,
+    "",
+    recruiter,
+  ].join("\n");
+}
