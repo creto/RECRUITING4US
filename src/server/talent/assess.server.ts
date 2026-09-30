@@ -1172,10 +1172,20 @@ async function loadOwnedAttempt(userId: string, attemptId: string) {
 async function loadAttemptByAccess(attemptId: string, accessToken: string) {
   const verified = verifyAssessAccess(accessToken, attemptId, assessAccessSecret());
   if (!verified.ok) throw new Error("This assessment session expired. Open your invite link again.");
-  const attempt = await readAttemptRow(attemptId);
-  if (attempt.assignment_id !== verified.assignmentId) {
+  // Guest requests have no Better Auth session, so app.user_id / app.company_id are empty.
+  // readAttemptRow runs under RLS and returns nothing until tenant is set — resolve company
+  // via the security-definer helper first (same pattern as provider callbacks / invite peek).
+  const sql = await db();
+  const owners = await sql<{ company_id: string; assignment_id: string }>`
+    select company_id, assignment_id from app_attempt_owner(${attemptId})
+  `;
+  const owner = owners[0];
+  if (!owner) throw new Error("Not found.");
+  if (owner.assignment_id !== verified.assignmentId) {
     throw new Error("This assessment session expired. Open your invite link again.");
   }
+  enterTenant({ companyId: owner.company_id, publicSlug: "" });
+  const attempt = await readAttemptRow(attemptId);
   return { attempt, accessUserId: null as string | null };
 }
 
