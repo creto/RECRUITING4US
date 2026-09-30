@@ -104,7 +104,11 @@ export async function drainMail(companyId: string) {
       select email from mail_suppressions
       where company_id = ${companyId} and email = ${normalizeEmail(row.to_email)}
     `;
-    const attemptNo = row.attempt_count + 1;
+    const prior = await sql<{ n: number }>`
+      select coalesce(max(attempt_no), 0)::int as n from delivery_attempts
+      where company_id = ${companyId} and intent_id = ${row.id}
+    `;
+    const attemptNo = Math.max(row.attempt_count, prior[0]?.n ?? 0) + 1;
     let providerResult: "accepted" | "delivered" | "stored" | "deferred" | "bounced" | "failed" = "stored";
     let detail = "";
     let providerId = "";
