@@ -1,4 +1,5 @@
 import { MENTAL_MATH, MENTAL_MATH_SECONDS } from "@/domain/mental-math";
+import { enterTenant } from "@/lib/tenant";
 import { db, json, sha256 } from "./db.server";
 
 function mentalId(companyId: string, name: string) {
@@ -13,6 +14,7 @@ const INSTRUCTIONS =
 
 /** Idempotent. Publishes the 15-minute arithmetic paper. */
 export async function ensureMentalMath(companyId: string) {
+  enterTenant({ companyId, publicSlug: "" });
   const sql = await db();
   const versionId = mentalId(companyId, "version");
   const assessmentId = mentalId(companyId, "assessment");

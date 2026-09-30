@@ -1,4 +1,5 @@
 import { READ_CODE_BANK } from "@/domain/read-code-bank";
+import { enterTenant } from "@/lib/tenant";
 import { db, json, sha256 } from "./db.server";
 
 function readCodeId(companyId: string, name: string) {
@@ -36,6 +37,7 @@ export async function ensureReadCodeBank(companyId: string) {
 }
 
 async function ensureReadCodeBankOnce(companyId: string) {
+  enterTenant({ companyId, publicSlug: "" });
   const sql = await db();
   const assessmentId = readCodeId(companyId, "assessment");
   const versionId = readCodeId(companyId, "version");

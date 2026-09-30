@@ -179,6 +179,7 @@ function scheduleAdvanceJob(companyId: string, jobId: string) {
   setTimeout(() => {
     void (async () => {
       try {
+        enterTenant({ companyId, publicSlug: "" });
         const { advanceJob } = await import("./ladder.server");
         await advanceJob(companyId, jobId);
       } catch (error) {
@@ -585,6 +586,10 @@ export async function updateJob(userId: string, input: Record<string, unknown>) 
     `;
     if (!published[0]) throw new Error("Choose a published assessment, or leave that field blank.");
     assessmentId = input.screenAssessmentId;
+    await sql`
+      update assessments set auto_send = true
+      where id = ${assessmentId} and company_id = ${actor.companyId}
+    `;
   }
   const requiredTerms = termsFromJson(String(input.screenRequired ?? ""));
   const preferredTerms = termsFromJson(String(input.screenPreferred ?? ""));
@@ -1059,7 +1064,9 @@ export async function listCandidates(
 }
 
 async function indexMissingProfiles(companyId: string) {
+  enterTenant({ companyId, publicSlug: "" });
   const sql = await db();
+  // Missing profiles, or empty indexes left behind when a file was not yet CLEAN.
   const rows = await sql<{ application_id: string; file_id: string; mime: string; content: string; scan_state: string; display_name: string }>`
     select a.id as application_id, f.id as file_id, f.mime, f.content, f.scan_state, f.display_name
     from applications a
@@ -1069,39 +1076,59 @@ async function indexMissingProfiles(companyId: string) {
       order by created_at desc limit 1
     ) f on true
     where a.company_id = ${companyId}
-      and not exists (
-        select 1 from candidate_profiles p
-        where p.company_id = a.company_id and p.application_id = a.id
+      and (
+        not exists (
+          select 1 from candidate_profiles p
+          where p.company_id = a.company_id and p.application_id = a.id
+        )
+        or exists (
+          select 1 from candidate_profiles p
+          where p.company_id = a.company_id and p.application_id = a.id
+            and coalesce(trim(p.indexed_text), '') = ''
+            and f.scan_state = 'CLEAN'
+        )
       )
     order by a.submitted_at desc
-    limit 10
+    limit 25
   `;
   for (const row of rows) {
-    const extracted = row.scan_state === "CLEAN"
-      ? await readResume(row.mime, await loadFileBytes(row.content), row.display_name)
-      : { text: null, readable: false };
-    const profile = parseResumeProfile(extracted.readable ? extracted.text : null);
-    await sql`
-      insert into candidate_profiles (
-        id, company_id, application_id, file_id, titles, skills, education, locations, years, history, indexed_text, note
-      ) values (
-        ${nid()}, ${companyId}, ${row.application_id}, ${row.file_id},
-        ${json(profile.titles)}::jsonb, ${json(profile.skills)}::jsonb, ${json(profile.education)}::jsonb,
-        ${json(profile.locations)}::jsonb, ${profile.years}, ${json(profile.history)}::jsonb,
-        ${profile.indexedText}, ${profile.note}
-      )
-      on conflict (company_id, application_id) do update set
-        file_id = excluded.file_id,
-        titles = excluded.titles,
-        skills = excluded.skills,
-        education = excluded.education,
-        locations = excluded.locations,
-        years = excluded.years,
-        history = excluded.history,
-        indexed_text = excluded.indexed_text,
-        note = excluded.note
-    `;
+    await indexApplicationResume(companyId, row.application_id, row);
   }
+}
+
+async function indexApplicationResume(
+  companyId: string,
+  applicationId: string,
+  file: { file_id?: string; id?: string; mime: string; content: string; scan_state: string; display_name: string },
+) {
+  enterTenant({ companyId, publicSlug: "" });
+  const sql = await db();
+  const fileId = file.file_id ?? file.id;
+  if (!fileId) return;
+  const extracted = file.scan_state === "CLEAN"
+    ? await readResume(file.mime, await loadFileBytes(file.content), file.display_name)
+    : { text: null, readable: false };
+  const profile = parseResumeProfile(extracted.readable ? extracted.text : null);
+  await sql`
+    insert into candidate_profiles (
+      id, company_id, application_id, file_id, titles, skills, education, locations, years, history, indexed_text, note
+    ) values (
+      ${nid()}, ${companyId}, ${applicationId}, ${fileId},
+      ${json(profile.titles)}::jsonb, ${json(profile.skills)}::jsonb, ${json(profile.education)}::jsonb,
+      ${json(profile.locations)}::jsonb, ${profile.years}, ${json(profile.history)}::jsonb,
+      ${profile.indexedText}, ${profile.note}
+    )
+    on conflict (company_id, application_id) do update set
+      file_id = excluded.file_id,
+      titles = excluded.titles,
+      skills = excluded.skills,
+      education = excluded.education,
+      locations = excluded.locations,
+      years = excluded.years,
+      history = excluded.history,
+      indexed_text = excluded.indexed_text,
+      note = excluded.note
+  `;
 }
 
 export async function getApplication(userId: string, slug: string, applicationId: string) {
@@ -2123,6 +2150,18 @@ export async function submitApplication(input: ApplyInput) {
       and c.email_normalized = ${email} and a.lifecycle = 'ACTIVE'
   `;
   if (active[0]) {
+    if (input.resume?.dataBase64) {
+      try {
+        await storeResume(job.company_id, active[0].id, input.resume);
+        try {
+          await runCvScreen({ companyId: job.company_id, applicationId: active[0].id, actorUserId: input.sessionUserId ?? null });
+        } catch {
+          // Profile indexing still ran inside storeResume when the file is CLEAN.
+        }
+      } catch (error) {
+        console.error("apply.resume", error instanceof Error ? error.message.slice(0, 180) : "failed");
+      }
+    }
     const result = await rowFromApplication(job.company_id, active[0].id, false)
       ?? { applicationId: active[0].id, alreadyApplied: true, receipt: applicationReceipt(active[0].id), cvResult: "" };
     await sql`
@@ -2243,6 +2282,7 @@ async function storeResume(
   applicationId: string,
   resume: { name: string; mime: string; dataBase64: string },
 ) {
+  enterTenant({ companyId, publicSlug: "" });
   const bytes = Buffer.from(resume.dataBase64, "base64");
   const problem = filePolicy({ name: resume.name, mime: resume.mime, size: bytes.length });
   if (problem) throw new Error(problem);
@@ -2279,6 +2319,19 @@ async function storeResume(
         scan_note = ${verdict === "CLEAN" ? "Local demo scanner. Not a commercial antivirus." : "Local demo scanner rejected this file."}
       where id = ${fileId} and company_id = ${companyId}
     `;
+  }
+  if (verdict === "CLEAN") {
+    try {
+      await indexApplicationResume(companyId, applicationId, {
+        file_id: fileId,
+        mime: resume.mime,
+        content,
+        scan_state: "CLEAN",
+        display_name: resume.name.slice(0, 180),
+      });
+    } catch (error) {
+      console.error("resume.index", error instanceof Error ? error.message.slice(0, 180) : "failed");
+    }
   }
 }
 

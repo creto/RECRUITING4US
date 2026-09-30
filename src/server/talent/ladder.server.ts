@@ -4,6 +4,7 @@ import { termsFromJson } from "@/domain/screen";
 import { readResume } from "./resume-text";
 import { loadFileBytes } from "./object-store.server";
 import { assertSameSiteRequest } from "@/lib/auth/isolation.server";
+import { enterTenant } from "@/lib/tenant";
 import { allow, audit, db, json, nid, requireActor, sha256 } from "./db.server";
 import { rememberEvent } from "./workflows.server";
 
@@ -30,6 +31,7 @@ type Paper = { id: string; versionId: string; name: string; seconds: number };
 
 /** Idempotent stages and the three pipeline papers. Math and personality already exist. */
 export async function ensureLadder(companyId: string, jobId: string) {
+  enterTenant({ companyId, publicSlug: "" });
   const { ensureCodingBank } = await import("./bank.server");
   const { ensurePersonalityAssessment } = await import("./personality.server");
   const { ensureMentalMath } = await import("./mental.server");
@@ -221,6 +223,7 @@ async function stageId(companyId: string, jobId: string, name: string) {
 
 /** Re-rank one job and send the next paper to the top half. Does not withdraw a paper already sent. */
 export async function advanceJob(companyId: string, jobId: string) {
+  enterTenant({ companyId, publicSlug: "" });
   await ensureLadder(companyId, jobId);
   await rankExpertise(companyId, jobId);
   await rankScoredGate(companyId, jobId, "CODING", "pipeline-coding", "Math and personality", ["mental-math-15", "work-style-25"]);

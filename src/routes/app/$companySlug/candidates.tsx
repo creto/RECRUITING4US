@@ -153,7 +153,7 @@ function Candidates() {
                   ))}
                 </ul>
               )}
-              {copied && lines.some((line) => line.id === copied) ? <p className="mt-1 text-xs text-ok">Copied.</p> : null}
+              {copied && lines.some((line) => line.id === copied) ? <p className="mt-1 inline-flex rounded-full bg-[#e8f6df] px-2.5 py-1 text-xs font-medium text-[#036145]">Copied.</p> : null}
               {person.indexed ? (
                 <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
                   {person.titles?.length ? <div><dt className="text-[11px] uppercase tracking-[0.14em] text-muted">Titles</dt><dd>{person.titles.slice(0, 2).join("; ")}</dd></div> : null}
@@ -190,7 +190,7 @@ function Candidates() {
           <div className="flex items-end">
             <Button type="submit">Add</Button>
           </div>
-          {added ? <p className="text-sm text-ok md:col-span-2">{added}</p> : null}
+          {added ? <p className="text-sm font-medium text-ok md:col-span-2">{added}</p> : null}
           {jobs.error ? <p className="text-sm text-muted md:col-span-2">Jobs could not be loaded. You can still add a person without an application.</p> : null}
         </form>
       </Section>

@@ -235,7 +235,7 @@ function ApplyPortal({
         {src ? <a className="inline-flex min-h-11 items-center text-sm text-link" href={src}>Open the form</a> : null}
         <Button type="button" variant="secondary" onClick={() => void download()}>Download application CSV</Button>
       </div>
-      {copied ? <p className="text-sm text-ok">Copied.</p> : null}
+      {copied ? <p className="inline-flex rounded-full bg-[#e8f6df] px-2.5 py-1 text-sm font-medium text-[#036145]">Copied.</p> : null}
       {note ? <p className="text-sm">{note}</p> : null}
       {error ? <Alert>{error}</Alert> : null}
     </section>

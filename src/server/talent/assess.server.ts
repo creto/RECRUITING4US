@@ -346,7 +346,9 @@ export async function publishAssessment(userId: string, input: { slug: string; a
   `;
   const version = versions[0];
   if (!version) throw new Error("Not found.");
-  if (version.status === "PUBLISHED") throw new Error("This version is already published and cannot be edited.");
+  if (version.status === "PUBLISHED") {
+    return { ok: true, alreadyPublished: true };
+  }
   const sections = await sql<{ id: string; title: string; weight_basis_points: number; pool_pick: number | null }>`
     select id, title, weight_basis_points, pool_pick from assessment_sections
     where version_id = ${version.id} and company_id = ${actor.companyId}
@@ -356,8 +358,8 @@ export async function publishAssessment(userId: string, input: { slug: string; a
     const items = await sql<{ type: string; key_payload: unknown; rubric: unknown; points: number }>`
       select q.type, v.key_payload, v.rubric, i.points
       from assessment_items i
-      join question_versions v on v.id = i.question_version_id
-      join questions q on q.id = v.question_id
+      join question_versions v on v.id = i.question_version_id and v.company_id = i.company_id
+      join questions q on q.id = v.question_id and q.company_id = v.company_id
       where i.section_id = ${section.id} and i.company_id = ${actor.companyId}
     `;
     built.push({
@@ -379,12 +381,21 @@ export async function publishAssessment(userId: string, input: { slug: string; a
   const issues = validateAssessmentPublish({ sections: built, durationSeconds: version.duration_seconds });
   if (issues.length) throw new Error(issues.map((issue) => issue.message).join(" "));
   const hash = sha256(canonical(built));
-  await sql`
+  const updated = await sql<{ id: string }>`
     update assessment_versions set status = 'PUBLISHED', published_at = now(), content_hash = ${hash}
     where id = ${version.id} and company_id = ${actor.companyId} and status = 'DRAFT'
+    returning id
   `;
+  if (!updated[0]) {
+    const again = await sql<{ status: string }>`
+      select status from assessment_versions
+      where id = ${version.id} and company_id = ${actor.companyId}
+    `;
+    if (again[0]?.status === "PUBLISHED") return { ok: true, alreadyPublished: true };
+    throw new Error("Publish did not save. Check that you can edit this company, then try again.");
+  }
   await audit(actor, "assessment.publish", "assessment", input.assessmentId, "Assessment version published.");
-  return { ok: true };
+  return { ok: true, alreadyPublished: false };
 }
 
 export async function assignAssessment(

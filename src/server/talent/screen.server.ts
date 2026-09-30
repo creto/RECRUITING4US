@@ -8,6 +8,7 @@ import { readResume } from "./resume-text";
 import { loadFileBytes, storeFileBytes } from "./object-store.server";
 import { allow, audit, db, json, nid, requireActor } from "./db.server";
 import { rememberEvent } from "./workflows.server";
+import { enterTenant } from "@/lib/tenant";
 
 const GOOD_CV = "Amina Okonkwo. Software engineer. I have shipped production services in TypeScript for six years. I design PostgreSQL schemas and write SQL for reporting. I also use React for internal tools.";
 const WEAK_CV = "Jonah Hale. Retail supervisor. I managed a store team, scheduled shifts, and handled customer complaints. I use spreadsheets for the weekly roster. I have not worked in software.";
@@ -125,6 +126,7 @@ export async function rescreenCv(userId: string, input: { slug: string; applicat
 }
 
 export async function runCvScreen(input: { companyId: string; applicationId: string; actorUserId: string | null }) {
+  enterTenant({ companyId: input.companyId, publicSlug: "" });
   const sql = await db();
   const apps = await sql<{
     id: string;
@@ -160,9 +162,12 @@ export async function runCvScreen(input: { companyId: string; applicationId: str
     ? await readResume(file.mime, await loadFileBytes(file.content), file.display_name)
     : { text: null, readable: false, note: "" };
 
+  // Job screen_assessment_id is the exam to auto-send on a CV fit. Prefer
+  // assessments with auto_send on; still send a published linked exam when the
+  // job explicitly chose it (auto_send off is for manual-only papers).
   const published = app.assessment_id
-    ? await sql<{ id: string; duration_seconds: number; name: string }>`
-        select v.id, v.duration_seconds, s.name
+    ? await sql<{ id: string; duration_seconds: number; name: string; auto_send: unknown }>`
+        select v.id, v.duration_seconds, s.name, s.auto_send
         from assessment_versions v
         join assessments s on s.id = v.assessment_id and s.company_id = v.company_id
         where v.assessment_id = ${app.assessment_id} and v.company_id = ${input.companyId} and v.status = 'PUBLISHED'

@@ -178,6 +178,7 @@ function Assessments() {
     <div>
       <PageTitle title="Assessments" lede="Open Preview to take the paper with its time limit. Automatic send assigns a published exam when a CV is a fit. The coding bank is 500 original write-code problems across easy, medium, and hard. They are not items copied from another site. Code is stored for a person to grade." />
       {tests.error ? <Alert>{tests.error}</Alert> : null}
+      {error ? <div className="mb-3"><Alert>{error}</Alert></div> : null}
       {note ? <p className="mb-3 text-sm text-ok">{note}</p> : null}
       {previewId ? (
         <div className="mb-6">
@@ -205,7 +206,16 @@ function Assessments() {
             </div>
             <div className="mt-5 flex flex-wrap gap-2">
               <Button type="button" onClick={() => { setNote(null); setPreviewId(String(test.id)); }}>Preview</Button>
-              <Button variant="secondary" type="button" onClick={() => publishAssessment({ data: { slug: companySlug, assessmentId: String(test.id) } }).then(() => refreshPage()).catch((err) => setError(err.message))}>Publish</Button>
+              <Button variant="secondary" type="button" onClick={() => {
+                setError(null);
+                setNote(null);
+                void publishAssessment({ data: { slug: companySlug, assessmentId: String(test.id) } })
+                  .then((result) => {
+                    setNote(result?.alreadyPublished ? "Already published." : "Published. Candidates can be assigned this version.");
+                    refreshPage();
+                  })
+                  .catch((err) => setError(err instanceof Error ? err.message : "Could not publish."));
+              }}>Publish</Button>
               <Button variant="ghost" type="button" onClick={() => updateAssessmentDelivery({ data: { slug: companySlug, assessmentId: String(test.id), autoSend: !test.auto_send } }).then(() => refreshPage()).catch((err) => setError(err.message))}>
                 {test.auto_send ? "Auto-send off" : "Auto-send on"}
               </Button>

@@ -1,4 +1,5 @@
 import { LIKERT_OPTIONS, PERSONALITY_ITEMS } from "@/domain/personality";
+import { enterTenant } from "@/lib/tenant";
 import { db, json, sha256 } from "./db.server";
 
 function personalityId(companyId: string, name: string) {
@@ -14,6 +15,7 @@ const DESCRIPTION =
 
 /** Idempotent. Publishes the 25-statement personality questionnaire. */
 export async function ensurePersonalityAssessment(companyId: string) {
+  enterTenant({ companyId, publicSlug: "" });
   const sql = await db();
   const versionId = personalityId(companyId, "version");
   const assessmentId = personalityId(companyId, "assessment");

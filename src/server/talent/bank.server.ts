@@ -2,6 +2,7 @@ import { CODING_BANK } from "@/domain/coding-bank";
 import { orderedOptions } from "@/domain/candidate-view";
 import { DEFAULT_TEXT_RUBRIC } from "@/domain/rules";
 import { assertSameSiteRequest } from "@/lib/auth/isolation.server";
+import { enterTenant } from "@/lib/tenant";
 import { allow, audit, db, json, nid, requireActor, sha256 } from "./db.server";
 import { rememberEvent } from "./workflows.server";
 
@@ -32,6 +33,7 @@ export async function ensureCodingBank(companyId: string) {
 }
 
 async function ensureCodingBankOnce(companyId: string) {
+  enterTenant({ companyId, publicSlug: "" });
   const sql = await db();
   const versionId = bankId(companyId, "version");
   const existing = await sql<{ n: number }>`
