@@ -22,7 +22,8 @@ describe("delivery", () => {
     assert.match(deliveryLabel("STORED"), /outside provider/i);
     assert.match(deliveryLabel("ACCEPTED"), /not delivery/i);
     assert.match(deliveryLabel("DELIVERED"), /delivery/i);
-    assert.match(deliveryLabel("BOUNCED"), /suppressed/i);
+    assert.match(deliveryLabel("BOUNCED"), /rejected|bounce/i);
+    assert.match(deliveryLabel("SUPPRESSED"), /suppress/i);
     const fifth = nextState({ current: "DEFERRED", attemptNo: 5, suppressed: false, provider: "smtp", providerResult: "failed" });
     assert.equal(fifth.state, "FAILED");
     assert.equal(retryDelayMinutes(3), 4);
@@ -114,7 +115,7 @@ describe("plans", () => {
     assert.equal(merged.body, "Xhello!");
     const replies = pullSmtpReplies("250-ready\r\n250 OK\r\n");
     assert.equal(replies.replies[0]?.code, 250);
-    assert.equal(classifySmtpCode(550), "bounced");
+    assert.equal(classifySmtpCode(550), "failed");
     assert.equal(interpretBoardResponse(401, "{\"error\":\"no\"}").status, "FAILED");
     assert.equal(interpretHrisPush(200, "{}").status, "PUSHED");
     const health = integrationHealth({ smtpHost: false, mailFrom: false, inboundSecret: false, calendarVendor: false, calendarToken: false, jobBoard: false, hris: false, unshare: true, objectStore: false });

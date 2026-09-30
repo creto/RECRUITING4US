@@ -153,11 +153,8 @@ export async function drainMail(companyId: string) {
       `;
     }
     if (step.state === "BOUNCED") {
-      await sql`
-        insert into mail_suppressions (company_id, email, reason)
-        values (${companyId}, ${normalizeEmail(row.to_email)}, 'bounce')
-        on conflict (company_id, email) do nothing
-      `;
+      // Do not write mail_suppressions here. Recruiters suppress only via the
+      // Suppress control; Queue must keep enqueuing and attempting delivery.
       await sql`
         update campaign_enrollments set status = 'BOUNCED'
         where company_id = ${companyId} and status in ('QUEUED', 'SENT')
@@ -284,6 +281,13 @@ export async function queueMail(userId: string, slug: string, input: {
   if (!toEmail || !toEmail.includes("@")) {
     throw new Error("Enter the address to send to. It can be any inbox, including one outside this account.");
   }
+  const blocked = await sql<{ email: string }>`
+    select email from mail_suppressions
+    where company_id = ${actor.companyId} and email = ${normalizeEmail(toEmail)}
+  `;
+  if (blocked[0]) {
+    throw new Error("That address is on the suppression list. Use Unsuppress on Delivery, then queue again.");
+  }
   const tokens = {
     candidate_name: app.name,
     job_title: app.title,
@@ -402,6 +406,13 @@ export async function queueProspectMail(userId: string, slug: string, input: {
   const parsed = parseRecipient(input.email);
   if ("error" in parsed) throw new Error(parsed.error);
   const to = parsed.email;
+  const blocked = await sql<{ email: string }>`
+    select email from mail_suppressions
+    where company_id = ${actor.companyId} and email = ${normalizeEmail(to)}
+  `;
+  if (blocked[0]) {
+    throw new Error("That address is on the suppression list. Use Unsuppress on Delivery, then queue again.");
+  }
   const tokens = { candidate_name: input.name, company_name: actor.companyName, recruiter_name: actor.name, job_title: "" };
   const subject = renderTokens(input.subject, tokens).slice(0, 200);
   const body = prepareMailBody(renderTokens(input.body, tokens));
@@ -550,12 +561,10 @@ export async function receiveMailEvent(input: { body: string; timestamp: string;
       where company_id = ${companyId} and id = ${intent.id}
     `;
   }
+  // Provider bounce/complaint updates message status only. Address suppression
+  // stays an explicit recruiter action (Suppress / Unsuppress on Delivery).
   if (next === "BOUNCED" || next === "COMPLAINED") {
-    await sql`
-      insert into mail_suppressions (company_id, email, reason)
-      values (${companyId}, ${normalizeEmail(intent.to_email)}, ${next === "BOUNCED" ? "bounce" : "complaint"})
-      on conflict (company_id, email) do nothing
-    `;
+    /* intentional: no mail_suppressions write */
   }
   await sql`
     insert into delivery_attempts (id, company_id, intent_id, attempt_no, provider, state, detail)

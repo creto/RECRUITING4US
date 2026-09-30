@@ -79,9 +79,9 @@ export function deliveryLabel(state: string): string {
     case "DEFERRED":
       return "Deferred. It will be retried.";
     case "BOUNCED":
-      return "Bounced. The address is suppressed.";
+      return "Bounced. The provider rejected delivery.";
     case "COMPLAINED":
-      return "Complaint recorded. The address is suppressed.";
+      return "Complaint recorded. Delivery was stopped for this message.";
     case "FAILED":
       return "Failed. It was not delivered.";
     case "SUPPRESSED":

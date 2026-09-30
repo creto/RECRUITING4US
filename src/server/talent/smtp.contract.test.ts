@@ -60,7 +60,7 @@ describe("smtp contract", () => {
       { host: "127.0.0.1", port, user: "", password: "", from: "jobs@example.com", secure: false },
       { to: ["bounce@example.com"], cc: "", subject: "Hello", body: "Body", messageId: "m2@recruit4us" },
     );
-    assert.equal(bounced.result, "bounced");
+    assert.equal(bounced.result, "failed");
     await new Promise((resolve) => server.close(resolve));
   });
 });

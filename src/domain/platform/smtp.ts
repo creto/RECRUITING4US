@@ -27,7 +27,10 @@ export function pullSmtpReplies(buffer: string): { replies: SmtpReply[]; rest: s
 export function classifySmtpCode(code: number): "accepted" | "deferred" | "bounced" | "failed" {
   if (code >= 200 && code < 300) return "accepted";
   if (code >= 400 && code < 500) return "deferred";
-  if (code === 550 || code === 551 || code === 552 || code === 553) return "bounced";
+  // 5xx at submit time is a send failure, not an address suppression. Bounce/complaint
+  // suppressions are only recorded from the Suppress UI (or a signed provider webhook
+  // that maps to BOUNCED without auto-writing mail_suppressions).
+  if (code === 550 || code === 551 || code === 552 || code === 553) return "failed";
   return "failed";
 }
 
