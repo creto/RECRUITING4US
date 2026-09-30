@@ -905,6 +905,10 @@ export async function openLive(userId: string, slug: string, applicationId: stri
   const actor = await requireActor(userId, slug);
   allow(actor, "interview.manage");
   const sql = await db();
+  const apps = await sql<{ id: string }>`
+    select id from applications where company_id = ${actor.companyId} and id = ${applicationId} limit 1
+  `;
+  if (!apps[0]) throw new Error("Not found.");
   const id = nid();
   const token = crypto.randomUUID();
   const starter = "function solve() {\n  return null;\n}\n";
@@ -930,11 +934,24 @@ async function liveRole(userId: string, token: string): Promise<{ companyId: str
   if (!companyId) throw new Error("This interview room does not exist.");
   enterTenant({ userId: user.id, companyId });
   const sql = await db();
-  const sessions = await sql<{ id: string; application_id: string | null; status: string }>`
-    select id, application_id, status from live_sessions where company_id = ${companyId} and token = ${token}
+  const sessions = await sql<{ id: string; application_id: string | null; attempt_id: string | null; status: string }>`
+    select id, application_id, attempt_id, status from live_sessions where company_id = ${companyId} and token = ${token}
   `;
   const session = sessions[0];
   if (!session) throw new Error("This interview room does not exist.");
+  // Fail-closed: linked attempt/application must belong to this tenant (never cross-company bleed).
+  if (session.attempt_id) {
+    const attempts = await sql<{ id: string }>`
+      select id from attempts where company_id = ${companyId} and id = ${session.attempt_id} limit 1
+    `;
+    if (!attempts[0]) throw new Error("This interview room does not exist.");
+  }
+  if (session.application_id) {
+    const owned = await sql<{ id: string }>`
+      select id from applications where company_id = ${companyId} and id = ${session.application_id} limit 1
+    `;
+    if (!owned[0]) throw new Error("This interview room does not exist.");
+  }
   const members = await sql<{ role: string }>`
     select role from memberships where company_id = ${companyId} and user_id = ${user.id} and status = 'ACTIVE'
   `;

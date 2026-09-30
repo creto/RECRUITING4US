@@ -1,4 +1,4 @@
-import { activeAttemptSummary, buildAttemptLivePad, liveWatchPath } from "@/domain/live-watch";
+import { activeAttemptSummary, buildAttemptLivePad, liveRowVisibleToTenant, liveWatchPath } from "@/domain/live-watch";
 import { roleHas } from "@/domain/rules";
 import { enterTenant } from "@/lib/tenant";
 import { allow, db, json, nid, requireActor } from "./db.server";
@@ -21,6 +21,17 @@ type Meta = {
   job_title: string;
   status: string;
 };
+
+
+/** Fail-closed: attempt must exist under this company or every live path returns empty/null. */
+async function assertAttemptInCompany(companyId: string, attemptId: string): Promise<boolean> {
+  if (!companyId || !attemptId) return false;
+  const sql = await db();
+  const rows = await sql<{ id: string }>`
+    select id from attempts where company_id = ${companyId} and id = ${attemptId} limit 1
+  `;
+  return Boolean(rows[0]);
+}
 
 async function loadMeta(companyId: string, attemptId: string): Promise<Meta | null> {
   const sql = await db();
@@ -57,6 +68,7 @@ async function loadItems(companyId: string, attemptId: string) {
 /** Create or refresh the live pad tied to an open attempt. */
 export async function ensureAttemptLive(companyId: string, attemptId: string): Promise<{ token: string; id: string } | null> {
   enterTenant({ companyId, publicSlug: "" });
+  if (!(await assertAttemptInCompany(companyId, attemptId))) return null;
   const meta = await loadMeta(companyId, attemptId);
   if (!meta || meta.status !== "IN_PROGRESS") return null;
   const sql = await db();
@@ -126,6 +138,7 @@ export async function mirrorAttemptLive(companyId: string, attemptId: string): P
 export async function endAttemptLive(companyId: string, attemptId: string): Promise<void> {
   try {
     enterTenant({ companyId, publicSlug: "" });
+    if (!(await assertAttemptInCompany(companyId, attemptId))) return;
     const sql = await db();
     await sql`
       update live_sessions set status = 'ENDED'
@@ -140,6 +153,7 @@ export async function endAttemptLive(companyId: string, attemptId: string): Prom
 export async function touchAttemptLive(companyId: string, attemptId: string): Promise<void> {
   try {
     enterTenant({ companyId, publicSlug: "" });
+    if (!(await assertAttemptInCompany(companyId, attemptId))) return;
     const sql = await db();
     const sessions = await sql<{ id: string }>`
       select id from live_sessions where company_id = ${companyId} and attempt_id = ${attemptId} limit 1
@@ -171,6 +185,8 @@ export async function listActiveAttempts(userId: string, slug: string) {
     candidate_name: string;
     job_title: string;
     application_id: string;
+    row_company_id: string;
+    live_application_id: string | null;
     live_token: string | null;
     last_seen: string | null;
   }>`
@@ -181,6 +197,8 @@ export async function listActiveAttempts(userId: string, slug: string) {
       coalesce(c.name, c.email, 'Candidate') as candidate_name,
       coalesce(j.title, 'Role') as job_title,
       g.application_id,
+      t.company_id as row_company_id,
+      ls.application_id as live_application_id,
       ls.token as live_token,
       to_char(lp.last_seen at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as last_seen
     from attempts t
@@ -190,7 +208,7 @@ export async function listActiveAttempts(userId: string, slug: string) {
     join applications a on a.id = g.application_id and a.company_id = t.company_id
     join candidates c on c.id = a.candidate_id and c.company_id = t.company_id
     join jobs j on j.id = a.job_id and j.company_id = t.company_id
-    left join live_sessions ls on ls.company_id = t.company_id and ls.attempt_id = t.id
+    left join live_sessions ls on ls.company_id = t.company_id and ls.attempt_id = t.id and (ls.application_id is null or ls.application_id = g.application_id)
     left join lateral (
       select last_seen from live_people
       where company_id = t.company_id and session_id = ls.id and role = 'CANDIDATE'
@@ -205,8 +223,15 @@ export async function listActiveAttempts(userId: string, slug: string) {
   const items = [];
   for (const row of rows) {
     // Do not create live pads on the poll path — startAttempt already links them.
-    const token = row.live_token;
-    if (!token) continue;
+    // Fail-closed: never surface another tenant's (or mis-linked application's) token.
+    if (!liveRowVisibleToTenant({
+      tenantCompanyId: actor.companyId,
+      rowCompanyId: row.row_company_id,
+      applicationId: row.application_id,
+      liveApplicationId: row.live_application_id,
+      liveToken: row.live_token,
+    })) continue;
+    const token = row.live_token!;
     items.push({
       attemptId: row.attempt_id,
       applicationId: row.application_id,
@@ -232,6 +257,7 @@ export async function listActiveAttempts(userId: string, slug: string) {
 /** Create the pad if missing; do not rebuild source when it already exists (keeps typing buffer). */
 async function ensureAttemptLiveSession(companyId: string, attemptId: string): Promise<{ token: string; id: string } | null> {
   enterTenant({ companyId, publicSlug: "" });
+  if (!(await assertAttemptInCompany(companyId, attemptId))) return null;
   const sql = await db();
   const existing = await sql<{ id: string; token: string; status: string }>`
     select id, token, status from live_sessions
@@ -258,6 +284,7 @@ export async function pushAttemptLiveBuffer(
 ): Promise<{ revision: number; token: string } | null> {
   try {
     enterTenant({ companyId, publicSlug: "" });
+    if (!(await assertAttemptInCompany(companyId, attemptId))) return null;
     const ensured = await ensureAttemptLiveSession(companyId, attemptId);
     if (!ensured) return null;
     const sql = await db();
@@ -312,6 +339,9 @@ export async function pushAttemptLiveBuffer(
 /** Read public chat lines for an attempt live pad (no private interviewer notes). */
 export async function readAttemptLiveChat(companyId: string, attemptId: string) {
   enterTenant({ companyId, publicSlug: "" });
+  if (!(await assertAttemptInCompany(companyId, attemptId))) {
+    return { liveToken: null as string | null, chat: [] as { author: string; body: string }[] };
+  }
   const sql = await db();
   const sessions = await sql<{ id: string; token: string }>`
     select id, token from live_sessions
@@ -339,6 +369,9 @@ export async function postAttemptLiveChat(
   input: { body: string; author: string },
 ) {
   enterTenant({ companyId, publicSlug: "" });
+  if (!(await assertAttemptInCompany(companyId, attemptId))) {
+    return { liveToken: null as string | null, chat: [] as { author: string; body: string }[] };
+  }
   const body = input.body.trim().slice(0, 1000);
   if (!body) return readAttemptLiveChat(companyId, attemptId);
   const ensured = await ensureAttemptLiveSession(companyId, attemptId);

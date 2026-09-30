@@ -1186,7 +1186,7 @@ async function readAttemptRow(attemptId: string) {
       to_char(t.started_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as started_at,
       t.submission_reason
     from attempts t
-    join assignments g on g.id = t.assignment_id
+    join assignments g on g.id = t.assignment_id and g.company_id = t.company_id
     where t.id = ${attemptId}
   `;
   const attempt = rows[0];
@@ -1218,7 +1218,16 @@ async function loadAttemptByAccess(attemptId: string, accessToken: string) {
     throw new Error("This assessment session expired. Open your invite link again.");
   }
   enterTenant({ companyId: owner.company_id, publicSlug: "" });
+  const assignmentOk = await sql<{ id: string }>`
+    select id from assignments
+    where company_id = ${owner.company_id} and id = ${owner.assignment_id}
+    limit 1
+  `;
+  if (!assignmentOk[0]) throw new Error("Not found.");
   const attempt = await readAttemptRow(attemptId);
+  if (attempt.company_id !== owner.company_id || attempt.assignment_id !== owner.assignment_id) {
+    throw new Error("Not found.");
+  }
   return { attempt, accessUserId: null as string | null };
 }
 

@@ -7,6 +7,7 @@ import {
   describeLiveSignal,
   liveSignalKind,
   liveWatchPath,
+  liveRowVisibleToTenant,
 } from "./live-watch.ts";
 
 describe("live watch", () => {
@@ -42,6 +43,53 @@ describe("live watch", () => {
     assert.equal(
       activeAttemptSummary({ candidateName: "Ada Lovelace", jobTitle: "Platform engineer", assessmentName: "Coding screen" }),
       "Ada Lovelace · Platform engineer · Coding screen",
+    );
+  });
+
+  it("keeps live watch rows inside one tenant and drops cross-application tokens", () => {
+    const tiglobal = "co-tiglobal";
+    const northstar = "co-northstar";
+    const juanTiglobalApp = "bd546960-cae6-4cfd-873a-73e06c51015b";
+    const juanNorthstarApp = "1f4c10e8-2912-4eb3-9025-acd0de48d299";
+    assert.equal(
+      liveRowVisibleToTenant({
+        tenantCompanyId: tiglobal,
+        rowCompanyId: tiglobal,
+        applicationId: juanTiglobalApp,
+        liveApplicationId: juanTiglobalApp,
+        liveToken: "11111111-1111-1111-1111-111111111111",
+      }),
+      true,
+    );
+    assert.equal(
+      liveRowVisibleToTenant({
+        tenantCompanyId: northstar,
+        rowCompanyId: tiglobal,
+        applicationId: juanTiglobalApp,
+        liveApplicationId: juanTiglobalApp,
+        liveToken: "11111111-1111-1111-1111-111111111111",
+      }),
+      false,
+    );
+    assert.equal(
+      liveRowVisibleToTenant({
+        tenantCompanyId: northstar,
+        rowCompanyId: northstar,
+        applicationId: juanNorthstarApp,
+        liveApplicationId: juanTiglobalApp,
+        liveToken: "11111111-1111-1111-1111-111111111111",
+      }),
+      false,
+    );
+    assert.equal(
+      liveRowVisibleToTenant({
+        tenantCompanyId: tiglobal,
+        rowCompanyId: tiglobal,
+        applicationId: juanTiglobalApp,
+        liveApplicationId: juanTiglobalApp,
+        liveToken: null,
+      }),
+      false,
     );
   });
 });

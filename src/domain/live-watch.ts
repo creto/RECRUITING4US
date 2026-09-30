@@ -123,3 +123,18 @@ function answerPreview(type: string, answer: unknown): string {
   }
   return "";
 }
+
+/** Fail-closed: a live watch row is visible only when company and application line up. */
+export function liveRowVisibleToTenant(input: {
+  tenantCompanyId: string;
+  rowCompanyId: string;
+  applicationId: string;
+  liveApplicationId: string | null | undefined;
+  liveToken: string | null | undefined;
+}): boolean {
+  if (!input.tenantCompanyId || input.rowCompanyId !== input.tenantCompanyId) return false;
+  if (!input.liveToken) return false;
+  if (input.liveApplicationId && input.liveApplicationId !== input.applicationId) return false;
+  return true;
+}
+
