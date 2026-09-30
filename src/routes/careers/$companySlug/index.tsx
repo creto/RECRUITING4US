@@ -38,7 +38,7 @@ function Careers() {
   return (
     <main className="min-h-screen bg-bg text-ink" style={theme}>
       <div className="mx-auto max-w-3xl px-4 py-8">
-      <Link to="/"><Wordmark /></Link>
+      <Link to="/"><Wordmark logoUrl={data?.company?.logoUrl} companyName={data?.company?.name} /></Link>
       <h1 className="mt-3 text-4xl">{data?.company?.name ?? "Careers"}</h1>
       <p className="mt-2 text-sm text-muted">{data?.company?.headline || "Published jobs only. Drafts, paused roles, and closed roles are hidden."}</p>
       <p className="mt-2 text-sm"><Link to="/track" className="text-link">Already applied? Check your progress</Link></p>

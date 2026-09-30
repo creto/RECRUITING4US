@@ -34,6 +34,7 @@ import { loadFileBytes, removeStoredFile, storeFileBytes } from "./object-store.
 import { sniffResume } from "@/domain/platform/docx";
 import { applicationReceipt, applicationSheetCsv, cvResultLabel, storedAnswerText, type SheetField, type SheetRow } from "@/domain/sheet";
 import { normalizeWebsiteUrl } from "@/domain/web-url";
+import { companyBrandLogoUrl } from "@/domain/company-brand";
 import { enterTenant } from "@/lib/tenant";
 import { allow, audit, canonical, db, forgetActor, json, mapDbError, nid, requireActor, requireUser, sha256, withTransaction, type Actor } from "./db.server";
 import { rememberEvent } from "./workflows.server";
@@ -228,8 +229,9 @@ export async function getWorkspace(userId: string, slug: string) {
     embed_accent: string;
     embed_accent_ink: string;
     careers_headline: string;
+    mail_logo_url: string;
   }>`
-    select embed_background, embed_ink, embed_accent, embed_accent_ink, careers_headline
+    select embed_background, embed_ink, embed_accent, embed_accent_ink, careers_headline, mail_logo_url
     from companies where id = ${actor.companyId}
   `;
   return {
@@ -241,6 +243,7 @@ export async function getWorkspace(userId: string, slug: string) {
       demo: actor.demo,
       retentionDays: actor.retentionDays,
       headline: branding[0]?.careers_headline ?? "",
+      logoUrl: companyBrandLogoUrl(actor.slug, branding[0]?.mail_logo_url ?? ""),
       theme: {
         background: branding[0]?.embed_background ?? "#ffffff",
         ink: branding[0]?.embed_ink ?? "#14221b",
@@ -1833,8 +1836,9 @@ export async function listPublicJobs(input: { companySlug: string; q?: string; d
     embed_ink: string;
     embed_accent: string;
     embed_accent_ink: string;
+    mail_logo_url: string;
   }>`
-    select id, name, timezone, careers_headline, embed_background, embed_ink, embed_accent, embed_accent_ink
+    select id, name, timezone, careers_headline, embed_background, embed_ink, embed_accent, embed_accent_ink, mail_logo_url
     from companies where slug = ${input.companySlug} and status = 'ACTIVE'
   `;
   const company = companies[0];
@@ -1867,6 +1871,7 @@ export async function listPublicJobs(input: { companySlug: string; q?: string; d
       slug: input.companySlug,
       timezone: company.timezone,
       headline: company.careers_headline,
+      logoUrl: companyBrandLogoUrl(input.companySlug, company.mail_logo_url),
       theme: {
         background: company.embed_background,
         ink: company.embed_ink,
@@ -1905,11 +1910,12 @@ export async function getPublicJob(companySlug: string, jobSlug: string) {
     embed_accent: string;
     embed_accent_ink: string;
     careers_headline: string;
+    mail_logo_url: string;
   }>`
     select c.name as company_name, c.timezone, r.title, j.department, j.locations, j.work_arrangement,
       j.employment_type, r.description, r.form_schema, r.salary_visible, r.salary_min, r.salary_max,
       r.salary_currency, j.status,
-      c.embed_background, c.embed_ink, c.embed_accent, c.embed_accent_ink, c.careers_headline
+      c.embed_background, c.embed_ink, c.embed_accent, c.embed_accent_ink, c.careers_headline, c.mail_logo_url
     from jobs j
     join companies c on c.id = j.company_id
     join job_revisions r on r.id = j.published_revision_id and r.company_id = j.company_id
@@ -1917,8 +1923,10 @@ export async function getPublicJob(companySlug: string, jobSlug: string) {
   `;
   const job = rows[0];
   if (!job || job.status !== "PUBLISHED") return null;
+  const { mail_logo_url: mailLogoUrl, ...publicJob } = job;
   return {
-    ...job,
+    ...publicJob,
+    logoUrl: companyBrandLogoUrl(companySlug, mailLogoUrl),
     salary_min: job.salary_visible ? job.salary_min : null,
     salary_max: job.salary_visible ? job.salary_max : null,
   };

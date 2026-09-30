@@ -44,6 +44,9 @@ export type WorkspacePayload = {
     role: string;
     demo: boolean;
     retentionDays: number;
+    logoUrl?: string;
+    theme?: { background: string; ink: string; accent: string; accentInk: string };
+    headline?: string;
   };
   counts?: { jobs: number; applications: number; reviews: number; interviews: number };
   activity: { id: string; summary: string; action: string; at: string }[];
@@ -339,12 +342,14 @@ export function Shell({
   name,
   role,
   theme,
+  logoUrl,
   children,
 }: {
   slug: string;
   name: string;
   role: string;
   theme?: Record<string, string>;
+  logoUrl?: string;
   children: ReactNode;
 }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -354,7 +359,7 @@ export function Shell({
       <aside className="border-b border-line bg-sidebar text-sidebar-fg md:sticky md:top-0 md:h-screen md:overflow-y-auto md:border-b-0 md:border-r">
         <div className="flex items-center justify-between gap-3 px-4 py-5 md:block">
           <Link to="/app" className="block max-w-full overflow-hidden text-sidebar-fg">
-            <Wordmark />
+            <Wordmark logoUrl={logoUrl} companyName={name} />
           </Link>
           <div className="md:mt-4">
             <UserButton />
@@ -401,10 +406,26 @@ export function Shell({
   );
 }
 
-export function Wordmark({ className = "" }: { className?: string }) {
+export function Wordmark({
+  className = "",
+  logoUrl,
+  companyName,
+}: {
+  className?: string;
+  logoUrl?: string;
+  companyName?: string;
+}) {
+  const brandSrc = logoUrl?.trim() || "/mark.png";
+  const brandAlt = logoUrl?.trim() ? (companyName ? `${companyName} logo` : "Company logo") : "";
   return (
     <span className={`flex max-w-full flex-col items-start gap-1 ${className}`}>
-      <img src="/mark.png" alt="" width={72} height={40} className="h-6 w-auto max-w-16" />
+      <img
+        src={brandSrc}
+        alt={brandAlt}
+        width={logoUrl?.trim() ? 140 : 72}
+        height={logoUrl?.trim() ? 106 : 40}
+        className={logoUrl?.trim() ? "h-10 w-auto max-w-[9rem]" : "h-6 w-auto max-w-16"}
+      />
       <span className="font-brand max-w-full text-sm uppercase leading-none tracking-wide text-ink">RECRUIT4US</span>
     </span>
   );
