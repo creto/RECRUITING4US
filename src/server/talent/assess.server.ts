@@ -450,10 +450,24 @@ export async function assignAssessment(
       values (
         ${nid()}, ${actor.companyId}, ${people[0].email},
         ${"Assessment: " + people[0].name},
-        ${"You have an assessment to complete in the candidate portal before the start-by time. Opening this message does not start the timer."},
+        ${"You have an assessment to complete in the candidate portal before the start-by time. Opening this message does not start the timer. An outside email is queued separately and is not delivered unless a mail provider is configured."},
         'CAPTURED', ${id}
       )
     `;
+  }
+  try {
+    const { queueMail } = await import("./platform.server");
+    await queueMail(userId, input.slug, {
+      applicationId: input.applicationId,
+      kind: "ASSESSMENT",
+      subject: "Assessment: " + (people[0]?.name ?? "assignment"),
+      body: "Hello {{candidate_name}},\n\nYou have an assessment to complete in the candidate portal before the start-by time. Opening this message does not start the timer.\n\n{{company_name}}",
+      cc: "",
+      bcc: "",
+      idempotencyKey: `assessment:${id}`,
+    });
+  } catch {
+    // Assignment is already stored. Mail failure is visible in the delivery log.
   }
   await rememberEvent(actor.companyId, "ASSESSMENT_ASSIGNED", id, {
     applicationId: input.applicationId,

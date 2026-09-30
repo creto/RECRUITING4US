@@ -26,6 +26,7 @@ import { Route as ApiHealthIndexRouteImport } from './routes/api/health/index'
 import { Route as ApiHealthLiveRouteImport } from './routes/api/health/live'
 import { Route as ApiHealthReadyRouteImport } from './routes/api/health/ready'
 import { Route as ApiMailEventsRouteImport } from './routes/api/mail/events'
+import { Route as ApiOpsDrainMailRouteImport } from './routes/api/ops/drain-mail'
 import { Route as ApiProviderCallbackRouteImport } from './routes/api/provider/callback'
 import { Route as AppCompanySlugIndexRouteImport } from './routes/app/$companySlug/index'
 import { Route as AppCompanySlugAssessmentsRouteImport } from './routes/app/$companySlug/assessments'
@@ -140,6 +141,11 @@ const ApiHealthReadyRoute = ApiHealthReadyRouteImport.update({
 const ApiMailEventsRoute = ApiMailEventsRouteImport.update({
   id: '/api/mail/events',
   path: '/api/mail/events',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiOpsDrainMailRoute = ApiOpsDrainMailRouteImport.update({
+  id: '/api/ops/drain-mail',
+  path: '/api/ops/drain-mail',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiProviderCallbackRoute = ApiProviderCallbackRouteImport.update({
@@ -321,6 +327,7 @@ export interface FileRoutesByFullPath {
   '/api/health/live': typeof ApiHealthLiveRoute
   '/api/health/ready': typeof ApiHealthReadyRoute
   '/api/mail/events': typeof ApiMailEventsRoute
+  '/api/ops/drain-mail': typeof ApiOpsDrainMailRoute
   '/api/provider/callback': typeof ApiProviderCallbackRoute
   '/app/$companySlug/assessments': typeof AppCompanySlugAssessmentsRoute
   '/app/$companySlug/automations': typeof AppCompanySlugAutomationsRoute
@@ -369,6 +376,7 @@ export interface FileRoutesByTo {
   '/api/health/live': typeof ApiHealthLiveRoute
   '/api/health/ready': typeof ApiHealthReadyRoute
   '/api/mail/events': typeof ApiMailEventsRoute
+  '/api/ops/drain-mail': typeof ApiOpsDrainMailRoute
   '/api/provider/callback': typeof ApiProviderCallbackRoute
   '/app/$companySlug/assessments': typeof AppCompanySlugAssessmentsRoute
   '/app/$companySlug/automations': typeof AppCompanySlugAutomationsRoute
@@ -419,6 +427,7 @@ export interface FileRoutesById {
   '/api/health/live': typeof ApiHealthLiveRoute
   '/api/health/ready': typeof ApiHealthReadyRoute
   '/api/mail/events': typeof ApiMailEventsRoute
+  '/api/ops/drain-mail': typeof ApiOpsDrainMailRoute
   '/api/provider/callback': typeof ApiProviderCallbackRoute
   '/app/$companySlug/assessments': typeof AppCompanySlugAssessmentsRoute
   '/app/$companySlug/automations': typeof AppCompanySlugAutomationsRoute
@@ -470,6 +479,7 @@ export interface FileRouteTypes {
     | '/api/health/live'
     | '/api/health/ready'
     | '/api/mail/events'
+    | '/api/ops/drain-mail'
     | '/api/provider/callback'
     | '/app/$companySlug/assessments'
     | '/app/$companySlug/automations'
@@ -518,6 +528,7 @@ export interface FileRouteTypes {
     | '/api/health/live'
     | '/api/health/ready'
     | '/api/mail/events'
+    | '/api/ops/drain-mail'
     | '/api/provider/callback'
     | '/app/$companySlug/assessments'
     | '/app/$companySlug/automations'
@@ -567,6 +578,7 @@ export interface FileRouteTypes {
     | '/api/health/live'
     | '/api/health/ready'
     | '/api/mail/events'
+    | '/api/ops/drain-mail'
     | '/api/provider/callback'
     | '/app/$companySlug/assessments'
     | '/app/$companySlug/automations'
@@ -617,6 +629,7 @@ export interface RootRouteChildren {
   ApiHealthLiveRoute: typeof ApiHealthLiveRoute
   ApiHealthReadyRoute: typeof ApiHealthReadyRoute
   ApiMailEventsRoute: typeof ApiMailEventsRoute
+  ApiOpsDrainMailRoute: typeof ApiOpsDrainMailRoute
   ApiProviderCallbackRoute: typeof ApiProviderCallbackRoute
   CandidateApplicationsApplicationIdRoute: typeof CandidateApplicationsApplicationIdRoute
   CandidateAttemptsAttemptIdRoute: typeof CandidateAttemptsAttemptIdRoute
@@ -746,6 +759,13 @@ declare module '@tanstack/react-router' {
       path: '/api/mail/events'
       fullPath: '/api/mail/events'
       preLoaderRoute: typeof ApiMailEventsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/ops/drain-mail': {
+      id: '/api/ops/drain-mail'
+      path: '/api/ops/drain-mail'
+      fullPath: '/api/ops/drain-mail'
+      preLoaderRoute: typeof ApiOpsDrainMailRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/provider/callback': {
@@ -1046,6 +1066,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiHealthLiveRoute: ApiHealthLiveRoute,
   ApiHealthReadyRoute: ApiHealthReadyRoute,
   ApiMailEventsRoute: ApiMailEventsRoute,
+  ApiOpsDrainMailRoute: ApiOpsDrainMailRoute,
   ApiProviderCallbackRoute: ApiProviderCallbackRoute,
   CandidateApplicationsApplicationIdRoute:
     CandidateApplicationsApplicationIdRoute,
@@ -1059,12 +1080,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}

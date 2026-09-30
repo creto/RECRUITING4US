@@ -159,8 +159,8 @@ function scheduleMaintenance(companyId: string) {
   setTimeout(() => {
     void (async () => {
       try {
-        const { drain } = await import("./workflows.server");
-        await drain(companyId);
+        const { drainCompany } = await import("./drain.server");
+        await drainCompany(companyId);
         const { sweepCompany } = await import("./assess.server");
         await sweepCompany(companyId);
       } catch (error) {
