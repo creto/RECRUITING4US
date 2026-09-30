@@ -113,6 +113,29 @@ async function ensurePaper(
   const sql = await db();
   const assessmentId = ladderId(companyId, key);
   const versionId = ladderId(companyId, `${key}-version`);
+  const ready = await sql<{ n: number }>`
+    select count(*)::int as n
+    from assessment_items i
+    join assessment_sections s on s.id = i.section_id and s.company_id = i.company_id
+    where i.company_id = ${companyId} and s.version_id = ${versionId}
+  `;
+  const exam = await sql<{ id: string }>`
+    select id from assessment_versions where id = ${versionId} and company_id = ${companyId}
+  `;
+  // Each pipeline paper pools from the coding bank; once linked, skip rebuild.
+  if (exam[0] && Number(ready[0]?.n ?? 0) > 0) {
+    let expected = 0;
+    for (const section of sections) {
+      const count = await sql<{ n: number }>`
+        select count(*)::int as n from questions q
+        join question_versions v on v.question_id = q.id and v.company_id = q.company_id
+        where q.company_id = ${companyId} and q.logical_key like 'bank:%'
+          and v.payload->>'difficulty' = ${section.key}
+      `;
+      expected += Number(count[0]?.n ?? 0);
+    }
+    if (Number(ready[0]?.n ?? 0) >= expected && expected > 0) return;
+  }
   await sql`
     insert into assessments (id, company_id, name, description, auto_send)
     values (
@@ -148,9 +171,10 @@ async function ensurePaper(
       order by q.logical_key
     `;
     const have = await sql<{ n: number }>`
-      select count(*) as n from assessment_items
+      select count(*)::int as n from assessment_items
       where company_id = ${companyId} and section_id = ${sectionId}
     `;
+    if (Number(have[0]?.n ?? 0) === items.length && items.length > 0) continue;
     if (Number(have[0]?.n ?? 0) !== items.length) {
       await sql`
         delete from assessment_items
@@ -212,29 +236,36 @@ async function rankExpertise(companyId: string, jobId: string) {
   if (!job[0]) return;
   const required = termsFromJson(job[0].required);
   const preferred = termsFromJson(job[0].preferred);
-  const apps = await sql<{ id: string; stage_name: string; email: string }>`
-    select a.id, s.name as stage_name, c.email
+  const apps = await sql<{ id: string; stage_name: string; email: string; indexed_text: string | null }>`
+    select a.id, s.name as stage_name, c.email, p.indexed_text
     from applications a
     join pipeline_stages s on s.id = a.current_stage_id and s.company_id = a.company_id
     join candidates c on c.id = a.candidate_id and c.company_id = a.company_id
+    left join candidate_profiles p on p.application_id = a.id and p.company_id = a.company_id
     where a.company_id = ${companyId} and a.job_id = ${jobId} and a.lifecycle = 'ACTIVE'
   `;
   const scored: { id: string; score: number; lines: string[]; email: string; stageName: string }[] = [];
   const unread: { id: string; lines: string[] }[] = [];
   for (const app of apps) {
-    const files = await sql<{ mime: string; content: string; scan_state: string; display_name: string }>`
-      select mime, content, scan_state, display_name from file_objects
-      where company_id = ${companyId} and owner_id = ${app.id}
-      order by created_at desc limit 1
-    `;
-    const file = files[0];
-    const clean = file?.scan_state === "CLEAN";
-    const extracted = file && clean
-      ? await readResume(file.mime, await loadFileBytes(file.content), file.display_name)
-      : { text: null, readable: false };
+    let text = app.indexed_text;
+    let readable = Boolean(text && text.trim());
+    if (!readable) {
+      const files = await sql<{ mime: string; content: string; scan_state: string; display_name: string }>`
+        select mime, content, scan_state, display_name from file_objects
+        where company_id = ${companyId} and owner_id = ${app.id}
+        order by created_at desc limit 1
+      `;
+      const file = files[0];
+      const clean = file?.scan_state === "CLEAN";
+      const extracted = file && clean
+        ? await readResume(file.mime, await loadFileBytes(file.content), file.display_name)
+        : { text: null, readable: false };
+      text = extracted.text;
+      readable = extracted.readable;
+    }
     const expertise = scoreExpertise({
-      text: extracted.text,
-      readable: extracted.readable,
+      text,
+      readable,
       required,
       preferred,
     });

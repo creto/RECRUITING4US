@@ -112,37 +112,83 @@ export async function getAssessment(userId: string, slug: string, assessmentId: 
   return { assessment: rows[0], versions };
 }
 
-export async function listQuestions(userId: string, slug: string) {
+export async function listQuestions(
+  userId: string,
+  slug: string,
+  opts: { filter?: "all" | "bank" | "read" | "other"; limit?: number; offset?: number; q?: string } = {},
+) {
   const actor = await requireActor(userId, slug);
   allow(actor, "assessment.author");
   await ensureCodingBank(actor.companyId);
   await ensureReadCodeBank(actor.companyId);
   const sql = await db();
-  const rows = await sql<{
-    id: string;
-    type: string;
-    tags: string;
-    archived: boolean;
-    prompt: string;
-    version_number: number;
-    version_id: string;
-    points: number;
-    payload: unknown;
-    rubric: unknown;
-    key_payload: unknown;
-  }>`
-    select q.id, q.type, q.tags, q.archived, v.prompt, v.version_number, v.id as version_id, v.points,
-      v.payload, v.rubric, v.key_payload
+  const filter = opts.filter ?? "all";
+  const limit = Math.min(100, Math.max(1, Number(opts.limit ?? 40)));
+  const offset = Math.max(0, Number(opts.offset ?? 0));
+  const needle = (opts.q ?? "").trim().slice(0, 80);
+  const bank = filter === "bank";
+  const read = filter === "read";
+  const other = filter === "other";
+  const totals = await sql<{ n: number }>`
+    select count(*)::int as n
     from questions q
     join question_versions v on v.question_id = q.id and v.company_id = q.company_id
     where q.company_id = ${actor.companyId}
       and v.version_number = (
         select max(version_number) from question_versions where question_id = q.id
       )
-    order by q.created_at desc
+      and (
+        (${bank} and q.tags like 'coding-bank%')
+        or (${read} and q.tags like 'read-code%')
+        or (${other} and q.tags not like 'coding-bank%' and q.tags not like 'read-code%')
+        or (not ${bank} and not ${read} and not ${other})
+      )
+      and (${needle} = '' or v.prompt ilike ${"%" + needle + "%"} or coalesce(v.payload->>'title', '') ilike ${"%" + needle + "%"})
   `;
-  return rows.map((row) => {
-    const grading = gradingMethod(row.type)
+  const rows = await sql<{
+    id: string;
+    type: string;
+    tags: string;
+    archived: boolean;
+    prompt: string;
+    title: string | null;
+    version_number: number;
+    version_id: string;
+    points: number;
+    difficulty: string | null;
+    payload: unknown;
+    rubric: unknown;
+    key_payload: unknown;
+  }>`
+    select q.id, q.type, q.tags, q.archived,
+      left(v.prompt, 320) as prompt,
+      v.payload->>'title' as title,
+      v.version_number, v.id as version_id, v.points,
+      v.payload->>'difficulty' as difficulty,
+      case when q.type in ('single', 'multi', 'likert') then v.payload else '{}'::jsonb end as payload,
+      case when q.type in ('single', 'multi', 'numeric') then v.rubric else null end as rubric,
+      case when q.type in ('single', 'multi', 'numeric') then v.key_payload else '{}'::jsonb end as key_payload
+    from questions q
+    join question_versions v on v.question_id = q.id and v.company_id = q.company_id
+    where q.company_id = ${actor.companyId}
+      and v.version_number = (
+        select max(version_number) from question_versions where question_id = q.id
+      )
+      and (
+        (${bank} and q.tags like 'coding-bank%')
+        or (${read} and q.tags like 'read-code%')
+        or (${other} and q.tags not like 'coding-bank%' and q.tags not like 'read-code%')
+        or (not ${bank} and not ${read} and not ${other})
+      )
+      and (${needle} = '' or v.prompt ilike ${"%" + needle + "%"} or coalesce(v.payload->>'title', '') ilike ${"%" + needle + "%"})
+    order by
+      case when q.tags like 'coding-bank%' or q.tags like 'read-code%' then 1 else 0 end,
+      q.created_at desc
+    limit ${limit} offset ${offset}
+  `;
+  const items = rows.map((row) => {
+    const bankish = row.tags.startsWith("coding-bank") || row.tags.startsWith("read-code");
+    const grading = !bankish && gradingMethod(row.type)
       ? explainAuthorQuestion({
           type: row.type,
           points: row.points,
@@ -157,18 +203,24 @@ export async function listQuestions(userId: string, slug: string) {
       tags: row.tags,
       archived: row.archived,
       prompt: row.prompt,
+      title: row.title,
       version_number: row.version_number,
       version_id: row.version_id,
       points: row.points,
-      difficulty: typeof (row.payload as { difficulty?: string } | null)?.difficulty === "string"
-        ? (row.payload as { difficulty: string }).difficulty
-        : null,
-      options: orderedOptions(row.payload, null),
+      difficulty: row.difficulty,
+      options: bankish && row.type === "code" ? [] : orderedOptions(row.payload, null),
       grading: grading
         ? { method: grading.method, title: grading.title, keySummary: grading.keySummary, steps: grading.steps }
         : null,
     };
   });
+  return {
+    items,
+    total: Number(totals[0]?.n ?? 0),
+    limit,
+    offset,
+    filter,
+  };
 }
 
 export async function createQuestion(

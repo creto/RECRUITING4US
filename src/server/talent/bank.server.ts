@@ -13,44 +13,78 @@ export function flag(value: unknown): boolean {
   return value === true || value === "t" || value === "true";
 }
 
+const codingBankReady = new Set<string>();
+const codingBankInflight = new Map<string, Promise<void>>();
+
 /** Idempotent. Publishes the 500-problem coding bank and a pooled write-code assessment. */
 export async function ensureCodingBank(companyId: string) {
+  if (codingBankReady.has(companyId)) return;
+  const pending = codingBankInflight.get(companyId);
+  if (pending) return pending;
+  const work = (async () => {
+    await ensureCodingBankOnce(companyId);
+    codingBankReady.add(companyId);
+  })().finally(() => {
+    codingBankInflight.delete(companyId);
+  });
+  codingBankInflight.set(companyId, work);
+  return work;
+}
+
+async function ensureCodingBankOnce(companyId: string) {
   const sql = await db();
-  for (const item of CODING_BANK) {
-    const logical = `bank:${item.key}`;
+  const versionId = bankId(companyId, "version");
+  const existing = await sql<{ n: number }>`
+    select count(*)::int as n from questions
+    where company_id = ${companyId} and logical_key like 'bank:%'
+  `;
+  const exam = await sql<{ id: string }>`
+    select id from assessment_versions where id = ${versionId} and company_id = ${companyId}
+  `;
+  const linked = await sql<{ n: number }>`
+    select count(*)::int as n
+    from assessment_items i
+    join assessment_sections s on s.id = i.section_id and s.company_id = i.company_id
+    where i.company_id = ${companyId} and s.version_id = ${versionId}
+  `;
+  const questionCount = Number(existing[0]?.n ?? 0);
+  const itemCount = Number(linked[0]?.n ?? 0);
+  if (questionCount >= CODING_BANK.length && exam[0] && itemCount >= CODING_BANK.length) {
+    return;
+  }
+  if (questionCount < CODING_BANK.length) {
+    for (const item of CODING_BANK) {
+      const logical = `bank:${item.key}`;
+      const questionId = bankId(companyId, `q:${item.key}`);
+      const points = item.difficulty === "hard" ? 3 : item.difficulty === "medium" ? 2 : 1;
+      await sql`
+        insert into questions (id, company_id, logical_key, type, tags)
+        values (${questionId}, ${companyId}, ${logical}, 'code', ${`coding-bank:${item.difficulty}`})
+        on conflict (company_id, logical_key) do nothing
+      `;
+      await sql`
+        insert into question_versions (
+          id, company_id, question_id, version_number, prompt, payload, key_payload, rubric, points
+        ) values (
+          ${bankId(companyId, `v:${item.key}`)}, ${companyId}, ${questionId}, 1, ${item.prompt},
+          ${json({ mode: "code", languages: ["typescript"], difficulty: item.difficulty, title: item.title, judged: false })}::jsonb,
+          '{}'::jsonb,
+          ${json(DEFAULT_TEXT_RUBRIC)}::jsonb,
+          ${points}
+        )
+        on conflict (company_id, question_id, version_number) do nothing
+      `;
+    }
     await sql`
-      insert into questions (id, company_id, logical_key, type, tags)
-      values (${bankId(companyId, `q:${item.key}`)}, ${companyId}, ${logical}, 'code', ${`coding-bank:${item.difficulty}`})
-      on conflict (company_id, logical_key) do nothing
-    `;
-    const found = await sql<{ id: string }>`
-      select id from questions where company_id = ${companyId} and logical_key = ${logical}
-    `;
-    const questionId = found[0]?.id;
-    if (!questionId) continue;
-    const points = item.difficulty === "hard" ? 3 : item.difficulty === "medium" ? 2 : 1;
-    await sql`
-      insert into question_versions (
-        id, company_id, question_id, version_number, prompt, payload, key_payload, rubric, points
-      ) values (
-        ${bankId(companyId, `v:${item.key}`)}, ${companyId}, ${questionId}, 1, ${item.prompt},
-        ${json({ mode: "code", languages: ["typescript"], difficulty: item.difficulty, title: item.title, judged: false })}::jsonb,
-        '{}'::jsonb,
-        ${json(DEFAULT_TEXT_RUBRIC)}::jsonb,
-        ${points}
-      )
-      on conflict (company_id, question_id, version_number) do nothing
+      update question_versions v
+      set payload = jsonb_set(v.payload, '{judged}', 'false'::jsonb)
+      from questions q
+      where q.id = v.question_id and q.company_id = v.company_id
+        and q.company_id = ${companyId}
+        and q.logical_key like 'bank:%'
+        and coalesce(v.payload->>'judged', '') <> 'false'
     `;
   }
-  await sql`
-    update question_versions v
-    set payload = jsonb_set(v.payload, '{judged}', 'false'::jsonb)
-    from questions q
-    where q.id = v.question_id and q.company_id = v.company_id
-      and q.company_id = ${companyId}
-      and q.logical_key like 'bank:%'
-      and coalesce(v.payload->>'judged', '') <> 'false'
-  `;
   await ensureCodingExam(companyId);
 }
 
@@ -119,9 +153,10 @@ async function ensureCodingExam(companyId: string) {
       order by q.logical_key
     `;
     const have = await sql<{ n: number }>`
-      select count(*) as n from assessment_items
+      select count(*)::int as n from assessment_items
       where company_id = ${companyId} and section_id = ${sectionId}
     `;
+    if (Number(have[0]?.n ?? 0) === questions.length && questions.length > 0) continue;
     if (Number(have[0]?.n ?? 0) !== questions.length) {
       await sql`
         delete from assessment_items
@@ -188,6 +223,7 @@ export async function previewAssessment(userId: string, input: { slug: string; a
   `;
   const built: { title: string; poolPick: number | null; questions: PreviewQuestion[] }[] = [];
   for (const section of sections) {
+    const take = section.pool_pick && section.pool_pick > 0 ? section.pool_pick : 40;
     const items = await sql<{
       id: string;
       type: string;
@@ -201,6 +237,7 @@ export async function previewAssessment(userId: string, input: { slug: string; a
       join questions q on q.id = v.question_id and q.company_id = v.company_id
       where i.section_id = ${section.id} and i.company_id = ${actor.companyId}
       order by i.position
+      limit ${take}
     `;
     built.push({
       title: section.title,

@@ -58,8 +58,6 @@ export async function ensureOpsDefaults(companyId: string) {
 
 export async function listSandboxes(userId: string, slug: string) {
   const actor = await requireActor(userId, slug);
-  const { ensureCodingBank } = await import("./bank.server");
-  await ensureCodingBank(actor.companyId);
   await ensureOpsDefaults(actor.companyId);
   const sql = await db();
   const profiles = await sql<{

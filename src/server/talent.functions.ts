@@ -535,11 +535,22 @@ export const listAssessments = createServerFn({ method: "POST" })
 
 export const listQuestions = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(z.object({ slug: Slug }))
+  .validator(z.object({
+    slug: Slug,
+    filter: z.enum(["all", "bank", "read", "other"]).optional(),
+    limit: z.number().int().min(1).max(100).optional(),
+    offset: z.number().int().min(0).max(100000).optional(),
+    q: z.string().max(80).optional(),
+  }))
   .handler(async ({ context, data }) => {
     const userId = context.userId;
     const api = await import("./talent/assess.server");
-  return api.listQuestions(userId, data.slug) as any;
+    return api.listQuestions(userId, data.slug, {
+      filter: data.filter,
+      limit: data.limit,
+      offset: data.offset,
+      q: data.q,
+    }) as any;
   });
 
 export const createQuestion = createServerFn({ method: "POST" })

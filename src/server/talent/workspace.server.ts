@@ -149,6 +149,7 @@ export async function createCompany(userId: string, input: { name: string; timez
 }
 
 const maintainedAt = new Map<string, number>();
+const advancedAt = new Map<string, number>();
 
 function scheduleMaintenance(companyId: string) {
   const now = Date.now();
@@ -166,6 +167,24 @@ function scheduleMaintenance(companyId: string) {
       }
     })();
   }, 400);
+}
+
+/** Rank/send pipeline papers in the background so the board opens in seconds. */
+function scheduleAdvanceJob(companyId: string, jobId: string) {
+  const key = `${companyId}:${jobId}`;
+  const now = Date.now();
+  if (now - (advancedAt.get(key) ?? 0) < 15_000) return;
+  advancedAt.set(key, now);
+  setTimeout(() => {
+    void (async () => {
+      try {
+        const { advanceJob } = await import("./ladder.server");
+        await advanceJob(companyId, jobId);
+      } catch (error) {
+        console.error("advanceJob", error instanceof Error ? error.message.slice(0, 180) : "failed");
+      }
+    })();
+  }, 50);
 }
 
 export async function getWorkspace(userId: string, slug: string) {
@@ -677,11 +696,10 @@ export async function listPipeline(userId: string, slug: string, jobId: string) 
   const actor = await requireActor(userId, slug);
   try {
     await ensureDemoCvSamples(actor.companyId);
-    const { advanceJob } = await import("./ladder.server");
-    await advanceJob(actor.companyId, jobId);
   } catch {
-    // A ranking that cannot be stored does not hide the pipeline.
+    // Demo samples are optional for non-demo companies.
   }
+  scheduleAdvanceJob(actor.companyId, jobId);
   const sql = await db();
   const stages = await sql<{ id: string; name: string; category: string; position: number; archived: boolean }>`
     select id, name, category, position, archived from pipeline_stages
@@ -726,10 +744,13 @@ export async function listPipeline(userId: string, slug: string, jobId: string) 
     where a.company_id = ${actor.companyId} and a.job_id = ${jobId}
     order by a.submitted_at desc
   `;
+  const alwaysRead = canReadApplication({ role: actor.role, assignedToActor: false });
   const visible = [];
   for (const card of cards) {
-    const isAssigned = await assigned(actor, card.id);
-    if (!canReadApplication({ role: actor.role, assignedToActor: isAssigned })) continue;
+    if (!alwaysRead) {
+      const isAssigned = await assigned(actor, card.id);
+      if (!canReadApplication({ role: actor.role, assignedToActor: isAssigned })) continue;
+    }
     visible.push({
       ...card,
       email: actor.role === "INTERVIEWER" ? "" : card.email,
@@ -922,12 +943,14 @@ export async function listCandidates(
   }
   const compiled = compileSearch(input.query ?? "");
   if (compiled && "error" in compiled) throw new Error(compiled.error);
+  // Index at most a few missing resumes; never block the list on a full reindex.
   try {
     await indexMissingProfiles(actor.companyId);
   } catch {
     // Search still runs on profiles that are already stored.
   }
   const sql = await db();
+  const searching = Boolean((input.query ?? "").trim() || (input.location ?? "").trim() || (input.education ?? "").trim() || (input.criteria ?? "").trim());
   const rows = await sql<{
     id: string;
     name: string;
@@ -954,13 +977,14 @@ export async function listCandidates(
         join tags t on t.id = ct.tag_id and t.company_id = ct.company_id
         where ct.candidate_id = c.id and ct.company_id = c.company_id
       ) as tags,
-      profile.titles, profile.skills, profile.education, profile.locations, profile.history, profile.years, profile.indexed_text,
-      (
+      profile.titles, profile.skills, profile.education, profile.locations, profile.history, profile.years,
+      case when ${searching} then profile.indexed_text else null end as indexed_text,
+      case when ${searching} then (
         select string_agg(aa.value::text, ' ')
         from application_answers aa
         join applications ans_app on ans_app.id = aa.application_id and ans_app.company_id = aa.company_id
         where ans_app.candidate_id = c.id and aa.company_id = c.company_id
-      ) as answers_text,
+      ) else null end as answers_text,
       (
         select a.rejection_reason from applications a
         where a.candidate_id = c.id and a.company_id = c.company_id and a.rejection_reason like 'Knockout:%'
@@ -991,7 +1015,7 @@ export async function listCandidates(
         )
       )
     order by c.created_at desc
-    limit 200
+    limit 100
   `;
   const location = (input.location ?? "").trim();
   const education = (input.education ?? "").trim();
@@ -1034,8 +1058,12 @@ async function indexMissingProfiles(companyId: string) {
       order by created_at desc limit 1
     ) f on true
     where a.company_id = ${companyId}
+      and not exists (
+        select 1 from candidate_profiles p
+        where p.company_id = a.company_id and p.application_id = a.id
+      )
     order by a.submitted_at desc
-    limit 25
+    limit 10
   `;
   for (const row of rows) {
     const extracted = row.scan_state === "CLEAN"

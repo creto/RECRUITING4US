@@ -476,12 +476,13 @@ export async function listOffers(userId: string, slug: string) {
     select o.id, o.application_id, o.status, o.current_revision, r.title, r.salary_minor, r.currency,
       c.name as candidate_name, j.title as job_title
     from offers o
-    join offer_revisions r on r.offer_id = o.id and r.revision = o.current_revision
-    join applications a on a.id = o.application_id
-    join candidates c on c.id = a.candidate_id
-    join jobs j on j.id = a.job_id
+    join offer_revisions r on r.offer_id = o.id and r.company_id = o.company_id and r.revision = o.current_revision
+    join applications a on a.id = o.application_id and a.company_id = o.company_id
+    join candidates c on c.id = a.candidate_id and c.company_id = a.company_id
+    join jobs j on j.id = a.job_id and j.company_id = a.company_id
     where o.company_id = ${actor.companyId}
     order by o.created_at desc
+    limit 200
   `;
   return rows.map((row) => (show ? row : { ...row, salary_minor: null }));
 }

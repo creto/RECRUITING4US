@@ -25,7 +25,6 @@ const OPTION_IDS = ["a", "b", "c", "d", "e", "f"] as const;
 function Assessments() {
   const { companySlug } = Route.useParams();
   const tests = useAuthed(() => listAssessments({ data: { slug: companySlug } }), [companySlug]);
-  const questions = useAuthed(() => listQuestions({ data: { slug: companySlug } }), [companySlug]);
   const [error, setError] = useState<string | null>(null);
   const [type, setType] = useState<(typeof TYPES)[number][0]>("single");
   const [prompt, setPrompt] = useState("");
@@ -43,7 +42,23 @@ function Assessments() {
   const [autoSend, setAutoSend] = useState(true);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
-  const [bankFilter, setBankFilter] = useState<"all" | "bank" | "read" | "other">("all");
+  const [bankFilter, setBankFilter] = useState<"all" | "bank" | "read" | "other">("other");
+  const [bankPage, setBankPage] = useState(0);
+  const [bankQuery, setBankQuery] = useState("");
+  const [bankSearch, setBankSearch] = useState("");
+  const pageSize = 40;
+  const questions = useAuthed(
+    () => listQuestions({
+      data: {
+        slug: companySlug,
+        filter: bankFilter,
+        limit: pageSize,
+        offset: bankPage * pageSize,
+        q: bankSearch || undefined,
+      },
+    }),
+    [companySlug, bankFilter, bankPage, bankSearch],
+  );
   const [sendApplicationId, setSendApplicationId] = useState("");
   const [sendAssessmentId, setSendAssessmentId] = useState("");
   const preview = useAuthed(
@@ -264,26 +279,25 @@ function Assessments() {
           })}
         </div>
         <h2 className="mt-8 text-2xl">Question bank</h2>
-        <p className="mt-1 text-sm text-muted">The coding bank is 500 original write-code problems, easy, medium, and hard. The read-code bank is 500 original multiple-choice snippets. Neither set is copied from LeetCode, HackerRank, or another proprietary bank.</p>
-        {questions.loading ? <Loading /> : null}
-        {questions.error ? <p className="text-sm text-muted">Question authoring is limited to assessment authors. {questions.error}</p> : null}
+        <p className="mt-1 text-sm text-muted">The coding bank is 500 original write-code problems, easy, medium, and hard. The read-code bank is 500 original multiple-choice snippets. Lists load a page at a time so this tab stays fast.</p>
         <div className="mt-3 flex flex-wrap gap-2">
-          {(["all", "bank", "read", "other"] as const).map((value) => (
-            <Button key={value} type="button" variant={bankFilter === value ? "secondary" : "ghost"} onClick={() => setBankFilter(value)}>
+          {(["other", "bank", "read", "all"] as const).map((value) => (
+            <Button key={value} type="button" variant={bankFilter === value ? "secondary" : "ghost"} onClick={() => { setBankFilter(value); setBankPage(0); }}>
               {value === "all" ? "All" : value === "bank" ? "Coding bank" : value === "read" ? "Read-code bank" : "Other questions"}
             </Button>
           ))}
         </div>
+        <form className="mt-3 flex flex-wrap gap-2" onSubmit={(event) => { event.preventDefault(); setBankPage(0); setBankSearch(bankQuery.trim()); }}>
+          <input className={`${inputClass} max-w-md`} value={bankQuery} onChange={(event) => setBankQuery(event.target.value)} placeholder="Search titles or prompts" />
+          <Button type="submit" variant="secondary">Search</Button>
+        </form>
+        {questions.loading || questions.isPending ? <Loading /> : null}
+        {questions.error ? <p className="text-sm text-muted">Question authoring is limited to assessment authors. {questions.error}</p> : null}
+        <p className="mt-3 text-sm text-muted">
+          Showing {((questions.data as any)?.items ?? []).length} of {Number((questions.data as any)?.total ?? 0)} · page {bankPage + 1}
+        </p>
         <ul className="mt-3 space-y-2">
-          {(questions.data ?? []).filter((question: any) => {
-            const tags = String(question.tags);
-            const coding = tags.startsWith("coding-bank");
-            const reading = tags.startsWith("read-code");
-            if (bankFilter === "bank") return coding;
-            if (bankFilter === "read") return reading;
-            if (bankFilter === "other") return !coding && !reading;
-            return true;
-          }).map((question: any) => (
+          {(((questions.data as any)?.items ?? []) as any[]).map((question: any) => (
             <li key={String(question.version_id)} className={`${examPaper} rounded-[24px] border border-[#d7e1da] p-4 text-sm`}>
               <label className="flex items-start gap-3">
                 <input
@@ -296,7 +310,7 @@ function Assessments() {
                   }}
                 />
                 <span className="min-w-0 flex-1">
-                  <span className="text-[11px] uppercase tracking-[0.16em] text-[#4c6b16]">{String(question.type)} · v{String(question.version_number)} · {String(question.points)} pt{question.difficulty ? ` · ${String(question.difficulty)}` : ""}</span>
+                  <span className="text-[11px] uppercase tracking-[0.16em] text-[#4c6b16]">{String(question.type)} · v{String(question.version_number)} · {String(question.points)} pt{question.difficulty ? ` · ${String(question.difficulty)}` : ""}{question.title ? ` · ${String(question.title)}` : ""}</span>
                   <p className="mt-2 whitespace-pre-wrap text-base leading-relaxed text-[#17211c]">{String(question.prompt).slice(0, 320)}</p>
                   {Array.isArray(question.options) && question.options.length > 0 ? (
                     <ul className="mt-3 grid gap-2">
@@ -314,6 +328,10 @@ function Assessments() {
             </li>
           ))}
         </ul>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button type="button" variant="ghost" disabled={bankPage <= 0} onClick={() => setBankPage((page) => Math.max(0, page - 1))}>Previous</Button>
+          <Button type="button" variant="ghost" disabled={(bankPage + 1) * pageSize >= Number((questions.data as any)?.total ?? 0)} onClick={() => setBankPage((page) => page + 1)}>Next</Button>
+        </div>
         <form className="mt-4 space-y-3" onSubmit={saveQuestion}>
           <h3 className="text-xl">New question</h3>
           <Field label="Type">

@@ -13,62 +13,82 @@ const INSTRUCTIONS =
 const DURATION_SECONDS = 45 * 60;
 const POOL_PICK = 20;
 
+const readCodeReady = new Set<string>();
+const readCodeInflight = new Map<string, Promise<{ questions: number; assessmentId: string }>>();
+
 /** Idempotent. Publishes the read-the-code MCQ bank and a pool assessment. */
 export async function ensureReadCodeBank(companyId: string) {
-  const sql = await db();
-  for (const item of READ_CODE_BANK) {
-    const logical = `readcode:${item.key}`;
-    const questionId = readCodeId(companyId, `q:${item.key}`);
-    const versionId = readCodeId(companyId, `v:${item.key}`);
-    const points = item.difficulty === "hard" ? 2 : 1;
-    await sql`
-      insert into questions (id, company_id, logical_key, type, tags)
-      values (
-        ${questionId}, ${companyId}, ${logical}, 'single',
-        ${`read-code:${item.difficulty}`}
-      )
-      on conflict (company_id, logical_key) do nothing
-    `;
-    await sql`
-      insert into question_versions (
-        id, company_id, question_id, version_number, prompt, payload, key_payload, points
-      ) values (
-        ${versionId}, ${companyId}, ${questionId}, 1, ${item.prompt},
-        ${json({
-          options: item.options,
-          difficulty: item.difficulty,
-          title: item.title,
-          tags: item.tags,
-          mode: "read-code",
-        })}::jsonb,
-        ${json({ correct: [item.correct] })}::jsonb,
-        ${points}
-      )
-      on conflict (company_id, question_id, version_number) do nothing
-    `;
+  if (readCodeReady.has(companyId)) {
+    return { questions: READ_CODE_BANK.length, assessmentId: readCodeId(companyId, "assessment") };
   }
+  const pending = readCodeInflight.get(companyId);
+  if (pending) return pending;
+  const work = ensureReadCodeBankOnce(companyId)
+    .then((result) => {
+      readCodeReady.add(companyId);
+      return result;
+    })
+    .finally(() => {
+      readCodeInflight.delete(companyId);
+    });
+  readCodeInflight.set(companyId, work);
+  return work;
+}
 
+async function ensureReadCodeBankOnce(companyId: string) {
+  const sql = await db();
   const assessmentId = readCodeId(companyId, "assessment");
   const versionId = readCodeId(companyId, "version");
   const sectionId = readCodeId(companyId, "section");
   const existing = await sql<{ n: number }>`
-    select count(*) as n from questions
+    select count(*)::int as n from questions
     where company_id = ${companyId} and logical_key like 'readcode:%'
   `;
   const exam = await sql<{ id: string }>`
     select id from assessment_versions where id = ${versionId} and company_id = ${companyId}
   `;
-  if (Number(existing[0]?.n ?? 0) >= READ_CODE_BANK.length && exam[0]) {
-    await sql`
-      update assessments set name = ${NAME}, description = ${DESCRIPTION}
-      where id = ${assessmentId} and company_id = ${companyId}
-    `;
-    await sql`
-      update assessment_versions
-      set instructions = ${INSTRUCTIONS}, duration_seconds = ${DURATION_SECONDS}
-      where id = ${versionId} and company_id = ${companyId}
-    `;
-    return { questions: Number(existing[0]?.n ?? 0), assessmentId };
+  const linked = await sql<{ n: number }>`
+    select count(*)::int as n from assessment_items
+    where company_id = ${companyId} and section_id = ${sectionId}
+  `;
+  const questionCount = Number(existing[0]?.n ?? 0);
+  const itemCount = Number(linked[0]?.n ?? 0);
+  if (questionCount >= READ_CODE_BANK.length && exam[0] && itemCount >= READ_CODE_BANK.length) {
+    return { questions: questionCount, assessmentId };
+  }
+
+  if (questionCount < READ_CODE_BANK.length) {
+    for (const item of READ_CODE_BANK) {
+      const logical = `readcode:${item.key}`;
+      const questionId = readCodeId(companyId, `q:${item.key}`);
+      const qVersionId = readCodeId(companyId, `v:${item.key}`);
+      const points = item.difficulty === "hard" ? 2 : 1;
+      await sql`
+        insert into questions (id, company_id, logical_key, type, tags)
+        values (
+          ${questionId}, ${companyId}, ${logical}, 'single',
+          ${`read-code:${item.difficulty}`}
+        )
+        on conflict (company_id, logical_key) do nothing
+      `;
+      await sql`
+        insert into question_versions (
+          id, company_id, question_id, version_number, prompt, payload, key_payload, points
+        ) values (
+          ${qVersionId}, ${companyId}, ${questionId}, 1, ${item.prompt},
+          ${json({
+            options: item.options,
+            difficulty: item.difficulty,
+            title: item.title,
+            tags: item.tags,
+            mode: "read-code",
+          })}::jsonb,
+          ${json({ correct: [item.correct] })}::jsonb,
+          ${points}
+        )
+        on conflict (company_id, question_id, version_number) do nothing
+      `;
+    }
   }
 
   await sql`
@@ -96,17 +116,19 @@ export async function ensureReadCodeBank(companyId: string) {
     on conflict (id) do nothing
   `;
 
-  for (let index = 0; index < READ_CODE_BANK.length; index += 1) {
-    const item = READ_CODE_BANK[index]!;
-    const points = item.difficulty === "hard" ? 2 : 1;
-    await sql`
-      insert into assessment_items (id, company_id, section_id, question_version_id, position, points)
-      values (
-        ${readCodeId(companyId, `item:${item.key}`)}, ${companyId}, ${sectionId},
-        ${readCodeId(companyId, `v:${item.key}`)}, ${index}, ${points}
-      )
-      on conflict (id) do nothing
-    `;
+  if (itemCount < READ_CODE_BANK.length) {
+    for (let index = 0; index < READ_CODE_BANK.length; index += 1) {
+      const item = READ_CODE_BANK[index]!;
+      const points = item.difficulty === "hard" ? 2 : 1;
+      await sql`
+        insert into assessment_items (id, company_id, section_id, question_version_id, position, points)
+        values (
+          ${readCodeId(companyId, `item:${item.key}`)}, ${companyId}, ${sectionId},
+          ${readCodeId(companyId, `v:${item.key}`)}, ${index}, ${points}
+        )
+        on conflict (id) do nothing
+      `;
+    }
   }
 
   return { questions: READ_CODE_BANK.length, assessmentId };
