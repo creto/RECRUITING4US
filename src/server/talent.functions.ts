@@ -1174,7 +1174,7 @@ export const openAssessmentInvite = createServerFn({ method: "POST" })
   .validator(z.object({
     token: z.string().uuid(),
     email: z.string().trim().min(3).max(200),
-    applicationId: z.string().trim().min(8).max(80),
+    applicationId: z.string().trim().min(36).max(36),
   }))
   .handler(async ({ data }) => (await import("./talent/assess.server")).openAssessmentInvite(data) as any);
 

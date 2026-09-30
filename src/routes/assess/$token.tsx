@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { assessmentInviteGateLede } from "@/domain/assessment-invite";
+import { applicationIdGateHint, assessmentInviteGateLede } from "@/domain/assessment-invite";
 import { attemptHrefWithAccess, storeAssessAccess } from "@/domain/assess-access-storage";
 import { openAssessmentInvite, peekAssessmentInvite } from "@/server/talent.functions";
 import { Alert, Button, Field, inputClass, Loading, PageTitle, Wordmark, when } from "@/components/talent/kit";
@@ -48,6 +48,11 @@ function AssessInvite() {
   async function onUnlock(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    const idHint = applicationIdGateHint(applicationId);
+    if (idHint) {
+      setError(idHint);
+      return;
+    }
     setBusy(true);
     try {
       const result = await openAssessmentInvite({
@@ -92,14 +97,18 @@ function AssessInvite() {
                 required
               />
             </Field>
-            <Field label="Application id">
+            <Field label="Application id (full UUID, 36 characters)">
               <input
                 className={inputClass}
                 value={applicationId}
                 onChange={(event) => setApplicationId(event.target.value)}
-                placeholder="From your apply confirmation"
+                placeholder="bd546960-cae6-4cfd-873a-73e06c51015b"
                 required
-                minLength={8}
+                minLength={36}
+                maxLength={36}
+                spellCheck={false}
+                autoComplete="off"
+                inputMode="text"
               />
             </Field>
             <Button

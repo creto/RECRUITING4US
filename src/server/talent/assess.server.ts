@@ -45,7 +45,7 @@ import { candidateItem, answerComplete, coerceAnswer, orderedOptions } from "@/d
 import { readPersonality, scorePersonality, type PersonalityResult } from "@/domain/personality";
 import { ensureReview, rememberEvent } from "./workflows.server";
 import { endAttemptLive, ensureAttemptLive, mirrorAttemptLive, touchAttemptLive } from "./attempt-live.server";
-import { assessmentInviteHref, assessmentInvitePath } from "@/domain/assessment-invite";
+import { applicationIdGateHint, assessmentInviteHref, assessmentInvitePath, normalizeApplicationId } from "@/domain/assessment-invite";
 import { mintAssessAccess, verifyAssessAccess } from "@/domain/assessment-invite-access";
 import { env } from "@/lib/env.server";
 
@@ -592,13 +592,15 @@ export async function openAssessmentInvite(input: {
 }) {
   assertSameSiteRequest();
   const email = normalizeEmail(input.email);
-  const applicationId = input.applicationId.trim();
-  if (!email.includes("@") || applicationId.length < 8) {
+  const applicationId = normalizeApplicationId(input.applicationId);
+  const idHint = applicationIdGateHint(applicationId);
+  if (idHint) throw new Error(idHint);
+  if (!email.includes("@")) {
     throw new Error("Enter the application email and application id.");
   }
   const { companyId, row } = await loadInviteAssignment(input.token);
   if (normalizeEmail(row.candidate_email) !== email || row.application_id !== applicationId) {
-    throw new Error("That email and application id do not match this assessment invite.");
+    throw new Error("That email and application id do not match this assessment invite. Use the exact email and the full 36-character application id.");
   }
   const started = await startAttemptForAssignment(companyId, row.id, null);
   const accessToken = mintAssessAccess({

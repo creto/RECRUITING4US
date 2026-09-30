@@ -42,15 +42,34 @@ async function main() {
     return;
   }
 
-  const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
+  // Prefer the direct (unpooled) owner URL when present — Neon pooler sessions
+  // often SET ROLE app_user, which cannot CREATE in public.
+  const migrateUrl = process.env.DATABASE_URL_UNPOOLED || databaseUrl;
+  const pool = new pg.Pool({ connectionString: migrateUrl, max: 1 });
   const client = await pool.connect();
   try {
-    await client.query(
-      "CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())",
-    );
-    const applied = (await client.query("SELECT name FROM _migrations")).rows.map(
-      (r) => r.name,
-    );
+    // Pooler may leave us as app_user while session_user is the owner.
+    try {
+      await client.query("RESET ROLE");
+    } catch {
+      // Role reset is best-effort; SELECT/CREATE paths below still handle.
+    }
+    // Avoid CREATE when _migrations already exists (app_user has no CREATE).
+    let applied = [];
+    try {
+      applied = (await client.query("SELECT name FROM _migrations")).rows.map(
+        (r) => r.name,
+      );
+    } catch (err) {
+      const missing =
+        err?.code === "42P01" ||
+        String(err?.message || "").toLowerCase().includes("does not exist");
+      if (!missing) throw err;
+      await client.query(
+        "CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())",
+      );
+      applied = [];
+    }
 
     let count = 0;
     for (const { name } of pendingMigrations(entries, applied)) {
