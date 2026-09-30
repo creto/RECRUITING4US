@@ -472,6 +472,80 @@ export async function queueProspectMail(userId: string, slug: string, input: {
   return { id: inserted[0]?.id ?? id, duplicate: !inserted[0], note: mailMode().note };
 }
 
+
+/** System queue for guest OTP / transactional mail (no recruiter actor). Tenant must already be entered. */
+export async function queueSystemMail(input: {
+  companyId: string;
+  toEmail: string;
+  subject: string;
+  body: string;
+  kind: string;
+  idempotencyKey: string;
+  applicationId?: string | null;
+}) {
+  assertSameSiteRequest();
+  const companyId = input.companyId.trim();
+  if (!companyId) throw new Error("Missing company.");
+  enterTenant({ companyId, publicSlug: "" });
+  const sql = await db();
+  const toEmail = normalizeEmail(input.toEmail);
+  if (!toEmail.includes("@")) throw new Error("Enter a valid email address.");
+  const recent = await sql<{ n: number }>`
+    select count(*)::int as n from message_intents
+    where company_id = ${companyId} and created_at > now() - interval '1 minute'
+  `;
+  if ((recent[0]?.n ?? 0) >= 30) {
+    throw new Error("Too many messages were queued in the last minute. Wait and try again.");
+  }
+  const blocked = await sql<{ email: string }>`
+    select email from mail_suppressions
+    where company_id = ${companyId} and email = ${toEmail}
+  `;
+  if (blocked[0]) {
+    throw new Error("That address is on the suppression list.");
+  }
+  const subject = input.subject.trim().slice(0, 200);
+  const body = prepareMailBody(input.body);
+  const bodyPlain = looksLikeHtml(body) ? htmlToPlain(body) : body;
+  if (subject.length < 2 || bodyPlain.trim().length < 2) {
+    throw new Error("Write a subject and a message.");
+  }
+  let applicationId: string | null = (input.applicationId ?? "").trim() || null;
+  let candidateId: string | null = null;
+  let jobId: string | null = null;
+  if (applicationId) {
+    const apps = await sql<{ candidate_id: string; job_id: string }>`
+      select candidate_id, job_id from applications
+      where company_id = ${companyId} and id = ${applicationId}
+    `;
+    if (!apps[0]) applicationId = null;
+    else {
+      candidateId = apps[0].candidate_id;
+      jobId = apps[0].job_id;
+    }
+  }
+  const id = nid();
+  const thread = nid().replace(/-/g, "");
+  try {
+    const inserted = await sql<{ id: string }>`
+      insert into message_intents (
+        id, company_id, application_id, candidate_id, job_id, kind, subject, body, to_email, cc, bcc,
+        idempotency_key, status, provider, thread_token, created_by
+      ) values (
+        ${id}, ${companyId}, ${applicationId}, ${candidateId}, ${jobId}, ${input.kind.slice(0, 40)},
+        ${subject}, ${body}, ${toEmail}, ${""}, ${""},
+        ${input.idempotencyKey.slice(0, 80)}, 'QUEUED', ${mailMode().provider}, ${thread}, ${null}
+      )
+      on conflict (company_id, idempotency_key) do nothing
+      returning id
+    `;
+    await drainMail(companyId);
+    return { id: inserted[0]?.id ?? id, duplicate: !inserted[0], note: mailMode().note };
+  } catch (error) {
+    mapDbError(error);
+  }
+}
+
 export async function suppressAddress(userId: string, slug: string, email: string, reason: string) {
   assertSameSiteRequest();
   const actor = await requireActor(userId, slug);

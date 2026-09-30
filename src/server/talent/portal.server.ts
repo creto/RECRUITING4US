@@ -10,6 +10,19 @@ import {
 import { applicationPortalPath } from "@/domain/application-portal";
 import { mintPortalAccess, verifyPortalAccess } from "@/domain/application-portal-access";
 import { mintAssessAccess } from "@/domain/assessment-invite-access";
+import {
+  generatePortalOtpCode,
+  hashPortalOtp,
+  isPortalOtpCodeShape,
+  maskEmail,
+  normalizePortalOtpCode,
+  portalOtpCodesEqual,
+  portalOtpExpiresAt,
+  portalOtpMailCopy,
+  PORTAL_OTP_MAX_ATTEMPTS,
+  PORTAL_OTP_REQUEST_LIMIT,
+  PORTAL_OTP_TTL_SECONDS,
+} from "@/domain/portal-otp";
 import { enterTenant } from "@/lib/tenant";
 import { env } from "@/lib/env.server";
 import { db, nid } from "./db.server";
@@ -18,6 +31,9 @@ import { mailText } from "@/domain/mail";
 function portalAccessSecret(): string {
   return (env("BETTER_AUTH_SECRET") ?? process.env.BETTER_AUTH_SECRET ?? "recruit4us-dev-assess-access").trim();
 }
+
+const CODE_SENT =
+  "If that email has applications with this employer, we sent a one-time code. It expires in about 12 minutes.";
 
 async function loadApplicationGate(applicationId: string) {
   const sql = await db();
@@ -36,29 +52,272 @@ async function loadApplicationGate(applicationId: string) {
 async function requirePortalAccess(applicationId: string, accessToken: string) {
   const verified = verifyPortalAccess(accessToken, applicationId, portalAccessSecret());
   if (!verified.ok) {
-    throw new Error("This portal link expired or is not valid. Unlock again with your email and application id.");
+    throw new Error("This portal link expired or is not valid. Unlock again with your email and the one-time code.");
   }
   const gate = await loadApplicationGate(applicationId);
   if (gate.company_id !== verified.companyId) {
-    throw new Error("This portal link expired or is not valid. Unlock again with your email and application id.");
+    throw new Error("This portal link expired or is not valid. Unlock again with your email and the one-time code.");
   }
   enterTenant({ companyId: gate.company_id, publicSlug: "" });
   return { companyId: gate.company_id, email: gate.email_normalized, name: gate.candidate_name };
 }
 
+async function companiesForEmail(email: string) {
+  const sql = await db();
+  return sql.query<{ company_id: string; company_slug: string; company_name: string }>(
+    "select company_id, company_slug, company_name from app_portal_companies_for_email($1)",
+    [email],
+  );
+}
+
+async function assertOtpRequestAllowed(companyId: string, email: string) {
+  const sql = await db();
+  const recent = await sql<{ n: number }>`
+    select count(*)::int as n from portal_otp_challenges
+    where company_id = ${companyId}
+      and email_normalized = ${email}
+      and purpose = 'portal'
+      and created_at > now() - interval '15 minutes'
+  `;
+  if ((recent[0]?.n ?? 0) >= PORTAL_OTP_REQUEST_LIMIT) {
+    throw new Error("Too many codes were requested. Wait a few minutes and try again.");
+  }
+}
+
+async function createAndSendPortalOtp(input: {
+  companyId: string;
+  companyName: string;
+  email: string;
+  applicationId?: string | null;
+}) {
+  await assertOtpRequestAllowed(input.companyId, input.email);
+  enterTenant({ companyId: input.companyId, publicSlug: "" });
+  const sql = await db();
+  await sql`
+    update portal_otp_challenges
+    set consumed_at = coalesce(consumed_at, now())
+    where company_id = ${input.companyId}
+      and email_normalized = ${input.email}
+      and purpose = 'portal'
+      and consumed_at is null
+  `;
+  const id = nid();
+  const code = generatePortalOtpCode();
+  const codeHash = hashPortalOtp({
+    secret: portalAccessSecret(),
+    challengeId: id,
+    code,
+  });
+  const expires = portalOtpExpiresAt();
+  await sql`
+    insert into portal_otp_challenges (
+      id, company_id, email_normalized, purpose, code_hash, invite_token,
+      expires_at, attempt_count, max_attempts
+    ) values (
+      ${id}, ${input.companyId}, ${input.email}, ${"portal"}, ${codeHash}, ${""},
+      ${expires.toISOString()}, ${0}, ${PORTAL_OTP_MAX_ATTEMPTS}
+    )
+  `;
+  const mail = portalOtpMailCopy({
+    companyName: input.companyName,
+    code,
+    purpose: "portal",
+    ttlMinutes: Math.round(PORTAL_OTP_TTL_SECONDS / 60),
+  });
+  const { queueSystemMail } = await import("./platform.server");
+  await queueSystemMail({
+    companyId: input.companyId,
+    toEmail: input.email,
+    subject: mail.subject,
+    body: mail.body,
+    kind: "PORTAL_OTP",
+    idempotencyKey: `portal-otp:${id}`,
+    applicationId: input.applicationId ?? null,
+  });
+  return { challengeId: id, emailMasked: maskEmail(input.email) };
+}
+
 /**
- * Gate: email + application id must match. Returns a short-lived portal access proof (no Better Auth).
+ * Step 1: email only (optional company slug when the same address exists in more than one tenant).
+ * Always company-scoped; never unlocks applications across companies.
+ */
+export async function requestPortalOtp(input: { email: string; companySlug?: string }) {
+  assertSameSiteRequest();
+  const email = normalizeEmail(input.email);
+  if (!email.includes("@")) throw new Error("Enter the email you applied with.");
+  const companies = await companiesForEmail(email);
+  const slug = (input.companySlug ?? "").trim().toLowerCase();
+
+  if (companies.length === 0) {
+    return { status: "code_sent" as const, emailMasked: maskEmail(email), note: CODE_SENT };
+  }
+
+  if (!slug && companies.length > 1) {
+    return {
+      status: "pick_company" as const,
+      emailMasked: maskEmail(email),
+      companies: companies.map((row) => ({
+        slug: row.company_slug,
+        name: row.company_name,
+      })),
+    };
+  }
+
+  const chosen = slug
+    ? companies.find((row) => row.company_slug === slug)
+    : companies[0];
+  if (!chosen) {
+    // Fail closed: do not reveal whether the slug exists elsewhere.
+    return { status: "code_sent" as const, emailMasked: maskEmail(email), note: CODE_SENT };
+  }
+
+  const sent = await createAndSendPortalOtp({
+    companyId: chosen.company_id,
+    companyName: chosen.company_name,
+    email,
+  });
+  return {
+    status: "code_sent" as const,
+    emailMasked: sent.emailMasked,
+    companySlug: chosen.company_slug,
+    companyName: chosen.company_name,
+    note: CODE_SENT,
+  };
+}
+
+/**
+ * Step 2: verify OTP and mint per-application portal access tokens for that company only.
+ */
+export async function verifyPortalOtp(input: {
+  email: string;
+  code: string;
+  companySlug: string;
+}) {
+  assertSameSiteRequest();
+  const email = normalizeEmail(input.email);
+  const code = normalizePortalOtpCode(input.code);
+  const slug = input.companySlug.trim().toLowerCase();
+  if (!email.includes("@")) throw new Error("Enter the email you applied with.");
+  if (!isPortalOtpCodeShape(code)) throw new Error("Enter the 6-digit code from your email.");
+  if (!slug) throw new Error("Choose the employer this application belongs to.");
+
+  const companies = await companiesForEmail(email);
+  const company = companies.find((row) => row.company_slug === slug);
+  if (!company) {
+    throw new Error("That code is not valid or has expired. Request a new code.");
+  }
+
+  enterTenant({ companyId: company.company_id, publicSlug: "" });
+  const sql = await db();
+  const challenges = await sql<{
+    id: string;
+    code_hash: string;
+    attempt_count: number;
+    max_attempts: number;
+    expires_at: string;
+  }>`
+    select id, code_hash, attempt_count, max_attempts,
+      to_char(expires_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as expires_at
+    from portal_otp_challenges
+    where company_id = ${company.company_id}
+      and email_normalized = ${email}
+      and purpose = 'portal'
+      and consumed_at is null
+    order by created_at desc
+    limit 1
+  `;
+  const challenge = challenges[0];
+  if (!challenge) {
+    throw new Error("That code is not valid or has expired. Request a new code.");
+  }
+  if (Date.parse(challenge.expires_at) < Date.now()) {
+    await sql`
+      update portal_otp_challenges set consumed_at = now()
+      where company_id = ${company.company_id} and id = ${challenge.id}
+    `;
+    throw new Error("That code expired. Request a new code.");
+  }
+  if (challenge.attempt_count >= challenge.max_attempts) {
+    throw new Error("Too many incorrect attempts. Request a new code.");
+  }
+
+  const expected = hashPortalOtp({
+    secret: portalAccessSecret(),
+    challengeId: challenge.id,
+    code,
+  });
+  if (!portalOtpCodesEqual(expected, challenge.code_hash)) {
+    await sql`
+      update portal_otp_challenges
+      set attempt_count = attempt_count + 1
+      where company_id = ${company.company_id} and id = ${challenge.id}
+    `;
+    throw new Error("That code is not valid. Check the email and try again.");
+  }
+
+  await sql`
+    update portal_otp_challenges set consumed_at = now()
+    where company_id = ${company.company_id} and id = ${challenge.id}
+  `;
+
+  const apps = await sql<{
+    id: string;
+    job_title: string;
+    candidate_name: string;
+    lifecycle: string;
+    stage_name: string;
+  }>`
+    select a.id, j.title as job_title, c.name as candidate_name, a.lifecycle, s.name as stage_name
+    from applications a
+    join candidates c on c.company_id = a.company_id and c.id = a.candidate_id
+    join jobs j on j.company_id = a.company_id and j.id = a.job_id
+    join pipeline_stages s on s.company_id = a.company_id and s.id = a.current_stage_id
+    where a.company_id = ${company.company_id}
+      and c.email_normalized = ${email}
+    order by a.submitted_at desc
+    limit 40
+  `;
+
+  const applications = apps.map((row) => ({
+    id: row.id,
+    jobTitle: row.job_title,
+    candidateName: row.candidate_name,
+    lifecycle: row.lifecycle,
+    stageName: row.stage_name,
+    companyName: company.company_name,
+    companySlug: company.company_slug,
+    accessToken: mintPortalAccess({
+      applicationId: row.id,
+      companyId: company.company_id,
+      secret: portalAccessSecret(),
+    }),
+  }));
+
+  return {
+    email,
+    emailMasked: maskEmail(email),
+    companySlug: company.company_slug,
+    companyName: company.company_name,
+    portalPath: applicationPortalPath(),
+    applications,
+  };
+}
+
+/**
+ * Fallback gate: email + application UUID (kept so old invites / receipts still unlock).
+ * Primary path is requestPortalOtp + verifyPortalOtp.
  */
 export async function openApplicationPortal(input: { email: string; applicationId: string }) {
   assertSameSiteRequest();
   const email = normalizeEmail(input.email);
-  const applicationId = normalizeApplicationId(input.applicationId);
-  const idHint = applicationIdGateHint(applicationId);
+  const applicationId = input.applicationId.trim();
+  const normalizedId = normalizeApplicationId(applicationId);
+  const idHint = applicationIdGateHint(normalizedId);
   if (idHint) throw new Error(idHint);
   if (!email.includes("@")) {
     throw new Error("Enter the application email and application id.");
   }
-  const gate = await loadApplicationGate(applicationId);
+  const gate = await loadApplicationGate(normalizedId);
   if (normalizeEmail(gate.email_normalized) !== email) {
     throw new Error(
       "That email and application id do not match. Use the exact email from your application and the full 36-character application id.",
@@ -66,12 +325,12 @@ export async function openApplicationPortal(input: { email: string; applicationI
   }
   enterTenant({ companyId: gate.company_id, publicSlug: "" });
   const accessToken = mintPortalAccess({
-    applicationId,
+    applicationId: normalizedId,
     companyId: gate.company_id,
     secret: portalAccessSecret(),
   });
   return {
-    applicationId,
+    applicationId: normalizedId,
     accessToken,
     portalPath: applicationPortalPath(),
     candidateName: gate.candidate_name,

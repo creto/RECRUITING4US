@@ -15,7 +15,7 @@ export function assessmentInviteHref(token: string, origin = ""): string {
 
 /** Copy on the public /assess/$token gate (no Better Auth). */
 export function assessmentInviteGateLede(): string {
-  return "Enter the invited email and your application id. Opening this page does not start the timer. Unlock only when you are ready.";
+  return "Enter the invited email. We send a short one-time code to that inbox. Opening this page does not start the timer. Unlock only when you are ready. Application id unlock remains available as a fallback.";
 }
 
 /** Application ids are UUIDs (36 chars). Reject truncated pastes early. */

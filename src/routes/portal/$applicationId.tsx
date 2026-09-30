@@ -102,7 +102,7 @@ function PortalShell() {
         <Link to="/"><Wordmark /></Link>
         <PageTitle
           title="Unlock required"
-          lede="Open the applicant portal with the email and application id from your confirmation."
+          lede="Open the applicant portal with your email and one-time code (or email plus application id). Deep links with ?access= still work."
         />
         <AppLink className="inline-flex min-h-11 items-center rounded-full bg-[#cefa90] px-5 text-sm font-medium text-[#14221b]" href="/portal">
           Go to portal unlock

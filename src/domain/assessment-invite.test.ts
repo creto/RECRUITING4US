@@ -13,7 +13,8 @@ describe("assessment invite", () => {
     );
   });
 
-  it("explains the email + application id unlock", () => {
+  it("explains the email OTP unlock with application id fallback", () => {
+    assert.match(assessmentInviteGateLede(), /one-time code/i);
     assert.match(assessmentInviteGateLede(), /application id/i);
     assert.match(assessmentInviteGateLede(), /does not start the timer/i);
   });

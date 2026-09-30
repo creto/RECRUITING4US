@@ -1237,9 +1237,25 @@ export const openAssessmentInvite = createServerFn({ method: "POST" })
   .validator(z.object({
     token: z.string().uuid(),
     email: z.string().trim().min(3).max(200),
-    applicationId: z.string().trim().min(36).max(36),
+    applicationId: z.string().trim().min(36).max(36).optional(),
+    code: z.string().trim().min(6).max(8).optional(),
   }))
   .handler(async ({ data }) => (await import("./talent/assess.server")).openAssessmentInvite(data) as any);
+
+export const requestAssessOtp = createServerFn({ method: "POST" })
+  .validator(z.object({
+    token: z.string().uuid(),
+    email: z.string().trim().min(3).max(200),
+  }))
+  .handler(async ({ data }) => (await import("./talent/assess.server")).requestAssessOtp(data) as any);
+
+export const verifyAssessOtp = createServerFn({ method: "POST" })
+  .validator(z.object({
+    token: z.string().uuid(),
+    email: z.string().trim().min(3).max(200),
+    code: z.string().trim().min(6).max(8),
+  }))
+  .handler(async ({ data }) => (await import("./talent/assess.server")).verifyAssessOtp(data) as any);
 
 export const openApplicationPortal = createServerFn({ method: "POST" })
   .validator(z.object({
@@ -1247,6 +1263,21 @@ export const openApplicationPortal = createServerFn({ method: "POST" })
     applicationId: z.string().trim().min(36).max(36),
   }))
   .handler(async ({ data }) => (await import("./talent/portal.server")).openApplicationPortal(data) as any);
+
+export const requestPortalOtp = createServerFn({ method: "POST" })
+  .validator(z.object({
+    email: z.string().trim().min(3).max(200),
+    companySlug: z.string().trim().min(2).max(48).optional(),
+  }))
+  .handler(async ({ data }) => (await import("./talent/portal.server")).requestPortalOtp(data) as any);
+
+export const verifyPortalOtp = createServerFn({ method: "POST" })
+  .validator(z.object({
+    email: z.string().trim().min(3).max(200),
+    code: z.string().trim().min(6).max(8),
+    companySlug: z.string().trim().min(2).max(48),
+  }))
+  .handler(async ({ data }) => (await import("./talent/portal.server")).verifyPortalOtp(data) as any);
 
 export const getPortalApplication = createServerFn({ method: "POST" })
   .validator(z.object({

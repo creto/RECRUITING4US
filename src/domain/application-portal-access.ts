@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-/** Short-lived proof that email + application id unlocked the applicant portal. */
+/** Short-lived proof that the applicant portal was unlocked (OTP or email+application id). */
 export function mintPortalAccess(input: {
   applicationId: string;
   companyId: string;

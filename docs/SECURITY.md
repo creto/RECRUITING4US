@@ -12,6 +12,7 @@ Implemented:
 - The client production bundle does not contain the demo answer-key sentinel.
 - Employer tables use Postgres row-level security forced for a non-superuser role. A query with no company, user, or public slug sees no employer rows and cannot insert one. The preview connection sets that role only inside a transaction, so it does not stick for sign-in queries.
 - Composite foreign keys still reject a link that points at another company's row.
+- Applicant portal / assess unlock can use a company-scoped email one-time code (short TTL, hashed at rest, rate-limited). Applications returned after verify are limited to that company. Email + application UUID and `?access=` deep links remain as fallbacks.
 
 Limitations, stated plainly:
 

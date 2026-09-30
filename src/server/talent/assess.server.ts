@@ -52,6 +52,19 @@ import { applicationIdGateHint, assessmentInviteHref, assessmentInvitePath, norm
 import { applicationPortalPath } from "@/domain/application-portal";
 import { mintAssessAccess, verifyAssessAccess } from "@/domain/assessment-invite-access";
 import { mintPortalAccess } from "@/domain/application-portal-access";
+import {
+  generatePortalOtpCode,
+  hashPortalOtp,
+  isPortalOtpCodeShape,
+  maskEmail,
+  normalizePortalOtpCode,
+  portalOtpCodesEqual,
+  portalOtpExpiresAt,
+  portalOtpMailCopy,
+  PORTAL_OTP_MAX_ATTEMPTS,
+  PORTAL_OTP_REQUEST_LIMIT,
+  PORTAL_OTP_TTL_SECONDS,
+} from "@/domain/portal-otp";
 import { env } from "@/lib/env.server";
 
 
@@ -609,26 +622,207 @@ export async function peekAssessmentInvite(token: string) {
   };
 }
 
+const ASSESS_CODE_SENT =
+  "If that email matches this assessment invite, we sent a one-time code. It expires in about 12 minutes.";
+
+function assessAccessSecretForOtp(): string {
+  return assessAccessSecret();
+}
+
 /**
- * Gate: email + application id must match the assignment on this invite token.
- * Starts or resumes the attempt and returns a short-lived access proof (no full login).
+ * Step 1 for /assess/$token: email only. Invite token already scopes the company.
+ * Does not reveal whether the email matches until a code is verified.
+ */
+export async function requestAssessOtp(input: { token: string; email: string }) {
+  assertSameSiteRequest();
+  const email = normalizeEmail(input.email);
+  if (!email.includes("@")) throw new Error("Enter the invited email.");
+  const { companyId, row } = await loadInviteAssignment(input.token);
+  const matches = normalizeEmail(row.candidate_email) === email;
+  if (!matches) {
+    return { status: "code_sent" as const, emailMasked: maskEmail(email), note: ASSESS_CODE_SENT };
+  }
+  if (row.status === "COMPLETED" || row.status === "EXPIRED" || row.status === "CANCELLED") {
+    throw new Error(
+      row.status === "COMPLETED"
+        ? "This assessment is already completed."
+        : "This assessment is no longer available.",
+    );
+  }
+  const sql = await db();
+  const recent = await sql<{ n: number }>`
+    select count(*)::int as n from portal_otp_challenges
+    where company_id = ${companyId}
+      and email_normalized = ${email}
+      and purpose = 'assess'
+      and invite_token = ${input.token}
+      and created_at > now() - interval '15 minutes'
+  `;
+  if ((recent[0]?.n ?? 0) >= PORTAL_OTP_REQUEST_LIMIT) {
+    throw new Error("Too many codes were requested. Wait a few minutes and try again.");
+  }
+  await sql`
+    update portal_otp_challenges
+    set consumed_at = coalesce(consumed_at, now())
+    where company_id = ${companyId}
+      and email_normalized = ${email}
+      and purpose = 'assess'
+      and invite_token = ${input.token}
+      and consumed_at is null
+  `;
+  const id = nid();
+  const code = generatePortalOtpCode();
+  const codeHash = hashPortalOtp({
+    secret: assessAccessSecretForOtp(),
+    challengeId: id,
+    code,
+  });
+  const expires = portalOtpExpiresAt();
+  await sql`
+    insert into portal_otp_challenges (
+      id, company_id, email_normalized, purpose, code_hash, invite_token,
+      expires_at, attempt_count, max_attempts
+    ) values (
+      ${id}, ${companyId}, ${email}, ${"assess"}, ${codeHash}, ${input.token},
+      ${expires.toISOString()}, ${0}, ${PORTAL_OTP_MAX_ATTEMPTS}
+    )
+  `;
+  const companyRows = await sql<{ name: string }>`select name from companies where id = ${companyId}`;
+  const mail = portalOtpMailCopy({
+    companyName: companyRows[0]?.name ?? "",
+    code,
+    purpose: "assess",
+    ttlMinutes: Math.round(PORTAL_OTP_TTL_SECONDS / 60),
+  });
+  const { queueSystemMail } = await import("./platform.server");
+  await queueSystemMail({
+    companyId,
+    toEmail: email,
+    subject: mail.subject,
+    body: mail.body,
+    kind: "ASSESS_OTP",
+    idempotencyKey: `assess-otp:${id}`,
+    applicationId: row.application_id,
+  });
+  return {
+    status: "code_sent" as const,
+    emailMasked: maskEmail(email),
+    note: ASSESS_CODE_SENT,
+  };
+}
+
+/**
+ * Step 2: verify OTP bound to this invite token, then start/resume the attempt.
+ */
+export async function verifyAssessOtp(input: { token: string; email: string; code: string }) {
+  assertSameSiteRequest();
+  const email = normalizeEmail(input.email);
+  const code = normalizePortalOtpCode(input.code);
+  if (!email.includes("@")) throw new Error("Enter the invited email.");
+  if (!isPortalOtpCodeShape(code)) throw new Error("Enter the 6-digit code from your email.");
+  const { companyId, row } = await loadInviteAssignment(input.token);
+  if (normalizeEmail(row.candidate_email) !== email) {
+    throw new Error("That code is not valid or has expired. Request a new code.");
+  }
+  const sql = await db();
+  const challenges = await sql<{
+    id: string;
+    code_hash: string;
+    attempt_count: number;
+    max_attempts: number;
+    expires_at: string;
+  }>`
+    select id, code_hash, attempt_count, max_attempts,
+      to_char(expires_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as expires_at
+    from portal_otp_challenges
+    where company_id = ${companyId}
+      and email_normalized = ${email}
+      and purpose = 'assess'
+      and invite_token = ${input.token}
+      and consumed_at is null
+    order by created_at desc
+    limit 1
+  `;
+  const challenge = challenges[0];
+  if (!challenge) {
+    throw new Error("That code is not valid or has expired. Request a new code.");
+  }
+  if (Date.parse(challenge.expires_at) < Date.now()) {
+    await sql`
+      update portal_otp_challenges set consumed_at = now()
+      where company_id = ${companyId} and id = ${challenge.id}
+    `;
+    throw new Error("That code expired. Request a new code.");
+  }
+  if (challenge.attempt_count >= challenge.max_attempts) {
+    throw new Error("Too many incorrect attempts. Request a new code.");
+  }
+  const expected = hashPortalOtp({
+    secret: assessAccessSecretForOtp(),
+    challengeId: challenge.id,
+    code,
+  });
+  if (!portalOtpCodesEqual(expected, challenge.code_hash)) {
+    await sql`
+      update portal_otp_challenges
+      set attempt_count = attempt_count + 1
+      where company_id = ${companyId} and id = ${challenge.id}
+    `;
+    throw new Error("That code is not valid. Check the email and try again.");
+  }
+  await sql`
+    update portal_otp_challenges set consumed_at = now()
+    where company_id = ${companyId} and id = ${challenge.id}
+  `;
+  const started = await startAttemptForAssignment(companyId, row.id, null);
+  const accessToken = mintAssessAccess({
+    attemptId: started.attemptId,
+    assignmentId: row.id,
+    secret: assessAccessSecret(),
+  });
+  const portalAccessToken = mintPortalAccess({
+    applicationId: row.application_id,
+    companyId,
+    secret: assessAccessSecret(),
+  });
+  return {
+    assignmentId: row.id,
+    attemptId: started.attemptId,
+    applicationId: row.application_id,
+    created: started.created,
+    accessToken,
+    portalAccessToken,
+    assessmentName: row.assessment_name,
+    status: row.status,
+    durationSeconds: Number(row.duration_seconds),
+    startBy: row.start_by,
+    invitePath: assessmentInvitePath(input.token),
+  };
+}
+
+/**
+ * Legacy gate: email + application id. Prefer verifyAssessOtp (email + code).
  */
 export async function openAssessmentInvite(input: {
   token: string;
   email: string;
-  applicationId: string;
+  applicationId?: string;
+  code?: string;
 }) {
   assertSameSiteRequest();
+  if (input.code) {
+    return verifyAssessOtp({ token: input.token, email: input.email, code: input.code });
+  }
   const email = normalizeEmail(input.email);
-  const applicationId = normalizeApplicationId(input.applicationId);
+  const applicationId = normalizeApplicationId(input.applicationId ?? "");
   const idHint = applicationIdGateHint(applicationId);
   if (idHint) throw new Error(idHint);
   if (!email.includes("@")) {
-    throw new Error("Enter the application email and application id.");
+    throw new Error("Enter the invited email and the one-time code from that inbox.");
   }
   const { companyId, row } = await loadInviteAssignment(input.token);
   if (normalizeEmail(row.candidate_email) !== email || row.application_id !== applicationId) {
-    throw new Error("That email and application id do not match this assessment invite. Use the exact email and the full 36-character application id.");
+    throw new Error("That email and application id do not match this assessment invite. Prefer unlocking with the email one-time code.");
   }
   const started = await startAttemptForAssignment(companyId, row.id, null);
   const accessToken = mintAssessAccess({
@@ -656,7 +850,6 @@ export async function openAssessmentInvite(input: {
   };
 }
 
-/** Signed-in path still works when the candidate already has an account. */
 export async function getAssessmentInvite(userId: string, token: string) {
   const user = await requireUser(userId);
   const { row } = await loadInviteAssignment(token);
