@@ -11,7 +11,7 @@ function Offers() {
   const { companySlug } = Route.useParams();
   return (
     <div>
-      <PageTitle title="Offers" lede="The offer, the hiring plan, and onboarding after an acceptance. All three stay on this page." />
+      <PageTitle title="Hiring" lede="The offer, the hiring plan, and onboarding after an acceptance. All three stay on this page." />
       <p className="mb-6 flex flex-wrap gap-4 text-sm">
         <a className="text-link" href="#offers">Offers</a>
         <a className="text-link" href="#plans">Hiring plans</a>

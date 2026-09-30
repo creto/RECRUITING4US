@@ -354,7 +354,7 @@ const NAV = [
   {
     label: "Decide",
     items: [
-      ["/offers", "Offers"],
+      ["/offers", "Hiring"],
     ],
   },
   {
