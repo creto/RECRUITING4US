@@ -970,6 +970,7 @@ export async function listCandidates(
     locations: unknown;
     history: unknown;
     years: number | null;
+    is_indexed: boolean;
     indexed_text: string | null;
     answers_text: string | null;
     website: string | null;
@@ -985,6 +986,7 @@ export async function listCandidates(
         where ct.candidate_id = c.id and ct.company_id = c.company_id
       ) as tags,
       profile.titles, profile.skills, profile.education, profile.locations, profile.history, profile.years,
+      (coalesce(trim(profile.indexed_text), '') <> '') as is_indexed,
       case when ${searching} then profile.indexed_text else null end as indexed_text,
       case when ${searching} then (
         select string_agg(aa.value::text, ' ')
@@ -1056,7 +1058,7 @@ export async function listCandidates(
     locations: stringList(row.locations),
     history: stringList(row.history),
     years: row.years == null ? null : Number(row.years),
-    indexed: Boolean(row.indexed_text),
+    indexed: Boolean(row.is_indexed),
     website: row.website ?? "",
     knockout: row.knockout,
     applicationsList: applicationLines(row.application_lines),
