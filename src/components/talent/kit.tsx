@@ -355,8 +355,6 @@ const NAV = [
     label: "Decide",
     items: [
       ["/offers", "Offers"],
-      ["/plans", "Hiring plans"],
-      ["/onboarding", "Onboarding"],
     ],
   },
   {

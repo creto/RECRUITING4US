@@ -2,11 +2,29 @@ import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { approveOffer, createOffer, listOffers, sendOffer } from "@/server/talent.functions";
 import { Alert, AppLink, Button, Empty, Field, inputClass, Loading, PageTitle, money, refreshPage, useAuthed } from "@/components/talent/kit";
+import { HiringPlansSection } from "./plans";
+import { OnboardingSection } from "./onboarding";
 
 export const Route = createFileRoute("/app/$companySlug/offers")({ component: Offers });
 
 function Offers() {
   const { companySlug } = Route.useParams();
+  return (
+    <div>
+      <PageTitle title="Offers" lede="The offer, the hiring plan, and onboarding after an acceptance. All three stay on this page." />
+      <p className="mb-6 flex flex-wrap gap-4 text-sm">
+        <a className="text-link" href="#offers">Offers</a>
+        <a className="text-link" href="#plans">Hiring plans</a>
+        <a className="text-link" href="#onboarding">Onboarding</a>
+      </p>
+      <OffersDesk companySlug={companySlug} />
+      <HiringPlansSection companySlug={companySlug} />
+      <OnboardingSection companySlug={companySlug} />
+    </div>
+  );
+}
+
+function OffersDesk({ companySlug }: { companySlug: string }) {
   const state = useAuthed(() => listOffers({ data: { slug: companySlug } }), [companySlug]);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -14,8 +32,7 @@ function Offers() {
   if (state.error) return <Alert>{state.error}</Alert>;
   const rows = state.data ?? [];
   return (
-    <div>
-      <PageTitle title="Offers" lede="Create one here with an application id or an exact candidate name. Sending still requires an approval of the exact current revision." />
+    <section id="offers">
       {error ? <div className="mb-3"><Alert>{error}</Alert></div> : null}
       {note ? <p className="mb-3 text-sm text-ok">{note}</p> : null}
       <form className="mb-8 grid gap-3 rounded-[24px] border border-line bg-white p-4 shadow-[0_8px_24px_rgba(20,34,27,0.04)] md:grid-cols-2" onSubmit={(event) => {
@@ -82,6 +99,6 @@ function Offers() {
           </li>
         ))}
       </ul>
-    </div>
+    </section>
   );
 }

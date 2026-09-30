@@ -18,6 +18,8 @@ export const ES: Record<string, string> = {
   "Scheduled conversations, scorecards, and the calendar connection. Self-schedule links and sync retries stay on this page.": "Conversaciones agendadas, tarjetas de evaluación y la conexión del calendario. Los enlaces para que el candidato elija hora y los reintentos de sincronización siguen en esta página.",
   Sandboxes: "Entornos",
   Offers: "Ofertas",
+  "The offer, the hiring plan, and onboarding after an acceptance. All three stay on this page.": "La oferta, el plan de contratación y la incorporación después de aceptar. Los tres siguen en esta página.",
+  "Opens after an offer is accepted. Tasks, reminders, and the handoff file stay here.": "Se abre después de que aceptan la oferta. Las tareas, los recordatorios y el archivo de entrega siguen aquí.",
   "Hiring plans": "Planes de contratación",
   Onboarding: "Incorporación",
   Mail: "Correo",

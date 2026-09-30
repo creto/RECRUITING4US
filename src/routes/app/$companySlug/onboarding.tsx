@@ -1,19 +1,23 @@
 import { useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { cancelHire, hrisPayload, listHires, openHire, remindHires, setHireTask } from "@/server/talent.functions";
-import { Alert, Button, Empty, Field, inputClass, Loading, PageTitle, refreshPage, useAuthed } from "@/components/talent/kit";
+import { Alert, Button, Empty, Field, inputClass, Loading, refreshPage, useAuthed } from "@/components/talent/kit";
 
-export const Route = createFileRoute("/app/$companySlug/onboarding")({ component: Onboarding });
+export const Route = createFileRoute("/app/$companySlug/onboarding")({
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: "/app/$companySlug/offers", params: { companySlug: params.companySlug }, hash: "onboarding" });
+  },
+});
 
-function Onboarding() {
-  const { companySlug } = Route.useParams();
+export function OnboardingSection({ companySlug }: { companySlug: string }) {
   const state = useAuthed(() => listHires({ data: { slug: companySlug } }), [companySlug]);
   const [error, setError] = useState<string | null>(null);
   const [file, setFile] = useState<string | null>(null);
   if (state.loading || state.isPending) return <Loading />;
   return (
-    <div>
-      <PageTitle title="Onboarding" lede={state.data?.hris} />
+    <section id="onboarding" className="mt-12">
+      <h2 className="text-2xl">Onboarding</h2>
+      <p className="mt-2 text-sm text-muted">{state.data?.hris || "Opens after an offer is accepted. Tasks, reminders, and the handoff file stay here."}</p>
       {state.error ? <Alert>{state.error}</Alert> : null}
       {error ? <Alert>{error}</Alert> : null}
       <form className="mb-4 flex flex-wrap gap-2" onSubmit={(event) => {
@@ -48,6 +52,6 @@ function Onboarding() {
         ))}
       </ul>
       {file ? <pre className="mt-4 overflow-auto rounded-md border border-line p-3 text-xs">{file}</pre> : null}
-    </div>
+    </section>
   );
 }

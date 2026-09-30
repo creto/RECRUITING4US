@@ -1,12 +1,15 @@
 import { useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { explainJob, listJobs, listPlans, movePlanStage, savePlan } from "@/server/talent.functions";
-import { Alert, Button, Field, inputClass, Loading, PageTitle, useAuthed } from "@/components/talent/kit";
+import { Alert, Button, Field, inputClass, Loading, useAuthed } from "@/components/talent/kit";
 
-export const Route = createFileRoute("/app/$companySlug/plans")({ component: Plans });
+export const Route = createFileRoute("/app/$companySlug/plans")({
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: "/app/$companySlug/offers", params: { companySlug: params.companySlug }, hash: "plans" });
+  },
+});
 
-function Plans() {
-  const { companySlug } = Route.useParams();
+export function HiringPlansSection({ companySlug }: { companySlug: string }) {
   const jobs = useAuthed(() => listJobs({ data: { slug: companySlug } }), [companySlug]);
   const [jobId, setJobId] = useState("");
   const plans = useAuthed(() => listPlans({ data: { slug: companySlug, jobId } }), [companySlug, jobId], jobId.length > 7);
@@ -21,8 +24,9 @@ function Plans() {
   ]);
   if (jobs.loading || jobs.isPending) return <Loading />;
   return (
-    <div>
-      <PageTitle title="Hiring plans" lede="Each job can use a different plan. The cutoff includes ties. It does not withdraw a paper that was already sent. A personality type cannot be a cutoff." />
+    <section id="plans" className="mt-12">
+      <h2 className="text-2xl">Hiring plans</h2>
+      <p className="mt-2 text-sm text-muted">Each job can use a different plan. The cutoff includes ties. It does not withdraw a paper that was already sent. A personality type cannot be a cutoff.</p>
       {error ? <Alert>{error}</Alert> : null}
       <Field label="Job">
         <select className={inputClass} value={jobId} onChange={(event) => setJobId(event.target.value)}>
@@ -84,6 +88,6 @@ function Plans() {
         <label className="text-sm"><input name="decline" type="checkbox" /> Decline instead of advancing</label>
         <Button type="submit" variant="secondary">Record transition</Button>
       </form>
-    </div>
+    </section>
   );
 }
