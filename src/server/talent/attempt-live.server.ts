@@ -204,11 +204,8 @@ export async function listActiveAttempts(userId: string, slug: string) {
 
   const items = [];
   for (const row of rows) {
-    let token = row.live_token;
-    if (!token) {
-      const created = await ensureAttemptLive(actor.companyId, row.attempt_id);
-      token = created?.token ?? null;
-    }
+    // Do not create live pads on the poll path — startAttempt already links them.
+    const token = row.live_token;
     if (!token) continue;
     items.push({
       attemptId: row.attempt_id,

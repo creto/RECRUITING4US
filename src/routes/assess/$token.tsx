@@ -1,75 +1,114 @@
-import { useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { getAssessmentInvite, startAttempt } from "@/server/talent.functions";
-import { Alert, Button, Loading, PageTitle, useAuthed, when } from "@/components/talent/kit";
+import { assessmentInviteGateLede } from "@/domain/assessment-invite";
+import { storeAssessAccess } from "@/domain/assess-access-storage";
+import { openAssessmentInvite, peekAssessmentInvite } from "@/server/talent.functions";
+import { Alert, Button, Field, inputClass, Loading, PageTitle, Wordmark, when } from "@/components/talent/kit";
 
 export const Route = createFileRoute("/assess/$token")({ component: AssessInvite });
 
 function AssessInvite() {
   const { token } = Route.useParams();
   const navigate = useNavigate();
-  const state = useAuthed(() => getAssessmentInvite({ data: { token } }), [token]);
+  const [peek, setPeek] = useState<{
+    assessmentName: string;
+    status: string;
+    durationSeconds: number;
+    startBy: string;
+  } | null>(null);
+  const [peekError, setPeekError] = useState<string | null>(null);
+  const [peekLoading, setPeekLoading] = useState(true);
+  const [email, setEmail] = useState("");
+  const [applicationId, setApplicationId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const next = `/assess/${token}`;
 
-  if (state.isPending) return <Loading />;
-  if (state.signedOut) {
-    if (typeof window !== "undefined") {
-      const target = `/login?next=${encodeURIComponent(next)}`;
-      if (`${window.location.pathname}${window.location.search}` !== target) {
-        window.location.replace(target);
-      }
+  useEffect(() => {
+    let live = true;
+    setPeekLoading(true);
+    peekAssessmentInvite({ data: { token } })
+      .then((row) => {
+        if (!live) return;
+        setPeek(row);
+        setPeekError(null);
+      })
+      .catch((err: unknown) => {
+        if (!live) return;
+        setPeek(null);
+        setPeekError(err instanceof Error ? err.message : "This assessment link is not valid.");
+      })
+      .finally(() => {
+        if (live) setPeekLoading(false);
+      });
+    return () => {
+      live = false;
+    };
+  }, [token]);
+
+  async function onUnlock(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      const result = await openAssessmentInvite({
+        data: {
+          token,
+          email: email.trim(),
+          applicationId: applicationId.trim(),
+        },
+      });
+      storeAssessAccess(result.attemptId, result.accessToken);
+      void navigate({ href: `/candidate/attempts/${result.attemptId}` });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Could not open this assessment.");
+      setBusy(false);
     }
-    return <Loading />;
   }
 
   return (
     <main className="mx-auto max-w-xl px-4 py-8">
+      <Wordmark />
       <PageTitle
-        title={state.data?.assessmentName || "Assessment invite"}
-        lede="Sign in with the invited email. Opening this page does not start the timer. Start only when you are ready."
+        title={peek?.assessmentName || "Assessment invite"}
+        lede={assessmentInviteGateLede()}
       />
-      {state.loading ? <Loading /> : null}
-      {state.error ? <Alert>{state.error}</Alert> : null}
-      {error ? <Alert>{error}</Alert> : null}
-      {state.data ? (
+      {peekLoading ? <Loading /> : null}
+      {peekError ? <Alert>{peekError}</Alert> : null}
+      {error ? <div className="mb-3"><Alert>{error}</Alert></div> : null}
+      {peek ? (
         <article className="mt-4 space-y-3 rounded-[24px] border border-line bg-white p-5 text-sm shadow-[0_8px_24px_rgba(20,34,27,0.04)]">
-          <p>Status: {state.data.status}</p>
-          <p>Start by: {when(String(state.data.startBy))}</p>
-          <p>Duration: {Math.round(Number(state.data.durationSeconds) / 60)} minutes (timer starts when you begin).</p>
-          <p className="text-muted">Signed in as {state.data.email}</p>
-          {state.data.activeAttemptId ? (
+          <p>Status: {peek.status}</p>
+          <p>Start by: {when(String(peek.startBy))}</p>
+          <p>Duration: {Math.round(Number(peek.durationSeconds) / 60)} minutes (timer starts when you unlock).</p>
+          <form className="space-y-3 pt-2" onSubmit={onUnlock}>
+            <Field label="Email from your application">
+              <input
+                className={inputClass}
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+              />
+            </Field>
+            <Field label="Application id">
+              <input
+                className={inputClass}
+                value={applicationId}
+                onChange={(event) => setApplicationId(event.target.value)}
+                placeholder="From your apply confirmation"
+                required
+                minLength={8}
+              />
+            </Field>
             <Button
-              type="button"
+              type="submit"
               className="rounded-full bg-[#cefa90] text-[#14221b]"
-              onClick={() => {
-                void navigate({ href: `/candidate/attempts/${state.data!.activeAttemptId}` });
-              }}
+              disabled={busy || peek.status === "COMPLETED" || peek.status === "EXPIRED" || peek.status === "CANCELLED"}
             >
-              Continue assessment
+              {busy ? "Opening…" : "Open assessment"}
             </Button>
-          ) : (
-            <Button
-              type="button"
-              className="rounded-full bg-[#cefa90] text-[#14221b]"
-              disabled={busy || state.data.status === "COMPLETED" || state.data.status === "EXPIRED" || state.data.status === "CANCELLED"}
-              onClick={() => {
-                setBusy(true);
-                setError(null);
-                startAttempt({ data: { assignmentId: String(state.data!.assignmentId) } })
-                  .then((result) => {
-                    void navigate({ href: `/candidate/attempts/${result.attemptId}` });
-                  })
-                  .catch((err: Error) => {
-                    setError(err.message);
-                    setBusy(false);
-                  });
-              }}
-            >
-              Start assessment
-            </Button>
-          )}
+          </form>
         </article>
       ) : null}
     </main>

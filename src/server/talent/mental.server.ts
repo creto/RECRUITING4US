@@ -12,8 +12,11 @@ const DESCRIPTION =
 const INSTRUCTIONS =
   "Fifteen minutes on the server clock. Enter digits only. A calculator is not part of the assessment. The answer key is not in this page, and changing the timer in the browser does not add time.";
 
+const mentalReady = new Set<string>();
+
 /** Idempotent. Publishes the 15-minute arithmetic paper. */
 export async function ensureMentalMath(companyId: string) {
+  if (mentalReady.has(companyId)) return;
   enterTenant({ companyId, publicSlug: "" });
   const sql = await db();
   const versionId = mentalId(companyId, "version");
@@ -26,8 +29,7 @@ export async function ensureMentalMath(companyId: string) {
     select id from assessment_versions where id = ${versionId} and company_id = ${companyId}
   `;
   if (Number(existing[0]?.n ?? 0) >= MENTAL_MATH.length && exam[0]) {
-    await sql`update assessments set name = ${NAME}, description = ${DESCRIPTION} where id = ${assessmentId} and company_id = ${companyId}`;
-    await sql`update assessment_versions set instructions = ${INSTRUCTIONS}, duration_seconds = ${MENTAL_MATH_SECONDS} where id = ${versionId} and company_id = ${companyId}`;
+    mentalReady.add(companyId);
     return;
   }
   for (const item of MENTAL_MATH) {
@@ -85,4 +87,5 @@ export async function ensureMentalMath(companyId: string) {
       on conflict (id) do nothing
     `;
   }
+  mentalReady.add(companyId);
 }

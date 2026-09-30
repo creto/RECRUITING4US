@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { getAttempt, requestSampleRun, saveResponse, submitAttempt } from "@/server/talent.functions";
+import { getAttempt, getAttemptByAccess, requestSampleRun, requestSampleRunByAccess, saveResponse, saveResponseByAccess, submitAttempt, submitAttemptByAccess } from "@/server/talent.functions";
 import { questionIndex, saveStatusLabel } from "@/domain/rules";
 import { ExamProctor } from "@/components/talent/proctor";
 import { ExamDesk, PersonalityCard, examPaper } from "@/components/talent/exam-shell";
 import { answerComplete, type SavedAnswer } from "@/domain/candidate-view";
 import { Alert, Gate, Loading, PageTitle, useAuthed, when } from "@/components/talent/kit";
+import { readAssessAccess } from "@/domain/assess-access-storage";
 
 export const Route = createFileRoute("/candidate/attempts/$attemptId")({ component: AttemptPage });
 
@@ -47,6 +48,12 @@ type AttemptView = {
 
 function AttemptPage() {
   const { attemptId } = Route.useParams();
+  const accessToken = typeof window !== "undefined" ? readAssessAccess(attemptId) : null;
+  if (accessToken) return <GuestAttempt attemptId={attemptId} accessToken={accessToken} />;
+  return <AuthedAttempt attemptId={attemptId} />;
+}
+
+function AuthedAttempt({ attemptId }: { attemptId: string }) {
   const state = useAuthed(() => getAttempt({ data: { attemptId } }) as Promise<AttemptView>, [attemptId]);
   if (state.isPending || state.loading) return <Loading />;
   return (
@@ -61,13 +68,48 @@ function AttemptPage() {
   );
 }
 
-function Delivery({ view }: { view: AttemptView }) {
-  const open = view.attempt.status === "IN_PROGRESS" && !view.receipt;
-  if (!open) return <Receipt view={view} />;
-  return <Taker view={view} />;
+function GuestAttempt({ attemptId, accessToken }: { attemptId: string; accessToken: string }) {
+  const [view, setView] = useState<AttemptView | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let live = true;
+    setLoading(true);
+    getAttemptByAccess({ data: { attemptId, accessToken } })
+      .then((row) => {
+        if (!live) return;
+        setView(row as AttemptView);
+        setError(null);
+      })
+      .catch((err: unknown) => {
+        if (!live) return;
+        setError(err instanceof Error ? err.message : "Could not open this assessment.");
+      })
+      .finally(() => {
+        if (live) setLoading(false);
+      });
+    return () => {
+      live = false;
+    };
+  }, [attemptId, accessToken]);
+  if (loading) return <Loading />;
+  return (
+    <main className={`${examPaper} min-h-screen bg-[#f4f7f5]`}>
+      <div className="mx-auto max-w-6xl px-4 py-6">
+        {error ? <Alert>{error}</Alert> : null}
+        {view ? <Delivery key={view.receipt?.id ?? view.attempt.status} view={view} accessToken={accessToken} /> : null}
+      </div>
+    </main>
+  );
 }
 
-function Taker({ view }: { view: AttemptView }) {
+function Delivery({ view, accessToken }: { view: AttemptView; accessToken?: string }) {
+  const open = view.attempt.status === "IN_PROGRESS" && !view.receipt;
+  if (!open) return <Receipt view={view} />;
+  return <Taker view={view} accessToken={accessToken} />;
+}
+
+function Taker({ view, accessToken }: { view: AttemptView; accessToken?: string }) {
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, Answer>>(() => {
     const seed: Record<string, Answer> = {};
@@ -105,15 +147,26 @@ function Taker({ view }: { view: AttemptView }) {
   async function persist(next: Item, answer: Answer, expected: number): Promise<number> {
     setSaveState((current) => ({ ...current, [next.id]: "saving" }));
     try {
-      const result = await saveResponse({
-        data: {
-          attemptId: view.attempt.id,
-          itemId: next.id,
-          answer,
-          expectedRevision: expected,
-          mutationId: crypto.randomUUID(),
-        },
-      });
+      const result = accessToken
+        ? await saveResponseByAccess({
+            data: {
+              accessToken,
+              attemptId: view.attempt.id,
+              itemId: next.id,
+              answer,
+              expectedRevision: expected,
+              mutationId: crypto.randomUUID(),
+            },
+          })
+        : await saveResponse({
+            data: {
+              attemptId: view.attempt.id,
+              itemId: next.id,
+              answer,
+              expectedRevision: expected,
+              mutationId: crypto.randomUUID(),
+            },
+          });
       if (result.status === "saved") {
         setRevisions((current) => ({ ...current, [next.id]: result.revision }));
         setSaveState((current) => ({ ...current, [next.id]: "saved" }));
@@ -172,7 +225,9 @@ function Taker({ view }: { view: AttemptView }) {
     const expectedRevisions: Record<string, number> = {};
     for (const row of view.items) expectedRevisions[row.id] = latest[row.id] ?? row.revision;
     try {
-      const result = await submitAttempt({ data: { attemptId: view.attempt.id, expectedRevisions } });
+      const result = accessToken
+        ? await submitAttemptByAccess({ data: { accessToken, attemptId: view.attempt.id, expectedRevisions } })
+        : await submitAttempt({ data: { attemptId: view.attempt.id, expectedRevisions } });
       setReceipt({
         id: result.receiptId,
         submittedAt: result.submittedAt,
@@ -241,7 +296,10 @@ function Taker({ view }: { view: AttemptView }) {
           onAnswer={edit}
           onSubmit={() => void submit()}
           onSample={() => {
-            requestSampleRun({ data: { attemptId: view.attempt.id } })
+            const run = accessToken
+              ? requestSampleRunByAccess({ data: { attemptId: view.attempt.id, accessToken } })
+              : requestSampleRun({ data: { attemptId: view.attempt.id } });
+            run
               .then((result) => setRunnerNote(result.outputExcerpt ? `${result.reason}\n${result.outputExcerpt}` : result.reason))
               .catch((err: Error) => setRunnerNote(err.message));
           }}

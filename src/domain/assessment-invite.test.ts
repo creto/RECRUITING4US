@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { assessmentInviteHref, assessmentInvitePath } from "./assessment-invite.ts";
+import { assessmentInviteGateLede, assessmentInviteHref, assessmentInvitePath } from "./assessment-invite.ts";
 
 describe("assessment invite", () => {
   it("builds the candidate path and absolute href", () => {
@@ -11,5 +11,10 @@ describe("assessment invite", () => {
       assessmentInviteHref(token, "https://hire.example.com/"),
       `https://hire.example.com/assess/${token}`,
     );
+  });
+
+  it("explains the email + application id unlock", () => {
+    assert.match(assessmentInviteGateLede(), /application id/i);
+    assert.match(assessmentInviteGateLede(), /does not start the timer/i);
   });
 });

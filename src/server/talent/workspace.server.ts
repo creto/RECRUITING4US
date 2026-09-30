@@ -159,8 +159,23 @@ function scheduleMaintenance(companyId: string) {
   setTimeout(() => {
     void (async () => {
       try {
-        const { drainCompany } = await import("./drain.server");
-        await drainCompany(companyId);
+        enterTenant({ companyId, publicSlug: "" });
+        // Outbox only on every shell paint. SMTP mail drain runs only when due work exists
+        // so empty navigations stay fast; ops/worker still force full drains.
+        const { drain } = await import("./workflows.server");
+        await drain(companyId);
+        const sql = await db();
+        const due = await sql<{ n: number }>`
+          select 1::int as n from message_intents
+          where company_id = ${companyId}
+            and status in ('QUEUED', 'DEFERRED')
+            and (scheduled_for is null or scheduled_for <= now())
+          limit 1
+        `;
+        if (due[0]) {
+          const { drainMail } = await import("./platform.server");
+          await drainMail(companyId);
+        }
         const { sweepCompany } = await import("./assess.server");
         await sweepCompany(companyId);
       } catch (error) {
@@ -168,6 +183,19 @@ function scheduleMaintenance(companyId: string) {
       }
     })();
   }, 400);
+}
+
+const indexedAt = new Map<string, number>();
+
+function scheduleIndexMissing(companyId: string) {
+  const now = Date.now();
+  if (now - (indexedAt.get(companyId) ?? 0) < 20_000) return;
+  indexedAt.set(companyId, now);
+  setTimeout(() => {
+    void indexMissingProfiles(companyId).catch(() => {
+      // Search still runs on profiles that are already stored.
+    });
+  }, 50);
 }
 
 /** Rank/send pipeline papers in the background so the board opens in seconds. */
@@ -949,12 +977,8 @@ export async function listCandidates(
   }
   const compiled = compileSearch(input.query ?? "");
   if (compiled && "error" in compiled) throw new Error(compiled.error);
-  // Index at most a few missing resumes; never block the list on a full reindex.
-  try {
-    await indexMissingProfiles(actor.companyId);
-  } catch {
-    // Search still runs on profiles that are already stored.
-  }
+  // Index missing resumes in the background so Candidates paints immediately.
+  scheduleIndexMissing(actor.companyId);
   const sql = await db();
   const searching = Boolean((input.query ?? "").trim() || (input.location ?? "").trim() || (input.education ?? "").trim() || (input.criteria ?? "").trim());
   const rows = await sql<{
@@ -1091,7 +1115,7 @@ async function indexMissingProfiles(companyId: string) {
         )
       )
     order by a.submitted_at desc
-    limit 25
+    limit 8
   `;
   for (const row of rows) {
     await indexApplicationResume(companyId, row.application_id, row);

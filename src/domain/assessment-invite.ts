@@ -12,3 +12,8 @@ export function assessmentInviteHref(token: string, origin = ""): string {
   const base = origin.trim().replace(/\/$/, "");
   return base ? `${base}${path}` : path;
 }
+
+/** Copy on the public /assess/$token gate (no Better Auth). */
+export function assessmentInviteGateLede(): string {
+  return "Enter the invited email and your application id. Opening this page does not start the timer. Unlock only when you are ready.";
+}

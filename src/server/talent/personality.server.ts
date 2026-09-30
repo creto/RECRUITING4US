@@ -13,8 +13,11 @@ const NAME = "Assessment 3 · Personality";
 const DESCRIPTION =
   "Third assessment. Twenty-five agree-or-disagree statements. Five scales — mind, information, decisions, structure, and identity — produce a type such as ENFP-A. There is no correct answer and no percentage. It is not sent automatically with a CV. The statements are original. This is not the 16Personalities test and not the Myers-Briggs Type Indicator.";
 
+const personalityReady = new Set<string>();
+
 /** Idempotent. Publishes the 25-statement personality questionnaire. */
 export async function ensurePersonalityAssessment(companyId: string) {
+  if (personalityReady.has(companyId)) return;
   enterTenant({ companyId, publicSlug: "" });
   const sql = await db();
   const versionId = personalityId(companyId, "version");
@@ -27,14 +30,7 @@ export async function ensurePersonalityAssessment(companyId: string) {
     select id from assessment_versions where id = ${versionId} and company_id = ${companyId}
   `;
   if (Number(existing[0]?.n ?? 0) >= PERSONALITY_ITEMS.length && exam[0]) {
-    await sql`
-      update assessments set name = ${NAME}, description = ${DESCRIPTION}
-      where id = ${assessmentId} and company_id = ${companyId}
-    `;
-    await sql`
-      update assessment_versions set instructions = ${INSTRUCTIONS}
-      where id = ${versionId} and company_id = ${companyId}
-    `;
+    personalityReady.add(companyId);
     return;
   }
 
@@ -97,4 +93,5 @@ export async function ensurePersonalityAssessment(companyId: string) {
       on conflict (id) do nothing
     `;
   }
+  personalityReady.add(companyId);
 }

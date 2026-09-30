@@ -476,17 +476,28 @@ type ActiveAttempt = {
 };
 
 function LiveExams({ companySlug }: { companySlug: string }) {
+  // Defer first poll so Assessments list + shell paint are not competing with Live now.
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    const boot = window.setTimeout(() => setArmed(true), 1200);
+    return () => window.clearTimeout(boot);
+  }, [companySlug]);
   const live = useAuthed(
     () => listActiveAttempts({ data: { slug: companySlug } }) as Promise<{ items: ActiveAttempt[]; polledAt: string }>,
     [companySlug],
+    armed,
   );
 
   useEffect(() => {
-    const timer = window.setInterval(() => live.reload(), 4000);
+    if (!armed) return;
+    const timer = window.setInterval(() => {
+      if (live.loading) return;
+      live.reload();
+    }, 8000);
     return () => window.clearInterval(timer);
     // reload bumps an internal tick; identity is not stable across renders.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companySlug]);
+  }, [companySlug, armed]);
 
   const items = live.data?.items ?? [];
   return (

@@ -36,13 +36,18 @@ import {
 import { proctorKind } from "@/domain/proctor";
 import { enterTenant } from "@/lib/tenant";
 import { allow, audit, canonical, db, dbNow, json, mapDbError, nid, requireActor, requireUser, sha256, withTransaction } from "./db.server";
-import { ensureCodingBank, flag } from "./bank.server";
+function flag(value: unknown): boolean {
+  return value === true || value === "t" || value === "true";
+}
+
 import { ensureReadCodeBank } from "./read-code.server";
 import { candidateItem, answerComplete, coerceAnswer, orderedOptions } from "@/domain/candidate-view";
 import { readPersonality, scorePersonality, type PersonalityResult } from "@/domain/personality";
 import { ensureReview, rememberEvent } from "./workflows.server";
 import { endAttemptLive, ensureAttemptLive, mirrorAttemptLive, touchAttemptLive } from "./attempt-live.server";
 import { assessmentInviteHref, assessmentInvitePath } from "@/domain/assessment-invite";
+import { mintAssessAccess, verifyAssessAccess } from "@/domain/assessment-invite-access";
+import { env } from "@/lib/env.server";
 
 
 const HUMAN_TYPES = new Set(["text", "code", "file", "sql", "spreadsheet", "recording"]);
@@ -58,7 +63,7 @@ function newInviteToken(): string {
 
 function assessmentInviteMailBody(token: string, intro: string): string {
   const href = assessmentInviteHref(token, publicAppOrigin());
-  return `${intro}\n\nOpen your assessment invite (sign in with the invited email; opening the message does not start the timer):\n${href}\n\n{{company_name}}`;
+  return `${intro}\n\nOpen your assessment invite (enter the invited email and your application id; opening the message does not start the timer):\n${href}\n\n{{company_name}}`;
 }
 
 function assessmentInviteCapturedBody(token: string, intro: string): string {
@@ -67,20 +72,40 @@ function assessmentInviteCapturedBody(token: string, intro: string): string {
 }
 
 
+const bankEnsureAt = new Map<string, number>();
+
+/** Seed banks in the background so Assessments/shell list paint does not wait on reseed. */
+function scheduleBankEnsure(companyId: string) {
+  const now = Date.now();
+  if (now - (bankEnsureAt.get(companyId) ?? 0) < 60_000) return;
+  bankEnsureAt.set(companyId, now);
+  setTimeout(() => {
+    void (async () => {
+      try {
+        enterTenant({ companyId, publicSlug: "" });
+        const { ensureCodingBank } = await import("./bank.server");
+        await ensureCodingBank(companyId);
+        await ensureReadCodeBank(companyId);
+        const { ensurePersonalityAssessment } = await import("./personality.server");
+        await ensurePersonalityAssessment(companyId);
+        const { ensureMentalMath } = await import("./mental.server");
+        await ensureMentalMath(companyId);
+        try {
+          const { ensureOpsDefaults } = await import("./ops.server");
+          await ensureOpsDefaults(companyId);
+        } catch {
+          // Sandbox tables are optional on list.
+        }
+      } catch (error) {
+        console.error("bankEnsure", error instanceof Error ? error.message.slice(0, 180) : "failed");
+      }
+    })();
+  }, 50);
+}
+
 export async function listAssessments(userId: string, slug: string) {
   const actor = await requireActor(userId, slug);
-  await ensureCodingBank(actor.companyId);
-  await ensureReadCodeBank(actor.companyId);
-  const { ensurePersonalityAssessment } = await import("./personality.server");
-  await ensurePersonalityAssessment(actor.companyId);
-  const { ensureMentalMath } = await import("./mental.server");
-  await ensureMentalMath(actor.companyId);
-  try {
-    const { ensureOpsDefaults } = await import("./ops.server");
-    await ensureOpsDefaults(actor.companyId);
-  } catch {
-    // Assessments still list if the sandbox tables are not ready.
-  }
+  scheduleBankEnsure(actor.companyId);
   const sql = await db();
   const rows = await sql<{
     id: string;
@@ -143,8 +168,7 @@ export async function listQuestions(
 ) {
   const actor = await requireActor(userId, slug);
   allow(actor, "assessment.author");
-  await ensureCodingBank(actor.companyId);
-  await ensureReadCodeBank(actor.companyId);
+  scheduleBankEnsure(actor.companyId);
   const sql = await db();
   const filter = opts.filter ?? "all";
   const limit = Math.min(100, Math.max(1, Number(opts.limit ?? 40)));
@@ -503,8 +527,11 @@ export async function assignAssessment(
 }
 
 
-export async function getAssessmentInvite(userId: string, token: string) {
-  const user = await requireUser(userId);
+function assessAccessSecret(): string {
+  return (env("BETTER_AUTH_SECRET") ?? process.env.BETTER_AUTH_SECRET ?? "recruit4us-dev-assess-access").trim();
+}
+
+async function loadInviteAssignment(token: string) {
   const sql = await db();
   const found = await sql.query<{ company_id: string | null }>(
     "select app_company_for_assessment($1) as company_id",
@@ -512,7 +539,7 @@ export async function getAssessmentInvite(userId: string, token: string) {
   );
   const companyId = found[0]?.company_id;
   if (!companyId) throw new Error("This assessment link is not valid.");
-  enterTenant({ userId: user.id, companyId });
+  enterTenant({ companyId, publicSlug: "" });
   const rows = await sql<{
     id: string;
     status: string;
@@ -538,6 +565,64 @@ export async function getAssessmentInvite(userId: string, token: string) {
   `;
   const row = rows[0];
   if (!row) throw new Error("This assessment link is not valid.");
+  return { companyId, row };
+}
+
+/** Public peek for /assess/$token — no login. */
+export async function peekAssessmentInvite(token: string) {
+  const { row } = await loadInviteAssignment(token);
+  return {
+    status: row.status,
+    assessmentName: row.assessment_name,
+    durationSeconds: Number(row.duration_seconds),
+    startBy: row.start_by,
+    invitePath: assessmentInvitePath(token),
+    needsGate: true as const,
+  };
+}
+
+/**
+ * Gate: email + application id must match the assignment on this invite token.
+ * Starts or resumes the attempt and returns a short-lived access proof (no full login).
+ */
+export async function openAssessmentInvite(input: {
+  token: string;
+  email: string;
+  applicationId: string;
+}) {
+  assertSameSiteRequest();
+  const email = normalizeEmail(input.email);
+  const applicationId = input.applicationId.trim();
+  if (!email.includes("@") || applicationId.length < 8) {
+    throw new Error("Enter the application email and application id.");
+  }
+  const { companyId, row } = await loadInviteAssignment(input.token);
+  if (normalizeEmail(row.candidate_email) !== email || row.application_id !== applicationId) {
+    throw new Error("That email and application id do not match this assessment invite.");
+  }
+  const started = await startAttemptForAssignment(companyId, row.id, null);
+  const accessToken = mintAssessAccess({
+    attemptId: started.attemptId,
+    assignmentId: row.id,
+    secret: assessAccessSecret(),
+  });
+  return {
+    assignmentId: row.id,
+    attemptId: started.attemptId,
+    created: started.created,
+    accessToken,
+    assessmentName: row.assessment_name,
+    status: row.status,
+    durationSeconds: Number(row.duration_seconds),
+    startBy: row.start_by,
+    invitePath: assessmentInvitePath(input.token),
+  };
+}
+
+/** Signed-in path still works when the candidate already has an account. */
+export async function getAssessmentInvite(userId: string, token: string) {
+  const user = await requireUser(userId);
+  const { row } = await loadInviteAssignment(token);
   if (normalizeEmail(user.email) !== normalizeEmail(row.candidate_email)) {
     throw new Error("This assessment belongs to a different email address.");
   }
@@ -739,9 +824,57 @@ export async function requestDeletion(userId: string, applicationId: string) {
   return { ok: true };
 }
 
-export async function startAttempt(userId: string, assignmentId: string) {
-  assertSameSiteRequest();
-  await requireUser(userId);
+type SlimItem = {
+  question_version_id: string;
+  section_id: string;
+  position: number;
+  points: number;
+};
+
+/** Pick pool items without loading every bank payload (coding 500 stays slim). */
+async function selectAttemptItems(versionId: string, attemptId: string) {
+  const sql = await db();
+  const sectionRows = await sql<{ id: string; pool_pick: number | null }>`
+    select id, pool_pick from assessment_sections where version_id = ${versionId}
+    order by position
+  `;
+  const selected: (SlimItem & { payload: { options?: { id: string }[] } })[] = [];
+  for (const section of sectionRows) {
+    const pick = section.pool_pick && section.pool_pick > 0 ? section.pool_pick : null;
+    if (pick) {
+      const slim = await sql<SlimItem>`
+        select i.question_version_id, i.section_id, i.position, i.points
+        from assessment_items i
+        where i.section_id = ${section.id}
+        order by i.position
+      `;
+      const chosen = choosePool(slim, pick, `${attemptId}:${section.id}`);
+      for (const item of chosen) {
+        const payloads = await sql<{ payload: { options?: { id: string }[] } }>`
+          select payload from question_versions where id = ${item.question_version_id}
+        `;
+        selected.push({ ...item, payload: payloads[0]?.payload ?? {} });
+      }
+    } else {
+      const full = await sql<SlimItem & { payload: { options?: { id: string }[] } }>`
+        select i.question_version_id, i.section_id, i.position, i.points, v.payload
+        from assessment_items i
+        join question_versions v on v.id = i.question_version_id
+        where i.section_id = ${section.id}
+        order by i.position
+      `;
+      selected.push(...full);
+    }
+  }
+  return selected;
+}
+
+async function startAttemptForAssignment(
+  companyId: string,
+  assignmentId: string,
+  userId: string | null,
+) {
+  enterTenant({ companyId, publicSlug: "", userId: userId ?? undefined });
   const sql = await db();
   const rows = await sql<{
     id: string;
@@ -759,11 +892,10 @@ export async function startAttempt(userId: string, assignmentId: string) {
     select g.id, g.company_id, g.application_id, g.assessment_version_id as version_id, g.status,
       g.start_by::text as start_by, g.hard_finish_by::text as hard_finish_by,
       g.duration_seconds, g.multiplier_basis_points, g.extra_seconds, g.attempt_allowance
-    from assignments g where g.id = ${assignmentId}
+    from assignments g where g.id = ${assignmentId} and g.company_id = ${companyId}
   `;
   const assignment = rows[0];
   if (!assignment) throw new Error("Not found.");
-  await candidateOwns(userId, assignment.application_id);
   const active = await sql<{ id: string }>`
     select id from attempts
     where assignment_id = ${assignmentId} and status in ('NOT_STARTED', 'IN_PROGRESS')
@@ -802,27 +934,7 @@ export async function startAttempt(userId: string, assignmentId: string) {
   }
   const attemptId = nid();
   const ordinal = Number(used[0]?.n ?? 0) + 1;
-  const bank = await sql<{
-    question_version_id: string;
-    section_id: string;
-    position: number;
-    points: number;
-    payload: { options?: { id: string }[] };
-  }>`
-    select i.question_version_id, i.section_id, i.position, i.points, v.payload
-    from assessment_items i
-    join assessment_sections s on s.id = i.section_id
-    join question_versions v on v.id = i.question_version_id
-    where s.version_id = ${assignment.version_id}
-    order by i.position
-  `;
-  const sectionRows = await sql<{ id: string; pool_pick: number | null }>`
-    select id, pool_pick from assessment_sections where version_id = ${assignment.version_id}
-  `;
-  const selected = sectionRows.flatMap((section) => {
-    const group = bank.filter((item) => item.section_id === section.id);
-    return section.pool_pick ? choosePool(group, section.pool_pick, `${attemptId}:${section.id}`) : group;
-  });
+  const selected = await selectAttemptItems(assignment.version_id, attemptId);
   try {
     await withTransaction(async () => {
       await sql`
@@ -858,6 +970,19 @@ export async function startAttempt(userId: string, assignmentId: string) {
   );
   await ensureAttemptLive(assignment.company_id, attemptId);
   return { attemptId, created: true };
+}
+
+export async function startAttempt(userId: string, assignmentId: string) {
+  assertSameSiteRequest();
+  await requireUser(userId);
+  const sql = await db();
+  const rows = await sql<{ company_id: string; application_id: string }>`
+    select company_id, application_id from assignments where id = ${assignmentId}
+  `;
+  const assignment = rows[0];
+  if (!assignment) throw new Error("Not found.");
+  await candidateOwns(userId, assignment.application_id);
+  return startAttemptForAssignment(assignment.company_id, assignmentId, userId);
 }
 
 type AttemptItem = {
@@ -1011,8 +1136,7 @@ function presentOptions(item: AttemptItem) {
   return orderedOptions(item.payload, item.option_order);
 }
 
-async function loadOwnedAttempt(userId: string, attemptId: string) {
-  await requireUser(userId);
+async function readAttemptRow(attemptId: string) {
   const sql = await db();
   const rows = await sql<{
     id: string;
@@ -1034,16 +1158,134 @@ async function loadOwnedAttempt(userId: string, attemptId: string) {
   `;
   const attempt = rows[0];
   if (!attempt) throw new Error("Not found.");
+  enterTenant({ companyId: attempt.company_id, publicSlug: "" });
+  return attempt;
+}
+
+async function loadOwnedAttempt(userId: string, attemptId: string) {
+  await requireUser(userId);
+  const attempt = await readAttemptRow(attemptId);
   await candidateOwns(userId, attempt.application_id);
   return { attempt };
 }
 
-export async function saveResponse(
-  userId: string,
+async function loadAttemptByAccess(attemptId: string, accessToken: string) {
+  const verified = verifyAssessAccess(accessToken, attemptId, assessAccessSecret());
+  if (!verified.ok) throw new Error("This assessment session expired. Open your invite link again.");
+  const attempt = await readAttemptRow(attemptId);
+  if (attempt.assignment_id !== verified.assignmentId) {
+    throw new Error("This assessment session expired. Open your invite link again.");
+  }
+  return { attempt, accessUserId: null as string | null };
+}
+
+/** Guest getAttempt after invite gate (email + application id). */
+export async function getAttemptByAccess(attemptId: string, accessToken: string) {
+  const ctx = await loadAttemptByAccess(attemptId, accessToken);
+  await sweepAttempt(ctx.attempt.company_id, attemptId);
+  const fresh = (await loadAttemptByAccess(attemptId, accessToken)).attempt;
+  if (fresh.status === "IN_PROGRESS") {
+    await touchAttemptLive(fresh.company_id, attemptId);
+  }
+  const sql = await db();
+  const items = await sql<AttemptItem>`
+    select i.id, i.position, i.points, v.prompt, q.type, v.payload, i.option_order, s.title as section_title,
+      r.answer, r.revision
+    from attempt_items i
+    join question_versions v on v.id = i.question_version_id
+    join questions q on q.id = v.question_id
+    join assessment_sections s on s.id = i.section_id
+    left join responses r on r.attempt_item_id = i.id
+    where i.attempt_id = ${attemptId}
+    order by i.position
+  `;
+  const snapshot = await sql<{ receipt_id: string; submitted_at: string; reason: string; answers: unknown }>`
+    select receipt_id, reason, answers,
+      to_char(submitted_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as submitted_at
+    from submission_snapshots where attempt_id = ${attemptId}
+  `;
+  const release = await sql<{ score_release: string; name: string; instructions: string; proctored: unknown; duration_seconds: number }>`
+    select v.score_release, a.name, v.instructions, v.proctored, v.duration_seconds
+    from attempts t
+    join assignments g on g.id = t.assignment_id
+    join assessment_versions v on v.id = g.assessment_version_id
+    join assessments a on a.id = v.assessment_id
+    where t.id = ${attemptId}
+  `;
+  let score: number | null = null;
+  if (snapshot[0] && release[0]?.score_release === "AGGREGATE") {
+    const evals = await sql<{ basis_points: number | null; status: string }>`
+      select basis_points, status from evaluations
+      where attempt_id = ${attemptId} and origin = 'AUTOMATIC'
+      order by revision desc limit 1
+    `;
+    if (evals[0]?.status === "FINAL") score = evals[0].basis_points;
+  }
+  const now = await dbNow();
+  return {
+    serverNow: now.toISOString(),
+    attempt: {
+      id: fresh.id,
+      status: fresh.status,
+      deadline: fresh.deadline,
+      startedAt: fresh.started_at,
+      reason: fresh.submission_reason,
+    },
+    assessmentName: release[0]?.name ?? "Assessment",
+    instructions: release[0]?.instructions ?? "",
+    proctored: flag(release[0]?.proctored),
+    durationSeconds: Number(release[0]?.duration_seconds ?? 0),
+    runner: runnerAvailability(),
+    items: items.map((item) => candidateItem({
+      id: item.id,
+      position: item.position,
+      points: item.points,
+      prompt: item.prompt,
+      type: item.type,
+      section: item.section_title,
+      options: presentOptions(item),
+      absTolerance: item.payload?.absTolerance,
+      relTolerance: item.payload?.relTolerance,
+      answer: item.answer ?? null,
+      revision: item.revision ?? 0,
+    })),
+    receipt: snapshot[0]
+      ? {
+          id: snapshot[0].receipt_id,
+          submittedAt: snapshot[0].submitted_at,
+          reason: snapshot[0].reason,
+          answered: Array.isArray(snapshot[0].answers) ? snapshot[0].answers.length : 0,
+          score,
+        }
+      : null,
+    personality: snapshot[0] ? await storedPersonality(attemptId) : null,
+    accessToken,
+  };
+}
+
+export async function saveResponseByAccess(
+  accessToken: string,
   input: { attemptId: string; itemId: string; answer: unknown; expectedRevision: number; mutationId: string },
 ) {
+  return saveResponse(null, input, accessToken);
+}
+
+export async function submitAttemptByAccess(
+  accessToken: string,
+  input: { attemptId: string; expectedRevisions: Record<string, number> },
+) {
+  return submitAttempt(null, input, accessToken);
+}
+
+export async function saveResponse(
+  userId: string | null,
+  input: { attemptId: string; itemId: string; answer: unknown; expectedRevision: number; mutationId: string },
+  accessToken?: string,
+) {
   assertSameSiteRequest();
-  const ctx = await loadOwnedAttempt(userId, input.attemptId);
+  const ctx = userId
+    ? await loadOwnedAttempt(userId, input.attemptId)
+    : await loadAttemptByAccess(input.attemptId, accessToken ?? "");
   const sql = await db();
   const hash = sha256(canonical(input.answer));
   const prior = await sql<{ payload_hash: string; revision: number }>`
@@ -1150,11 +1392,13 @@ function validateAnswer(type: string, payload: unknown, answer: unknown): string
 }
 
 export async function submitAttempt(
-  userId: string,
+  userId: string | null,
   input: { attemptId: string; expectedRevisions: Record<string, number> },
+  accessToken?: string,
 ) {
   assertSameSiteRequest();
-  await loadOwnedAttempt(userId, input.attemptId);
+  if (userId) await loadOwnedAttempt(userId, input.attemptId);
+  else await loadAttemptByAccess(input.attemptId, accessToken ?? "");
   return finalize(input.attemptId, "MANUAL", input.expectedRevisions, userId);
 }
 
@@ -1651,9 +1895,15 @@ export async function archiveAssessment(userId: string, input: { slug: string; a
   return { ok: true };
 }
 
-export async function sampleRun(userId: string, attemptId: string) {
-  const { attempt } = await loadOwnedAttempt(userId, attemptId);
-  enterTenant({ companyId: attempt.company_id, userId, publicSlug: "" });
+export async function sampleRunByAccess(attemptId: string, accessToken: string) {
+  return sampleRun(null, attemptId, accessToken);
+}
+
+export async function sampleRun(userId: string | null, attemptId: string, accessToken?: string) {
+  const { attempt } = userId
+    ? await loadOwnedAttempt(userId, attemptId)
+    : await loadAttemptByAccess(attemptId, accessToken ?? "");
+  enterTenant({ companyId: attempt.company_id, userId: userId ?? undefined, publicSlug: "" });
   const sql = await db();
   const rows = await sql<{ answer: { text?: string } | null }>`
     select r.answer

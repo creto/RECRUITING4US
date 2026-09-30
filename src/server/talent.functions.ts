@@ -765,6 +765,16 @@ export const requestSampleRun = createServerFn({ method: "POST" })
     return api.sampleRun(userId, data.attemptId);
   });
 
+export const requestSampleRunByAccess = createServerFn({ method: "POST" })
+  .validator(z.object({
+    attemptId: z.string().min(8).max(80),
+    accessToken: z.string().min(20).max(500),
+  }))
+  .handler(async ({ data }) => {
+    const api = await import("./talent/assess.server");
+    return api.sampleRunByAccess(data.attemptId, data.accessToken) as any;
+  });
+
 export const refreshCalendar = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ slug: Slug }))
@@ -1156,7 +1166,48 @@ export const listCodingQuestions = createServerFn({ method: "POST" }).middleware
 export const importQuestionCatalog = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ slug: Slug })).handler(async ({ context, data }) => (await import("./talent/platform.server")).importQuestionCatalog(context.userId, data.slug) as any);
 export const inviteToCode = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ slug: Slug, applicationId: z.string().min(8).max(80), questionId: z.string().min(8).max(80) })).handler(async ({ context, data }) => (await import("./talent/platform.server")).inviteToCode(context.userId, data.slug, data.applicationId, data.questionId) as any);
 export const getCodeExercise = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ token: z.string().uuid() })).handler(async ({ context, data }) => (await import("./talent/platform.server")).getCodeExercise(context.userId, data.token) as any);
+export const peekAssessmentInvite = createServerFn({ method: "POST" })
+  .validator(z.object({ token: z.string().uuid() }))
+  .handler(async ({ data }) => (await import("./talent/assess.server")).peekAssessmentInvite(data.token) as any);
+
+export const openAssessmentInvite = createServerFn({ method: "POST" })
+  .validator(z.object({
+    token: z.string().uuid(),
+    email: z.string().trim().min(3).max(200),
+    applicationId: z.string().trim().min(8).max(80),
+  }))
+  .handler(async ({ data }) => (await import("./talent/assess.server")).openAssessmentInvite(data) as any);
+
 export const getAssessmentInvite = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ token: z.string().uuid() })).handler(async ({ context, data }) => (await import("./talent/assess.server")).getAssessmentInvite(context.userId, data.token) as any);
+
+export const getAttemptByAccess = createServerFn({ method: "POST" })
+  .validator(z.object({ attemptId: z.string().min(8).max(80), accessToken: z.string().min(20).max(500) }))
+  .handler(async ({ data }) => (await import("./talent/assess.server")).getAttemptByAccess(data.attemptId, data.accessToken) as any);
+
+export const saveResponseByAccess = createServerFn({ method: "POST" })
+  .validator(z.object({
+    accessToken: z.string().min(20).max(500),
+    attemptId: z.string().min(8).max(80),
+    itemId: z.string().min(8).max(80),
+    answer: z.unknown(),
+    expectedRevision: z.number().int().min(0),
+    mutationId: z.string().uuid(),
+  }))
+  .handler(async ({ data }) => {
+    const { accessToken, ...input } = data;
+    return (await import("./talent/assess.server")).saveResponseByAccess(accessToken, input) as any;
+  });
+
+export const submitAttemptByAccess = createServerFn({ method: "POST" })
+  .validator(z.object({
+    accessToken: z.string().min(20).max(500),
+    attemptId: z.string().min(8).max(80),
+    expectedRevisions: z.record(z.string(), z.number().int().min(0)),
+  }))
+  .handler(async ({ data }) => {
+    const { accessToken, ...input } = data;
+    return (await import("./talent/assess.server")).submitAttemptByAccess(accessToken, input) as any;
+  });
 export const runCode = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ token: z.string().uuid(), source: z.string().max(20000), final: z.boolean(), consented: z.boolean().optional() })).handler(async ({ context, data }) => (await import("./talent/platform.server")).runCode(context.userId, data.token, data.source, data.final, data.consented ?? false) as any);
 export const listCodeResults = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ slug: Slug, applicationId: z.string().min(8).max(80) })).handler(async ({ context, data }) => (await import("./talent/platform.server")).listCodeResults(context.userId, data.slug, data.applicationId) as any);
 export const openLive = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ slug: Slug, applicationId: z.string().min(8).max(80), title: z.string().max(120), prompt: z.string().max(8000), meetingUrl: z.string().max(300).optional() })).handler(async ({ context, data }) => (await import("./talent/platform.server")).openLive(context.userId, data.slug, data.applicationId, data.title, data.prompt, data.meetingUrl ?? "") as any);
