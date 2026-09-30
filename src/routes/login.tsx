@@ -2,7 +2,6 @@ import { useState } from "react";
 import { createFileRoute, Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { goAfterLogin, safeNextPath } from "@/domain/post-login-next";
 import { authClient, GROK_PROVIDERS, signIn } from "@/lib/auth/client";
-import { seedDemo } from "@/server/talent.functions";
 import { Alert, BrandBar, Button, Field, inputClass, Wordmark } from "@/components/talent/kit";
 
 export const Route = createFileRoute("/login")({
@@ -26,25 +25,6 @@ function Login() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const signingUp = mode === "up";
-
-  async function continueWithoutAccount() {
-    setPending(true);
-    setError(null);
-    try {
-      const id = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
-      const email = `guest.${id}@example.com`;
-      const password = `Guest-${crypto.randomUUID()}`;
-      const created = await authClient.signUp.email({ email, password, name: "Guest" });
-      if (created.error) throw new Error(created.error.message ?? "Could not open a workspace.");
-      const signed = await authClient.signIn.email({ email, password });
-      if (signed.error) throw new Error(signed.error.message ?? "Could not open a workspace.");
-      const demo = await seedDemo();
-      void navigate({ href: `/app/${demo.slug}` });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not open a workspace.");
-      setPending(false);
-    }
-  }
 
   async function onEmail(event: React.FormEvent) {
     event.preventDefault();
@@ -82,7 +62,7 @@ function Login() {
             <BrandBar />
           </div>
         </div>
-        <p className="mt-10 hidden text-sm text-muted lg:block">Continue without an account, or sign in when you have one.</p>
+        <p className="mt-10 hidden text-sm text-muted lg:block">Sign in with the account this employer should recognize.</p>
       </aside>
       <section className="flex items-center px-6 py-10 lg:px-12">
         <div className="mx-auto w-full max-w-md">
@@ -90,23 +70,10 @@ function Login() {
           <p className="mt-2 text-sm text-muted">
             {signingUp
               ? "Use the email you want employers to recognize."
-              : "Sign-in is not required to look around. This opens a private demo workspace in this browser."}
+              : "Sign in with your email or a connected account."}
           </p>
           {signingUp ? null : (
-            <div className="mt-8 space-y-3">
-              <Button type="button" className="w-full" disabled={pending} onClick={() => void continueWithoutAccount()}>
-                {pending ? "Opening the workspace…" : "Continue without signing in"}
-              </Button>
-              <p className="text-xs text-muted">Loads Northstar Labs, a fictional employer. Harbor Analytics stays closed to you.</p>
-            </div>
-          )}
-          <div className="my-6 flex items-center gap-3 text-xs font-medium uppercase tracking-wide text-muted">
-            <span className="h-px flex-1 bg-line" />
-            {signingUp ? "Email" : "Or sign in"}
-            <span className="h-px flex-1 bg-line" />
-          </div>
-          {signingUp ? null : (
-            <div className="mb-3 space-y-2">
+            <div className="mt-8 space-y-2">
               {GROK_PROVIDERS.map((provider) => (
                 <Button
                   key={provider.providerId}
@@ -121,6 +88,11 @@ function Login() {
               ))}
             </div>
           )}
+          <div className="my-6 flex items-center gap-3 text-xs font-medium uppercase tracking-wide text-muted">
+            <span className="h-px flex-1 bg-line" />
+            Email
+            <span className="h-px flex-1 bg-line" />
+          </div>
           <form className="space-y-3" onSubmit={onEmail}>
             {signingUp ? (
               <Field label="Name">
