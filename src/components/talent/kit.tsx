@@ -322,7 +322,6 @@ const NAV = [
     label: "Evaluate",
     items: [
       ["/assessments", "Assessments"],
-      ["/questions", "Code bank"],
       ["/reviews", "Reviews"],
       ["/interviews", "Interviews"],
       ["/sandboxes", "Sandboxes"],

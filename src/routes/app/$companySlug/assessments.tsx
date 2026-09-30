@@ -6,6 +6,7 @@ import { ExamPreview, type AssessmentPreview } from "@/components/talent/exam-pr
 import { examPaper } from "@/components/talent/exam-shell";
 import { DifficultyBadge, ProblemPrompt } from "@/components/talent/code-block";
 import { Alert, AppLink, Button, Empty, Field, inputClass, Loading, PageTitle, refreshPage, useAuthed, when } from "@/components/talent/kit";
+import { ScoredProblems } from "./questions";
 
 export const Route = createFileRoute("/app/$companySlug/assessments")({ component: Assessments });
 
@@ -422,6 +423,7 @@ function Assessments() {
         </form>
       </section>
       {error ? <div className="mt-3"><Alert>{error}</Alert></div> : null}
+      <ScoredProblems companySlug={companySlug} />
     </div>
   );
 }

@@ -11,6 +11,8 @@ export const ES: Record<string, string> = {
   Candidates: "Candidatos",
   Assessments: "Evaluaciones",
   "Code bank": "Banco de código",
+  "Auto-scored problems": "Problemas con nota automática",
+  "These are not the exam bank. You send one problem to one application. Hidden tests stay on the server and the runner scores the answer. A timeout is not stored as zero. JavaScript runs in a separate process. The version freezes when you send it.": "No son el banco del examen. Mandas un problema a una solicitud. Las pruebas ocultas se quedan en el servidor y el programa pone la nota. Un tiempo agotado no se guarda como cero. JavaScript corre en un proceso aparte. La versión queda fija al enviarlo.",
   Reviews: "Revisiones",
   Interviews: "Entrevistas",
   Sandboxes: "Entornos",
