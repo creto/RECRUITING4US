@@ -4,7 +4,7 @@ import { ApplyForm } from "@/components/talent/apply-form";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getPublicJob } from "@/server/talent.functions";
 import { companyCssVars } from "@/domain/embed-theme";
-import { Empty, Loading, Wordmark } from "@/components/talent/kit";
+import { Empty, Loading } from "@/components/talent/kit";
 
 export const Route = createFileRoute("/careers/$companySlug/$jobSlug")({ component: JobPage });
 
@@ -37,10 +37,7 @@ function JobPage() {
   return (
     <main className="min-h-screen bg-bg text-ink" style={theme}>
       <div className="mx-auto max-w-3xl px-4 py-8">
-      <a href={`/careers/${companySlug}`} className="inline-block text-ink">
-        <Wordmark logoUrl={job.logoUrl} companyName={job.company_name} />
-      </a>
-      <a href={`/careers/${companySlug}`} className="mt-2 block text-sm text-muted">{job.company_name}</a>
+      <a href={`/careers/${companySlug}`} className="text-sm text-muted">{job.company_name}</a>
       {job.careers_headline ? <p className="mt-2 text-sm text-muted">{job.careers_headline}</p> : null}
       <h1 className="mt-3 text-4xl">{job.title}</h1>
       <p className="mt-2 text-sm text-muted">{job.department} · {job.locations} · {job.work_arrangement}</p>

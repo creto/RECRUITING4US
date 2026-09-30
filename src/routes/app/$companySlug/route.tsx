@@ -15,7 +15,6 @@ function Layout() {
           slug={companySlug}
           name={state.data?.company.name ?? "Workspace"}
           role={state.data?.company.role ?? ""}
-          logoUrl={state.data?.company.logoUrl}
           theme={state.data?.company.theme ? companyCssVars(state.data.company.theme) : undefined}
         >
           {state.error && !state.data ? <Alert>{state.error}</Alert> : null}
