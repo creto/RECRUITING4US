@@ -32,3 +32,94 @@ export function describeLiveSignal(kind: string, detail: string): string {
       return "Noted.";
   }
 }
+
+export type AttemptLiveItem = {
+  position: number;
+  type: string;
+  prompt: string;
+  answer: unknown;
+};
+
+export type AttemptLiveFile = { name: string; body: string };
+
+/** Build the pad files a recruiter watches while a candidate takes an exam. */
+export function buildAttemptLivePad(input: {
+  assessmentName: string;
+  candidateName: string;
+  jobTitle: string;
+  items: AttemptLiveItem[];
+}): { prompt: string; files: AttemptLiveFile[]; activeFile: string; source: string } {
+  const answered = input.items.filter((item) => answerPreview(item.type, item.answer)).length;
+  const total = input.items.length;
+  const lines = [
+    `# ${input.assessmentName}`,
+    "",
+    `${input.candidateName} · ${input.jobTitle}`,
+    `Progress: ${answered} of ${total} answered.`,
+    "",
+    "This pad mirrors the open exam. Answers update when the candidate saves. Watching does not change a score.",
+    "",
+  ];
+  const files: AttemptLiveFile[] = [];
+  for (const item of input.items) {
+    const label = `q${item.position}`;
+    const preview = answerPreview(item.type, item.answer);
+    lines.push(`## Q${item.position} · ${item.type}`);
+    lines.push(clipPrompt(item.prompt));
+    lines.push(preview ? `Saved: ${preview.split("\n")[0]!.slice(0, 120)}` : "Not answered yet.");
+    lines.push("");
+    if (item.type === "code" || item.type === "sql" || item.type === "text") {
+      const ext = item.type === "sql" ? "sql" : item.type === "code" ? "js" : "md";
+      files.push({
+        name: `${label}.${ext}`,
+        body: typeof preview === "string" && preview.length > 0
+          ? preview
+          : item.type === "code"
+            ? "function solve() {\n  return null;\n}\n"
+            : "",
+      });
+    }
+  }
+  files.unshift({ name: "progress.md", body: `${lines.join("\n")}\n` });
+  const codeFile = files.find((file) => file.name.endsWith(".js") || file.name.endsWith(".sql"));
+  const activeFile = codeFile?.name ?? "progress.md";
+  const source = files.find((file) => file.name === activeFile)?.body ?? files[0]!.body;
+  return {
+    prompt: `${input.assessmentName}\n\nLive exam watch for ${input.candidateName} (${input.jobTitle}). Answers appear here as they save. This does not change a score.`,
+    files,
+    activeFile,
+    source,
+  };
+}
+
+export function liveWatchPath(token: string): string {
+  return `/live/${token}`;
+}
+
+export function activeAttemptSummary(input: {
+  candidateName: string;
+  jobTitle: string;
+  assessmentName: string;
+}): string {
+  return `${input.candidateName} · ${input.jobTitle} · ${input.assessmentName}`;
+}
+
+function clipPrompt(prompt: string): string {
+  const text = prompt.replace(/\s+/g, " ").trim();
+  return text.length > 160 ? `${text.slice(0, 160)}…` : text || "(no prompt)";
+}
+
+function answerPreview(type: string, answer: unknown): string {
+  if (!answer || typeof answer !== "object") return "";
+  const record = answer as { text?: unknown; optionId?: unknown; optionIds?: unknown; value?: unknown };
+  if (type === "code" || type === "sql" || type === "text") {
+    return typeof record.text === "string" ? record.text : "";
+  }
+  if (type === "numeric") return typeof record.value === "string" ? record.value.trim() : "";
+  if (type === "single" || type === "likert") return typeof record.optionId === "string" ? `option ${record.optionId}` : "";
+  if (type === "multi" && Array.isArray(record.optionIds)) {
+    const ids = record.optionIds.filter((id): id is string => typeof id === "string");
+    return ids.length ? `options ${ids.join(", ")}` : "";
+  }
+  return "";
+}

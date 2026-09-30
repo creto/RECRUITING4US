@@ -40,6 +40,7 @@ import { ensureReadCodeBank } from "./read-code.server";
 import { candidateItem, answerComplete, coerceAnswer, orderedOptions } from "@/domain/candidate-view";
 import { readPersonality, scorePersonality, type PersonalityResult } from "@/domain/personality";
 import { ensureReview, rememberEvent } from "./workflows.server";
+import { endAttemptLive, ensureAttemptLive, mirrorAttemptLive, touchAttemptLive } from "./attempt-live.server";
 
 const HUMAN_TYPES = new Set(["text", "code", "file", "sql", "spreadsheet", "recording"]);
 
@@ -676,7 +677,10 @@ export async function startAttempt(userId: string, assignmentId: string) {
     select id from attempts
     where assignment_id = ${assignmentId} and status in ('NOT_STARTED', 'IN_PROGRESS')
   `;
-  if (active[0]) return { attemptId: active[0].id, created: false };
+  if (active[0]) {
+    await ensureAttemptLive(assignment.company_id, active[0].id);
+    return { attemptId: active[0].id, created: false };
+  }
   if (assignment.status === "CANCELLED" || assignment.status === "EXPIRED" || assignment.status === "COMPLETED") {
     throw new Error("This assessment can no longer be started.");
   }
@@ -761,6 +765,7 @@ export async function startAttempt(userId: string, assignmentId: string) {
     attemptId,
     "Attempt started. The deadline is fixed on the server.",
   );
+  await ensureAttemptLive(assignment.company_id, attemptId);
   return { attemptId, created: true };
 }
 
@@ -781,6 +786,9 @@ export async function getAttempt(userId: string, attemptId: string) {
   const ctx = await loadOwnedAttempt(userId, attemptId);
   await sweepAttempt(ctx.attempt.company_id, attemptId);
   const fresh = await loadOwnedAttempt(userId, attemptId);
+  if (fresh.attempt.status === "IN_PROGRESS") {
+    await touchAttemptLive(fresh.attempt.company_id, attemptId);
+  }
   const sql = await db();
   const items = await sql<AttemptItem>`
     select i.id, i.position, i.points, v.prompt, q.type, v.payload, i.option_order, s.title as section_title,
@@ -887,6 +895,24 @@ export async function recordProctorEvent(
     insert into proctor_events (id, company_id, attempt_id, kind, detail)
     values (${nid()}, ${ctx.attempt.company_id}, ${input.attemptId}, ${kind}, ${input.detail.slice(0, 200)})
   `;
+  if (kind !== "HEARTBEAT") {
+    const sessions = await sql<{ id: string }>`
+      select id from live_sessions
+      where company_id = ${ctx.attempt.company_id} and attempt_id = ${input.attemptId}
+      limit 1
+    `;
+    const liveKind =
+      kind === "TAB_HIDDEN" || kind === "FULLSCREEN_LEFT" ? "LEFT_APP"
+      : kind === "WINDOW_BLUR" ? "LEFT_WINDOW"
+      : kind === "COPY" || kind === "PASTE" ? kind
+      : null;
+    if (sessions[0] && liveKind) {
+      await sql`
+        insert into live_signals (id, company_id, session_id, author, kind, detail)
+        values (${nid()}, ${ctx.attempt.company_id}, ${sessions[0].id}, 'candidate', ${liveKind}, ${input.detail.slice(0, 240)})
+      `;
+    }
+  }
   return { ok: true, stored: true };
 }
 
@@ -978,6 +1004,7 @@ export async function saveResponse(
         insert into response_mutations (id, company_id, attempt_id, mutation_id, payload_hash, attempt_item_id, revision)
         values (${nid()}, ${ctx.attempt.company_id}, ${input.attemptId}, ${input.mutationId}, ${hash}, ${input.itemId}, 1)
       `;
+      void mirrorAttemptLive(ctx.attempt.company_id, input.attemptId);
       return { status: "saved" as const, revision: 1, replay: false };
     }
   }
@@ -1008,6 +1035,7 @@ export async function saveResponse(
       ${nid()}, ${ctx.attempt.company_id}, ${input.attemptId}, ${input.mutationId}, ${hash}, ${input.itemId}, ${updated[0].revision}
     )
   `;
+  void mirrorAttemptLive(ctx.attempt.company_id, input.attemptId);
   return { status: "saved" as const, revision: updated[0].revision, replay: false };
 }
 
@@ -1147,6 +1175,7 @@ async function finalize(
     update attempts set status = 'SUBMITTED', submitted_at = now(), submission_reason = ${finalReason}
     where id = ${attemptId} and status = 'IN_PROGRESS'
   `;
+  await endAttemptLive(attempt.company_id, attemptId);
   await sql`update assignments set status = 'COMPLETED' where id = ${attempt.assignment_id}`;
   const score = await gradeObjective(attempt.company_id, attemptId);
   const status = score.pending ? "AWAITING_REVIEW" : "COMPLETED";

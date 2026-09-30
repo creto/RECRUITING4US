@@ -1,11 +1,11 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { DEFAULT_TEXT_RUBRIC, explainAuthorQuestion, gradingGuide } from "@/domain/rules";
-import { archiveAssessment, assignAssessment, createAssessment, createQuestion, listAssessments, listQuestions, previewAssessment, publishAssessment, sendAssessmentToFits, updateAssessmentDelivery } from "@/server/talent.functions";
+import { archiveAssessment, assignAssessment, createAssessment, createQuestion, listActiveAttempts, listAssessments, listQuestions, previewAssessment, publishAssessment, sendAssessmentToFits, updateAssessmentDelivery } from "@/server/talent.functions";
 import { ExamPreview, type AssessmentPreview } from "@/components/talent/exam-preview";
 import { examPaper } from "@/components/talent/exam-shell";
 import { DifficultyBadge, ProblemPrompt } from "@/components/talent/code-block";
-import { Alert, Button, Empty, Field, inputClass, Loading, PageTitle, refreshPage, useAuthed } from "@/components/talent/kit";
+import { Alert, AppLink, Button, Empty, Field, inputClass, Loading, PageTitle, refreshPage, useAuthed, when } from "@/components/talent/kit";
 
 export const Route = createFileRoute("/app/$companySlug/assessments")({ component: Assessments });
 
@@ -180,6 +180,7 @@ function Assessments() {
       {tests.error ? <Alert>{tests.error}</Alert> : null}
       {error ? <div className="mb-3"><Alert>{error}</Alert></div> : null}
       {note ? <p className="mb-3 text-sm text-ok">{note}</p> : null}
+      <LiveExams companySlug={companySlug} />
       {previewId ? (
         <div className="mb-6">
           {preview.loading || preview.isPending ? <Loading /> : null}
@@ -452,5 +453,77 @@ function GradingPreview({
       <p className="mt-1 text-xl">{preview.title}</p>
       <p className="mt-2">{preview.keySummary}</p>
     </aside>
+  );
+}
+
+type ActiveAttempt = {
+  attemptId: string;
+  applicationId: string;
+  candidateName: string;
+  jobTitle: string;
+  assessmentName: string;
+  startedAt: string;
+  deadline: string;
+  lastSeen: string | null;
+  liveToken: string;
+  watchPath: string;
+  summary: string;
+};
+
+function LiveExams({ companySlug }: { companySlug: string }) {
+  const live = useAuthed(
+    () => listActiveAttempts({ data: { slug: companySlug } }) as Promise<{ items: ActiveAttempt[]; polledAt: string }>,
+    [companySlug],
+  );
+
+  useEffect(() => {
+    const timer = window.setInterval(() => live.reload(), 4000);
+    return () => window.clearInterval(timer);
+    // reload bumps an internal tick; identity is not stable across renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companySlug]);
+
+  const items = live.data?.items ?? [];
+  return (
+    <section className="mb-8 rounded-[24px] border border-[#d7e1da] bg-[#f7fbe9] p-4 shadow-[0_8px_24px_rgba(20,34,27,0.04)]" aria-live="polite">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-2xl text-[#17211c]">Live now</h2>
+          <p className="mt-1 text-sm text-[#44574e]">
+            When a candidate starts an exam, they show up here. Open Watch to see their answers update in the existing live pad.
+          </p>
+        </div>
+        <span className="rounded-full border border-[#d7e1da] bg-white px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide text-[#4c6b16]">
+          {items.length === 0 ? "Nobody taking an exam" : `${items.length} in progress`}
+        </span>
+      </div>
+      {live.error ? <div className="mt-3"><Alert>{live.error}</Alert></div> : null}
+      {items.length === 0 && !live.loading ? (
+        <p className="mt-3 text-sm text-[#44574e]">No open attempts right now. This list refreshes every few seconds.</p>
+      ) : null}
+      <ul className="mt-3 space-y-2">
+        {items.map((row) => (
+          <li key={row.attemptId} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#d7e1da] bg-white px-4 py-3">
+            <div className="min-w-0">
+              <p className="font-medium text-[#17211c]">{row.candidateName}</p>
+              <p className="text-sm text-[#44574e]">{row.jobTitle} · {row.assessmentName}</p>
+              <p className="mt-1 text-xs text-[#44574e]">
+                Started {when(row.startedAt)}
+                {row.lastSeen ? ` · last active ${when(row.lastSeen)}` : ""}
+                {" · deadline "}{when(row.deadline)}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <AppLink href={row.watchPath} className="inline-flex min-h-10 items-center rounded-full bg-[#14221b] px-4 text-sm text-white">
+                Watch live
+              </AppLink>
+              <AppLink href={`/app/${companySlug}/applications/${row.applicationId}`} className="inline-flex min-h-10 items-center rounded-full border border-[#d7e1da] px-4 text-sm text-[#17211c]">
+                Application
+              </AppLink>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

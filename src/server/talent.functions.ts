@@ -533,6 +533,14 @@ export const listAssessments = createServerFn({ method: "POST" })
   return api.listAssessments(userId, data.slug) as any;
   });
 
+export const listActiveAttempts = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ slug: Slug }))
+  .handler(async ({ context, data }) => {
+    const api = await import("./talent/attempt-live.server");
+    return api.listActiveAttempts(context.userId, data.slug) as any;
+  });
+
 export const listQuestions = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({
