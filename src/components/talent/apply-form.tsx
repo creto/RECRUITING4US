@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { parseRecipient } from "@/domain/mail";
 import { applicantNotice } from "@/domain/sheet";
+import { normalizeWebsiteUrl } from "@/domain/web-url";
 import { MAX_UPLOAD_BYTES } from "@/domain/rules";
 import { submitApplicationAuthed, submitApplicationPublic } from "@/server/talent.functions";
 import { Alert, Button, Field, inputClass } from "./kit";
@@ -40,14 +42,31 @@ export function ApplyForm({
       setError("Attach a CV as a PDF or text file.");
       return;
     }
+    const recipient = parseRecipient(email);
+    if ("error" in recipient) {
+      setError(recipient.error);
+      return;
+    }
+    const nextAnswers = { ...answers };
+    for (const field of fields) {
+      if (field.type !== "url") continue;
+      const website = normalizeWebsiteUrl(nextAnswers[field.id] ?? "");
+      if ("error" in website) {
+        setError(`“${field.label}”: ${website.error}`);
+        return;
+      }
+      nextAnswers[field.id] = "url" in website ? website.url : "";
+    }
+    setEmail(recipient.email);
+    setAnswers(nextAnswers);
     setPending(true);
     try {
       const result = user
         ? await submitApplicationAuthed({
-            data: { companySlug, jobSlug, name, email, phone, answers, idempotencyKey: crypto.randomUUID(), resume, source },
+            data: { companySlug, jobSlug, name, email: recipient.email, phone, answers: nextAnswers, idempotencyKey: crypto.randomUUID(), resume, source },
           })
         : await submitApplicationPublic({
-            data: { companySlug, jobSlug, name, email, phone, answers, idempotencyKey: crypto.randomUUID(), resume, source },
+            data: { companySlug, jobSlug, name, email: recipient.email, phone, answers: nextAnswers, idempotencyKey: crypto.randomUUID(), resume, source },
           });
       setDone(applicantNotice({
         alreadyApplied: result.alreadyApplied,
@@ -75,7 +94,22 @@ export function ApplyForm({
     <form className="space-y-3 rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4" onSubmit={submit}>
       <h2 className="text-2xl">Apply</h2>
       <Field label="Name"><input className={inputClass} value={name} onChange={(event) => setName(event.target.value)} required autoComplete="name" /></Field>
-      <Field label="Email"><input className={inputClass} type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" /></Field>
+      <Field label="Email">
+        <input
+          className={inputClass}
+          type="text"
+          inputMode="email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          onBlur={() => {
+            const parsed = parseRecipient(email);
+            if ("email" in parsed) setEmail(parsed.email);
+          }}
+          required
+          autoComplete="email"
+          placeholder="name@gmail.com"
+        />
+      </Field>
       <Field label="Phone (optional)"><input className={inputClass} value={phone} onChange={(event) => setPhone(event.target.value)} autoComplete="tel" /></Field>
       {fields.map((field) => (
         <Field key={field.id} label={field.required ? `${field.label} (required)` : field.label}>
@@ -99,10 +133,25 @@ export function ApplyForm({
           ) : (
             <input
               className={inputClass}
-              type={field.type === "url" ? "url" : field.type === "number" ? "number" : "text"}
+              type={field.type === "number" ? "number" : "text"}
+              inputMode={field.type === "url" ? "url" : undefined}
+              placeholder={field.type === "url" ? "https:// or a pasted page" : undefined}
               value={answers[field.id] ?? ""}
               required={Boolean(field.required)}
               onChange={(event) => setAnswers((current) => ({ ...current, [field.id]: event.target.value }))}
+              onPaste={field.type === "url" ? (event) => {
+                const html = event.clipboardData.getData("text/html");
+                const plain = event.clipboardData.getData("text/plain");
+                const fromHtml = html.trim() ? normalizeWebsiteUrl(html) : null;
+                const website = fromHtml && "url" in fromHtml ? fromHtml : normalizeWebsiteUrl(plain);
+                if (!("url" in website)) return;
+                event.preventDefault();
+                setAnswers((current) => ({ ...current, [field.id]: website.url }));
+              } : undefined}
+              onBlur={field.type === "url" ? () => {
+                const website = normalizeWebsiteUrl(answers[field.id] ?? "");
+                if ("url" in website) setAnswers((current) => ({ ...current, [field.id]: website.url }));
+              } : undefined}
             />
           )}
           {field.help ? <span className="mt-1 block text-xs text-muted">{field.help}</span> : null}

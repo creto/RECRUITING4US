@@ -248,7 +248,7 @@ export function knockoutResult(
 
 export function applicationForm(input: { minYears: number | null; requireAuthorization: boolean }) {
   const fields: Record<string, unknown>[] = [
-    { id: "website", type: "url", label: "Portfolio or website", required: false, help: "Optional" },
+    { id: "website", type: "url", label: "Portfolio or website", required: false, help: "Paste a page or address. https:// is added if it is missing." },
     { id: "why", type: "long_text", label: "Why this role?", required: false, help: "A short note is enough." },
   ];
   if (input.minYears != null) {

@@ -28,6 +28,8 @@ import {
 import { Alert, Button, Field, inputClass, Loading, MailCard, PageTitle, money, refreshPage, useAuthed, useCompanyWorkspace, when } from "@/components/talent/kit";
 import { RichMailEditor } from "@/components/talent/mail-compose";
 import { plainToEditorHtml } from "@/domain/mail-html";
+import { storedAnswerText } from "@/domain/sheet";
+import { websiteHref } from "@/domain/web-url";
 
 export const Route = createFileRoute("/app/$companySlug/applications/$applicationId")({ component: ApplicationPage });
 
@@ -72,9 +74,17 @@ function ApplicationPage() {
             <p>Lifecycle: {app.lifecycle}</p>
             {(state.data.answers ?? []).length ? (
               <ul className="space-y-1 border-t border-line pt-3">
-                {state.data.answers.map((row: { field_id: string; value: unknown }) => (
-                  <li key={row.field_id}><span className="text-muted">{row.field_id}</span> · {typeof row.value === "string" ? row.value : JSON.stringify(row.value)}</li>
-                ))}
+                {state.data.answers.map((row: { field_id: string; value: unknown }) => {
+                  const text = storedAnswerText(row.value);
+                  const href = websiteHref(text);
+                  return (
+                    <li key={row.field_id}>
+                      <span className="text-muted">{row.field_id}</span>
+                      {" · "}
+                      {href ? <a className="text-link underline" href={href} target="_blank" rel="noopener noreferrer">{text}</a> : text}
+                    </li>
+                  );
+                })}
               </ul>
             ) : null}
             <CvScreen
@@ -267,7 +277,7 @@ function ApplicationPage() {
         </div>
       ) : null}
       {tab === "Mail" ? (
-        <MailTab slug={companySlug} applicationId={applicationId} canEmail={Boolean(state.data.canEmail)} onError={setError} />
+        <MailTab slug={companySlug} applicationId={applicationId} defaultTo={String(app.email || "")} canEmail={Boolean(state.data.canEmail)} onError={setError} />
       ) : null}
       {tab === "Workbench" ? (
         <Workbench slug={companySlug} applicationId={applicationId} onError={setError} />
@@ -438,8 +448,9 @@ function scoreLine(item: {
   return `${origin}: ${shown}.${release}`;
 }
 
-function MailTab({ slug, applicationId, canEmail, onError }: { slug: string; applicationId: string; canEmail: boolean; onError: (value: string) => void }) {
+function MailTab({ slug, applicationId, defaultTo, canEmail, onError }: { slug: string; applicationId: string; defaultTo: string; canEmail: boolean; onError: (value: string) => void }) {
   const workspace = useCompanyWorkspace();
+  const [to, setTo] = useState(defaultTo);
   const [subject, setSubject] = useState("Update on {{job_title}}");
   const [body, setBody] = useState(() => plainToEditorHtml("Hello {{candidate_name}},\n\nThis note is queued for delivery. Stored in this workspace is not the same as delivered.\n\n{{recruiter_name}}"));
   if (!canEmail) return <p className="text-sm">Your role cannot send mail.</p>;
@@ -447,10 +458,11 @@ function MailTab({ slug, applicationId, canEmail, onError }: { slug: string; app
   return (
     <form className="grid gap-3" onSubmit={(event) => {
       event.preventDefault();
-      queuePlatformMail({ data: { slug, applicationId, kind: "FOLLOW_UP", subject, body, idempotencyKey: crypto.randomUUID() } })
+      queuePlatformMail({ data: { slug, applicationId, to, kind: "FOLLOW_UP", subject, body, idempotencyKey: crypto.randomUUID() } })
         .then(() => onError("Queued. The applicant receives this card. Open Delivery to see stored, accepted, delivered, bounced, or failed."))
         .catch((err: Error) => onError(err.message));
     }}>
+      <Field label="To"><input className={inputClass} type="text" inputMode="email" value={to} onChange={(event) => setTo(event.target.value)} placeholder="oscar@gmail.com or any outside inbox" /></Field>
       <Field label="Subject"><input className={inputClass} value={subject} onChange={(event) => setSubject(event.target.value)} /></Field>
       <Field label="Message"><RichMailEditor value={body} onChange={setBody} /></Field>
       <MailCard name={companyName} body={body} />

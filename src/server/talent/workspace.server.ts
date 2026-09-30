@@ -33,6 +33,7 @@ import { readResume } from "./resume-text";
 import { loadFileBytes, removeStoredFile, storeFileBytes } from "./object-store.server";
 import { sniffResume } from "@/domain/platform/docx";
 import { applicationReceipt, applicationSheetCsv, cvResultLabel, storedAnswerText, type SheetField, type SheetRow } from "@/domain/sheet";
+import { normalizeWebsiteUrl } from "@/domain/web-url";
 import { enterTenant } from "@/lib/tenant";
 import { allow, audit, canonical, db, forgetActor, json, mapDbError, nid, requireActor, requireUser, sha256, withTransaction, type Actor } from "./db.server";
 import { rememberEvent } from "./workflows.server";
@@ -966,6 +967,7 @@ export async function listCandidates(
     years: number | null;
     indexed_text: string | null;
     answers_text: string | null;
+    website: string | null;
     knockout: string | null;
     application_lines: unknown;
   }>`
@@ -985,6 +987,14 @@ export async function listCandidates(
         join applications ans_app on ans_app.id = aa.application_id and ans_app.company_id = aa.company_id
         where ans_app.candidate_id = c.id and aa.company_id = c.company_id
       ) else null end as answers_text,
+      (
+        select coalesce(aa.value->>'text', '')
+        from application_answers aa
+        join applications wa on wa.id = aa.application_id and wa.company_id = aa.company_id
+        where wa.candidate_id = c.id and aa.company_id = c.company_id and aa.field_id = 'website'
+        order by wa.submitted_at desc
+        limit 1
+      ) as website,
       (
         select a.rejection_reason from applications a
         where a.candidate_id = c.id and a.company_id = c.company_id and a.rejection_reason like 'Knockout:%'
@@ -1042,6 +1052,7 @@ export async function listCandidates(
     history: stringList(row.history),
     years: row.years == null ? null : Number(row.years),
     indexed: Boolean(row.indexed_text),
+    website: row.website ?? "",
     knockout: row.knockout,
     applicationsList: applicationLines(row.application_lines),
   }));
@@ -1359,7 +1370,7 @@ export async function getApplication(userId: string, slug: string, applicationId
   const showPay = canSeeCompensation(actor.role);
   return {
     application: limited ? { ...application, email: "", phone: null, rejection_reason: null } : application,
-    answers,
+    answers: answers.map((row) => ({ field_id: row.field_id, value: storedAnswerText(row.value) })),
     events,
     notes,
     stages,
@@ -2053,11 +2064,10 @@ export async function submitApplication(input: ApplyInput) {
   }
   const email = normalizeEmail(input.email);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid email address.");
-  let sessionEmail: string | null = null;
+  let linkedUserId: string | null = null;
   if (input.sessionUserId) {
     const user = await requireUser(input.sessionUserId);
-    sessionEmail = user.emailNormalized;
-    if (sessionEmail !== email) throw new Error("Apply with the email on your account.");
+    if (user.emailNormalized === email) linkedUserId = input.sessionUserId;
   }
   const recent = await sql<{ n: number }>`
     select count(*) as n from applications a
@@ -2065,11 +2075,27 @@ export async function submitApplication(input: ApplyInput) {
     where c.email_normalized = ${email} and a.submitted_at > now() - interval '1 hour'
   `;
   if (Number(recent[0]?.n ?? 0) > 20) throw new Error("Too many applications from this email. Try again later.");
+  const answers = { ...input.answers };
+  for (const field of job.form_schema ?? []) {
+    let value = (answers[field.id] ?? "").trim();
+    if (field.type === "url" && value) {
+      const website = normalizeWebsiteUrl(value);
+      if ("error" in website) throw new Error(`“${field.label}”: ${website.error}`);
+      if ("url" in website) {
+        value = website.url;
+        answers[field.id] = website.url;
+      }
+    }
+    if (field.required && !value) throw new Error(`“${field.label}” is required.`);
+    if (value && field.type === "select" && field.options && !field.options.includes(value)) {
+      throw new Error(`“${field.label}” has an unsupported choice.`);
+    }
+  }
   const payloadHash = sha256(canonical({
     name: input.name.trim(),
     email,
     phone: input.phone ?? "",
-    answers: input.answers,
+    answers,
     job: job.job_id,
   }));
   const actorKey = `apply:${email}`;
@@ -2087,16 +2113,6 @@ export async function submitApplication(input: ApplyInput) {
       receipt: stored.receipt || applicationReceipt(stored.applicationId),
       cvResult: stored.cvResult || "",
     };
-  }
-  for (const field of job.form_schema ?? []) {
-    const value = (input.answers[field.id] ?? "").trim();
-    if (field.required && !value) throw new Error(`“${field.label}” is required.`);
-    if (value && field.type === "url" && !/^https?:\/\//i.test(value)) {
-      throw new Error(`“${field.label}” must be a full http(s) URL.`);
-    }
-    if (value && field.type === "select" && field.options && !field.options.includes(value)) {
-      throw new Error(`“${field.label}” has an unsupported choice.`);
-    }
   }
   const active = await sql<{ id: string }>`
     select a.id from applications a
@@ -2121,7 +2137,7 @@ export async function submitApplication(input: ApplyInput) {
       insert into candidates (id, company_id, name, email, email_normalized, phone, source, user_id)
       values (
         ${candidateId}, ${job.company_id}, ${input.name.trim()}, ${input.email.trim()}, ${email},
-        ${input.phone ?? null}, 'CAREERS', ${sessionEmail ? input.sessionUserId! : null}
+        ${input.phone ?? null}, 'CAREERS', ${linkedUserId}
       )
       on conflict (company_id, email_normalized) do update
       set user_id = coalesce(candidates.user_id, excluded.user_id)
@@ -2138,7 +2154,7 @@ export async function submitApplication(input: ApplyInput) {
       )
     `;
     for (const field of job.form_schema ?? []) {
-      const value = input.answers[field.id] ?? "";
+      const value = answers[field.id] ?? "";
       if (!value.trim()) continue;
       await sql`
         insert into application_answers (id, company_id, application_id, field_id, value)
@@ -2171,7 +2187,7 @@ export async function submitApplication(input: ApplyInput) {
     source: input.source ?? "CAREERS",
   });
   await audit({ companyId: job.company_id, userId: input.sessionUserId ?? null }, "application.submit", "application", applicationId, "Public application stored.");
-  const knockout = knockoutResult(job.form_schema ?? [], input.answers);
+  const knockout = knockoutResult(job.form_schema ?? [], answers);
   if (knockout.closed && knockout.reason) {
     await sql`
       update applications
@@ -2203,7 +2219,7 @@ export async function submitApplication(input: ApplyInput) {
     phone: input.phone?.trim() ?? "",
     cvName: input.resume?.name ?? "",
     cvResult,
-    answers: input.answers,
+    answers,
     source: input.source ?? "CAREERS",
     submittedAt: null,
     confirm: true,

@@ -9,6 +9,7 @@ import { extractOffice } from "@/domain/platform/docx";
 import { disposeCase, similarityOpensCase, similarityPercent, signalChangesScore } from "@/domain/platform/integrity";
 import { candidateCases, type Grade } from "@/domain/platform/score";
 import { parseResumeProfile } from "@/domain/cv-index";
+import { parseRecipient } from "@/domain/mail";
 import { normalizeEmail, roleHas } from "@/domain/rules";
 import { enterTenant } from "@/lib/tenant";
 import { allow, audit, db, json, mapDbError, nid, requireActor, requireUser, type Actor } from "./db.server";
@@ -242,6 +243,7 @@ export async function queueMail(userId: string, slug: string, input: {
   body: string;
   cc: string;
   bcc: string;
+  to?: string;
   idempotencyKey: string;
 }) {
   assertSameSiteRequest();
@@ -261,7 +263,14 @@ export async function queueMail(userId: string, slug: string, input: {
     where a.company_id = ${actor.companyId} and a.id = ${input.applicationId}
   `;
   const app = apps[0];
-  if (!app?.email) throw new Error("This application has no email address.");
+  if (!app) throw new Error("This application has no email address.");
+  const requested = (input.to ?? "").trim();
+  const parsedTo = requested ? parseRecipient(requested) : null;
+  if (parsedTo && "error" in parsedTo) throw new Error(parsedTo.error);
+  const toEmail = parsedTo && "email" in parsedTo ? parsedTo.email : app.email;
+  if (!toEmail || !toEmail.includes("@")) {
+    throw new Error("Enter the address to send to. It can be any inbox, including one outside this account.");
+  }
   const tokens = {
     candidate_name: app.name,
     job_title: app.title,
@@ -281,13 +290,13 @@ export async function queueMail(userId: string, slug: string, input: {
         idempotency_key, status, provider, thread_token, created_by
       ) values (
         ${id}, ${actor.companyId}, ${input.applicationId}, ${app.candidate_id}, ${app.job_id}, ${input.kind},
-        ${subject}, ${body}, ${app.email}, ${input.cc.slice(0, 500)}, ${input.bcc.slice(0, 500)},
+        ${subject}, ${body}, ${toEmail}, ${input.cc.slice(0, 500)}, ${input.bcc.slice(0, 500)},
         ${input.idempotencyKey}, 'QUEUED', ${mailMode().provider}, ${thread}, ${actor.userId}
       )
       on conflict (company_id, idempotency_key) do nothing
       returning id
     `;
-    await audit(actor, "mail.queue", "message_intent", inserted[0]?.id ?? id, `Queued ${input.kind} to ${app.email}`);
+    await audit(actor, "mail.queue", "message_intent", inserted[0]?.id ?? id, `Queued ${input.kind} to ${toEmail}`);
     await drain(actor);
     return { id: inserted[0]?.id ?? id, duplicate: !inserted[0], note: mailMode().note };
   } catch (error) {
@@ -334,11 +343,27 @@ export async function queueNamedMail(userId: string, slug: string, input: {
   body: string;
   cc: string;
   bcc: string;
+  to?: string;
   idempotencyKey: string;
 }) {
   assertSameSiteRequest();
   const actor = await requireActor(userId, slug);
   allow(actor, "application.note");
+  const requested = (input.to ?? "").trim();
+  const hasTarget = (input.applicationId ?? "").trim().length >= 8 || (input.candidateName ?? "").trim().length >= 2;
+  if (!hasTarget) {
+    if (!requested) throw new Error("Give a recipient email, a candidate name, or an application id.");
+    const parsed = parseRecipient(requested);
+    if ("error" in parsed) throw new Error(parsed.error);
+    return queueProspectMail(userId, slug, {
+      email: parsed.email,
+      name: (input.candidateName ?? "").trim() || parsed.email,
+      kind: input.kind,
+      subject: input.subject,
+      body: input.body,
+      idempotencyKey: input.idempotencyKey,
+    });
+  }
   const applicationId = await resolveApplicationId(actor.companyId, input);
   return queueMail(userId, slug, { ...input, applicationId });
 }
@@ -361,8 +386,9 @@ export async function queueProspectMail(userId: string, slug: string, input: {
     where company_id = ${actor.companyId} and created_at > now() - interval '1 minute'
   `;
   if ((recent[0]?.n ?? 0) >= 30) throw new Error("Too many messages were queued in the last minute. Wait and try again.");
-  const to = normalizeEmail(input.email);
-  if (!to.includes("@")) throw new Error("That address is not usable.");
+  const parsed = parseRecipient(input.email);
+  if ("error" in parsed) throw new Error(parsed.error);
+  const to = parsed.email;
   const tokens = { candidate_name: input.name, company_name: actor.companyName, recruiter_name: actor.name, job_title: "" };
   const subject = renderTokens(input.subject, tokens).slice(0, 200);
   const body = prepareMailBody(renderTokens(input.body, tokens));

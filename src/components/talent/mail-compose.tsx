@@ -11,6 +11,7 @@ import {
 import { Button, inputClass, useCompanyWorkspace } from "@/components/talent/kit";
 
 const PHONE_KEY = "recruit4us.mail.contact.phone";
+const EMAIL_KEY = "recruit4us.mail.contact.email";
 
 function readPhone(): string {
   try {
@@ -23,6 +24,22 @@ function readPhone(): string {
 function writePhone(value: string) {
   try {
     localStorage.setItem(PHONE_KEY, value);
+  } catch {
+    /* ignore */
+  }
+}
+
+function readContactEmail(): string {
+  try {
+    return localStorage.getItem(EMAIL_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function writeContactEmail(value: string) {
+  try {
+    localStorage.setItem(EMAIL_KEY, value);
   } catch {
     /* ignore */
   }
@@ -71,6 +88,7 @@ export function RichMailEditor({
   const workspace = useCompanyWorkspace();
   const companyName = workspace.data?.company.name ?? "";
   const [phone, setPhone] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
   const [imageOpen, setImageOpen] = useState(false);
   const [imageUrl, setImageUrl] = useState("");
   const [linkOpen, setLinkOpen] = useState(false);
@@ -79,6 +97,7 @@ export function RichMailEditor({
 
   useEffect(() => {
     setPhone(readPhone());
+    setContactEmail(readContactEmail());
   }, []);
 
   useEffect(() => {
@@ -120,7 +139,7 @@ export function RichMailEditor({
     insertHtml(
       contactBlockHtml({
         name: contact?.name ?? user?.displayName ?? "",
-        email: contact?.email ?? user?.primaryEmail ?? "",
+        email: contact?.email ?? (contactEmail.trim() || user?.primaryEmail || ""),
         phone: contact?.phone ?? phone,
         company: contact?.company ?? companyName,
       }),
@@ -128,8 +147,19 @@ export function RichMailEditor({
   }
 
   function applyLink() {
-    const href = linkUrl.trim();
+    const raw = linkUrl.trim();
+    const href = /^(https?:|mailto:)/i.test(raw) ? raw : (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw) ? `mailto:${raw}` : `https://${raw.replace(/^\/+/, "")}`);
     if (!/^(https?:|mailto:)/i.test(href)) return;
+    try {
+      if (href.startsWith("mailto:")) {
+        if (!href.slice(7).includes("@")) return;
+      } else {
+        const parsed = new URL(href);
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return;
+      }
+    } catch {
+      return;
+    }
     run("createLink", href);
     setLinkOpen(false);
     setLinkUrl("https://");
@@ -195,6 +225,21 @@ export function RichMailEditor({
         onInput={emit}
         onBlur={emit}
       />
+      <div className="grid gap-2 sm:grid-cols-2">
+      <label className="block min-w-[12rem] space-y-1 text-xs text-muted">
+        <span>Email for contact block (any inbox, saved on this device)</span>
+        <input
+          className={inputClass}
+          type="text"
+          inputMode="email"
+          value={contactEmail}
+          onChange={(event) => {
+            setContactEmail(event.target.value);
+            writeContactEmail(event.target.value);
+          }}
+          placeholder={user?.primaryEmail || "name@gmail.com"}
+        />
+      </label>
       <label className="block min-w-[12rem] space-y-1 text-xs text-muted">
         <span>Phone for contact block (saved on this device)</span>
         <input
@@ -207,6 +252,7 @@ export function RichMailEditor({
           placeholder="+1 …"
         />
       </label>
+      </div>
       {required ? (
         <input
           tabIndex={-1}

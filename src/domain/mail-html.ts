@@ -116,7 +116,7 @@ export function contactBlockHtml(contact: ContactBlock): string {
   if (email) lines.push(escapeHtml(email));
   if (phone) lines.push(escapeHtml(phone));
   if (company) lines.push(escapeHtml(company));
-  if (!lines.length) return "<p><em>Add your name or email in your account to use a contact block.</em></p>";
+  if (!lines.length) return "<p><em>Add a name or email in the contact fields. It does not have to be the address on your account.</em></p>";
   return `<p><br></p><p>——</p><p>${lines.join("<br>")}</p>`;
 }
 

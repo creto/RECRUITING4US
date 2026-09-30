@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { addCandidateManual, exportCsv, importCsv, listCandidates, listJobs } from "@/server/talent.functions";
+import { websiteHref } from "@/domain/web-url";
 import { Alert, AppLink, Button, Empty, Field, inputClass, Loading, PageTitle, Section, refreshPage, useAuthed } from "@/components/talent/kit";
 
 export const Route = createFileRoute("/app/$companySlug/candidates")({ component: Candidates });
@@ -128,6 +129,9 @@ function Candidates() {
                     <h3 className="text-lg">{person.name}</h3>
                   )}
                   <p className="text-sm text-muted">{person.email}</p>
+                  {websiteHref(String(person.website ?? "")) ? (
+                    <a className="text-sm text-link underline" href={websiteHref(String(person.website ?? "")) ?? undefined} target="_blank" rel="noopener noreferrer">{String(person.website)}</a>
+                  ) : null}
                 </div>
                 <div className="flex flex-wrap gap-2 text-xs">
                   <span className="rounded-full bg-[#f7fbe9] px-2.5 py-1">{person.source}</span>

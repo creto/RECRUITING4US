@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { parseCc, renderMail } from "./mail.ts";
+import { parseCc, parseRecipient, renderMail } from "./mail.ts";
 
 describe("mail suite", () => {
   it("fills known tokens and leaves unknown ones", () => {
@@ -15,5 +15,13 @@ describe("mail suite", () => {
     assert.equal("error" in parseCc("not-an-email"), true);
     const parsed = parseCc("a@firm.example, B@firm.example");
     assert.deepEqual("emails" in parsed ? parsed.emails : [], ["a@firm.example", "b@firm.example"]);
+  });
+
+  it("accepts an outside inbox that is not the account email", () => {
+    const plain = parseRecipient("oscar@gmail.com");
+    assert.equal("email" in plain ? plain.email : "", "oscar@gmail.com");
+    const named = parseRecipient("Oscar Alvarez <Oscar@gmail.com>");
+    assert.equal("email" in named ? named.email : "", "oscar@gmail.com");
+    assert.equal("error" in parseRecipient("not-an-email"), true);
   });
 });

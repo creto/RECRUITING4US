@@ -12,6 +12,7 @@ function Inbox() {
   const state = useAuthed(() => listInbox({ data: { slug: companySlug } }), [companySlug]);
   const [applicationId, setApplicationId] = useState("");
   const [candidateName, setCandidateName] = useState("");
+  const [to, setTo] = useState("");
   const [subject, setSubject] = useState("Hello {{candidate_name}}");
   const [body, setBody] = useState(() => plainToEditorHtml("Hello {{candidate_name}},\n\nThis is about {{job_title}} at {{company_name}}.\n\n{{recruiter_name}}"));
   const [error, setError] = useState<string | null>(null);
@@ -35,18 +36,20 @@ function Inbox() {
         event.preventDefault();
         const name = candidateName.trim();
         const id = applicationId.trim();
-        if (name.length < 2 && id.length < 8) {
-          setError("Give a candidate name or an application id.");
+        const recipient = to.trim();
+        if (name.length < 2 && id.length < 8 && !recipient.includes("@")) {
+          setError("Give a To address, a candidate name, or an application id.");
           return;
         }
         setError(null);
-        queuePlatformMail({ data: { slug: companySlug, applicationId: id, candidateName: name, kind: "FOLLOW_UP", subject, body, idempotencyKey: crypto.randomUUID() } })
+        queuePlatformMail({ data: { slug: companySlug, applicationId: id, candidateName: name, to: recipient, kind: "FOLLOW_UP", subject, body, idempotencyKey: crypto.randomUUID() } })
           .then(() => refreshPage())
           .catch((err: Error) => setError(err.message));
       }}>
-        <Field label="Candidate name"><input className={inputClass} value={candidateName} onChange={(event) => setCandidateName(event.target.value)} placeholder="Exact name" /></Field>
+        <Field label="To"><input className={inputClass} type="text" inputMode="email" value={to} onChange={(event) => setTo(event.target.value)} placeholder="oscar@gmail.com or any outside inbox" /></Field>
+        <Field label="Candidate name"><input className={inputClass} value={candidateName} onChange={(event) => setCandidateName(event.target.value)} placeholder="Exact name, optional if To is set" /></Field>
         <Field label="Application id"><input className={inputClass} value={applicationId} onChange={(event) => setApplicationId(event.target.value)} placeholder="Or paste an application id" /></Field>
-        <p className="text-sm text-muted">A name sends only when one application matches. If several match, the error lists their ids. An application id is used as written and ignores the name.</p>
+        <p className="text-sm text-muted">To can be any address, including one that is not on your account. A name sends only when one application matches. If several match, the error lists their ids. An application id is used as written and ignores the name. With only a To address, the message is queued to that inbox.</p>
         <Field label="Subject"><input className={inputClass} value={subject} onChange={(event) => setSubject(event.target.value)} /></Field>
         <Field label="Message"><RichMailEditor value={body} onChange={setBody} /></Field>
         <MailCard name={workspace.data?.company.name ?? "Company"} body={body} />

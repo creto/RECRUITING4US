@@ -28,6 +28,19 @@ export const DEFAULT_MAIL_TEMPLATES = [
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/**
+ * Any inbox, including one that is not on the signed-in account.
+ * Accepts `ada@gmail.com` and `Ada <ada@gmail.com>`.
+ */
+export function parseRecipient(value: string): { email: string } | { error: string } {
+  const text = value.replace(/[\u200B-\u200D\uFEFF]/g, "").trim();
+  if (!text) return { error: "Enter an email address." };
+  const angled = text.match(/<([^<>\s]+)>/);
+  const email = (angled?.[1] ?? text).trim().toLowerCase();
+  if (email.length > 200 || !EMAIL.test(email)) return { error: "Enter a valid email address." };
+  return { email };
+}
+
 /** Replaces known {{tokens}}. Anything else is left in place. */
 export function renderMail(template: string, values: Record<string, string>): string {
   return template.replace(/\{\{\s*([a-z_]+)\s*\}\}/g, (full, key: string) => {
@@ -39,10 +52,13 @@ export function renderMail(template: string, values: Record<string, string>): st
 export function parseCc(value: string): { emails: string[] } | { error: string } {
   const parts = value.split(/[,;]/).map((part) => part.trim()).filter(Boolean);
   if (parts.length > 3) return { error: "Use at most three copy addresses." };
+  const emails: string[] = [];
   for (const part of parts) {
-    if (part.length > 120 || !EMAIL.test(part)) return { error: "A copy address is not a valid email." };
+    const parsed = parseRecipient(part);
+    if ("error" in parsed || parsed.email.length > 120) return { error: "A copy address is not a valid email." };
+    emails.push(parsed.email);
   }
-  return { emails: parts.map((part) => part.toLowerCase()) };
+  return { emails };
 }
 
 export function mailText(value: string, min: number, max: number, label: string): { text: string } | { error: string } {
