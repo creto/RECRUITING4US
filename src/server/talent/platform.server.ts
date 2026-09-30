@@ -4,7 +4,7 @@ import { assertSameSiteRequest } from "@/lib/auth/isolation.server";
 import { estimateComplexity } from "@/domain/judge";
 import { describeLiveSignal, liveSignalKind } from "@/domain/live-watch";
 import { applyDocument, applyOpChain, canSeeNote, type Edit } from "@/domain/platform/collab";
-import { classifySandboxAddress, chooseMailApplication, deliveryLabel, isTerminal, nextState, renderTokens, retryDelayMinutes, stripQuotedReply, webhookFresh, brandHtml, brandPlain, type DeliveryState, type MailBrand } from "@/domain/platform/delivery";
+import { classifySandboxAddress, chooseMailApplication, deliveryLabel, isTerminal, nextState, renderTokens, retryDelayMinutes, stripQuotedReply, webhookFresh, brandHtml, brandPlain, mailMark, type DeliveryState, type MailBrand } from "@/domain/platform/delivery";
 import { normalizeMailFiles, type MailFile } from "@/domain/platform/smtp";
 import { htmlToPlain, looksLikeHtml, prepareMailBody } from "@/domain/mail-html";
 import { extractOffice } from "@/domain/platform/docx";
@@ -77,20 +77,24 @@ async function companyBrand(companyId: string): Promise<MailBrand & { logoMime: 
     mail_logo_mime: string;
     mail_logo_bytes: string;
     embed_accent: string;
+    mail_mark: string;
   }>`
-    select name, mail_from_name, mail_footer, mail_logo_url, mail_logo_mime, mail_logo_bytes, embed_accent
+    select name, mail_from_name, mail_footer, mail_logo_url, mail_logo_mime, mail_logo_bytes, embed_accent, mail_mark
     from companies where id = ${companyId}
   `;
   const row = rows[0];
+  const logoBytes = row?.mail_logo_bytes ?? "";
   return {
     companyName: row?.name ?? "",
     fromName: row?.mail_from_name ?? "",
     footer: row?.mail_footer ?? "",
     logoUrl: row?.mail_logo_url ?? "",
     accent: row?.embed_accent ?? "",
+    mark: mailMark(row?.mail_mark),
+    hasLogo: Boolean(logoBytes) || /^https:\/\//i.test(row?.mail_logo_url ?? ""),
     markUrl: publicAppOrigin().startsWith("https://") ? `${publicAppOrigin()}/mark.png` : "",
     logoMime: row?.mail_logo_mime ?? "",
-    logoBytes: row?.mail_logo_bytes ?? "",
+    logoBytes,
   };
 }
 
@@ -224,7 +228,8 @@ async function smtpSend(
     .map((item) => item.trim())
     .filter((item) => item.includes("@"));
   const copy = mailCopy(row.body);
-  const logo = brand.logoBytes && (brand.logoMime === "image/png" || brand.logoMime === "image/jpeg")
+  const showLogo = mailMark(brand.mark) !== "name";
+  const logo = showLogo && brand.logoBytes && (brand.logoMime === "image/png" || brand.logoMime === "image/jpeg")
     ? { mime: brand.logoMime, base64: brand.logoBytes }
     : null;
   const sent = await sendSmtp(config, {

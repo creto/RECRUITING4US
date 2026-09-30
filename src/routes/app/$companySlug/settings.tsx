@@ -44,7 +44,7 @@ function Settings() {
       {tab === "Company" ? (
         status.loading && !status.data ? <Loading /> :
         <CompanySettings
-          key={`${status.data?.companyName ?? ""}:${status.data?.headline ?? ""}:${status.data?.embed.background ?? ""}:${status.data?.embed.ink ?? ""}:${status.data?.embed.accent ?? ""}:${status.data?.embed.accentInk ?? ""}:${status.data?.mail?.fromName ?? ""}:${status.data?.mail?.logoUrl ?? ""}:${status.data?.mail?.hasLogo ? "1" : "0"}`}
+          key={`${status.data?.companyName ?? ""}:${status.data?.headline ?? ""}:${status.data?.embed.background ?? ""}:${status.data?.embed.ink ?? ""}:${status.data?.embed.accent ?? ""}:${status.data?.embed.accentInk ?? ""}:${status.data?.mail?.fromName ?? ""}:${status.data?.mail?.logoUrl ?? ""}:${status.data?.mail?.hasLogo ? "1" : "0"}:${status.data?.mail?.mark ?? "both"}`}
           companySlug={companySlug}
           companyName={status.data?.companyName ?? ""}
           timezone={status.data?.timezone ?? "America/New_York"}
@@ -54,6 +54,7 @@ function Settings() {
           mailFromName={status.data?.mail?.fromName ?? ""}
           mailFooter={status.data?.mail?.footer ?? ""}
           mailLogoUrl={status.data?.mail?.logoUrl ?? ""}
+          mailMark={status.data?.mail?.mark === "logo" || status.data?.mail?.mark === "name" ? status.data.mail.mark : "both"}
           hasLogo={Boolean(status.data?.mail?.hasLogo)}
           onError={setError}
         />
@@ -155,6 +156,7 @@ function CompanySettings({
   mailFromName,
   mailFooter,
   mailLogoUrl,
+  mailMark,
   hasLogo,
   onError,
 }: {
@@ -167,6 +169,7 @@ function CompanySettings({
   mailFromName: string;
   mailFooter: string;
   mailLogoUrl: string;
+  mailMark: "both" | "logo" | "name";
   hasLogo: boolean;
   onError: (message: string) => void;
 }) {
@@ -175,6 +178,7 @@ function CompanySettings({
   const [fromName, setFromName] = useState(mailFromName);
   const [footer, setFooter] = useState(mailFooter);
   const [logoUrl, setLogoUrl] = useState(mailLogoUrl);
+  const [mark, setMark] = useState<"both" | "logo" | "name">(mailMark);
   const [logoFile, setLogoFile] = useState<{ mime: string; bytes: string } | null>(null);
   const [clearLogo, setClearLogo] = useState(false);
   const [logoError, setLogoError] = useState<string | null>(null);
@@ -205,13 +209,25 @@ function CompanySettings({
           mailLogoMime: logoFile?.mime ?? "",
           mailLogoBytes: logoFile?.bytes ?? "",
           clearLogo: clearLogo && !logoFile,
+          mailMark: mark,
         },
       }).then(() => refreshPage()).catch((err) => onError(err instanceof Error ? err.message : "Could not save."));
     }}>
       <Field label="Name"><input name="name" className={inputClass} defaultValue={companyName} placeholder="Company name" required /></Field>
       <fieldset className="space-y-3 rounded-md border border-line p-4">
         <legend className="px-1 text-sm font-medium">Email</legend>
-        <p className="text-sm text-muted">This name, logo, and footer are added when a queued message is sent. A blank name uses the company name. The header uses this company’s button color.</p>
+        <p className="text-sm text-muted">Choose what the card shows, then upload the logo photo here. A blank name uses the company name. The header uses this company’s button color.</p>
+        <fieldset>
+          <legend className="text-sm font-medium">Email header</legend>
+          <div className="mt-2 flex flex-wrap gap-3 text-sm">
+            {(["both", "logo", "name"] as const).map((value) => (
+              <label key={value} className="inline-flex min-h-11 items-center gap-2">
+                <input type="radio" name="mailMark" checked={mark === value} onChange={() => setMark(value)} />
+                {value === "both" ? "Logo and name" : value === "logo" ? "Logo only" : "Name only"}
+              </label>
+            ))}
+          </div>
+        </fieldset>
         <Field label="From name">
           <input className={inputClass} value={fromName} maxLength={80} placeholder={companyName || "Company"} onChange={(event) => setFromName(event.target.value)} />
         </Field>
@@ -221,7 +237,7 @@ function CompanySettings({
         <Field label="Logo URL">
           <input className={inputClass} value={logoUrl} maxLength={300} placeholder="https://…" onChange={(event) => setLogoUrl(event.target.value)} />
         </Field>
-        <Field label="Logo file">
+        <Field label="Logo photo">
           <input
             className={inputClass}
             type="file"
@@ -258,9 +274,13 @@ function CompanySettings({
           </label>
         ) : null}
         {logoError ? <p className="text-sm text-warn">{logoError}</p> : null}
+        <p className="text-sm text-muted">Upload the logo photo. PNG or JPEG under 120 KB.</p>
+        <p className="text-sm text-muted">{hasLogo && !clearLogo ? "A logo photo is already saved." : "No logo photo is saved yet."}</p>
+        {mark === "logo" && !logoFile && (!hasLogo || clearLogo) ? <p className="text-sm text-warn">Logo only needs a photo. Until one is saved, the name is shown.</p> : null}
         <div className="rounded-[24px] border border-line bg-white p-4">
-          {logoFile ? <img src={`data:${logoFile.mime};base64,${logoFile.bytes}`} alt="" className="mb-2 max-h-16" /> : null}
-          <p className="text-2xl">{fromName.trim() || companyName || "Company"}</p>
+          {mark !== "name" && logoFile ? <img src={`data:${logoFile.mime};base64,${logoFile.bytes}`} alt="" className="mb-2 max-h-16" /> : null}
+          {mark !== "name" && !logoFile && hasLogo && !clearLogo ? <p className="mb-2 text-sm text-muted">Saved logo photo</p> : null}
+          {mark !== "logo" || (!logoFile && (!hasLogo || clearLogo)) ? <p className="text-2xl">{fromName.trim() || companyName || "Company"}</p> : null}
           <p className="mb-1 mt-3 text-sm font-medium">Message</p>
           <div className="rounded-xl border border-line px-3 py-2 text-sm">Hello candidate,</div>
           {footer.trim() ? <p className="mt-3 text-sm text-muted">{footer.trim()}</p> : null}

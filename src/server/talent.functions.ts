@@ -55,6 +55,7 @@ export const updateCompany = createServerFn({ method: "POST" })
     mailLogoMime: z.string().max(40),
     mailLogoBytes: z.string().max(200_000),
     clearLogo: z.boolean(),
+    mailMark: z.enum(["both", "logo", "name"]),
   }))
   .handler(async ({ context, data }) => {
     const userId = context.userId;

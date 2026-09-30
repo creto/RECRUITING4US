@@ -60,6 +60,12 @@ describe("delivery", () => {
     assert.match(html, /Powered by/);
     assert.match(html, /RECRUIT4US/);
     assert.match(html, /https:\/\/cdn\.example\/mark\.png/);
+    const logoOnly = brandHtml("Hello", { companyName: "Northstar", fromName: "", footer: "", logoUrl: "https://cdn.example/logo.png", accent: "#cefa90", mark: "logo" }, false);
+    assert.match(logoOnly, /https:\/\/cdn\.example\/logo\.png/);
+    assert.doesNotMatch(logoOnly, />Northstar</);
+    const nameOnly = brandHtml("Hello", { companyName: "Northstar", fromName: "", footer: "", logoUrl: "https://cdn.example/logo.png", accent: "#cefa90", mark: "name" }, false);
+    assert.doesNotMatch(nameOnly, /cdn\.example\/logo\.png/);
+    assert.match(nameOnly, />Northstar</);
     const linked = brandHtml("See the page\nhttps://jobs.example/candidate/applications/abc", { companyName: "Northstar", fromName: "", footer: "", logoUrl: "", accent: "#cefa90" }, false);
     assert.match(linked, /href="https:\/\/jobs\.example\/candidate\/applications\/abc"/);
     assert.match(linked, /Open your application/);

@@ -300,6 +300,7 @@ export async function updateCompany(
     mailLogoMime: string;
     mailLogoBytes: string;
     clearLogo: boolean;
+    mailMark: string;
   },
 ) {
   assertSameSiteRequest();
@@ -341,6 +342,7 @@ export async function updateCompany(
       mail_logo_url = ${logoUrl},
       mail_logo_mime = ${logoMime},
       mail_logo_bytes = ${logoBytes},
+      mail_mark = ${input.mailMark === "logo" || input.mailMark === "name" ? input.mailMark : "both"},
       updated_at = now()
     where id = ${actor.companyId}
   `;
@@ -2603,9 +2605,10 @@ export async function integrationStatus(userId: string, slug: string) {
     mail_footer: string;
     mail_logo_url: string;
     mail_logo_bytes: string;
+    mail_mark: string;
   }>`
     select embed_background, embed_ink, embed_accent, embed_accent_ink, careers_headline,
-      mail_from_name, mail_footer, mail_logo_url,
+      mail_from_name, mail_footer, mail_logo_url, mail_mark,
       case when mail_logo_bytes = '' then '' else '1' end as mail_logo_bytes
     from companies where id = ${actor.companyId}
   `;
@@ -2620,6 +2623,7 @@ export async function integrationStatus(userId: string, slug: string) {
       footer: colors?.mail_footer ?? "",
       logoUrl: colors?.mail_logo_url ?? "",
       hasLogo: Boolean(colors?.mail_logo_bytes),
+      mark: colors?.mail_mark === "logo" || colors?.mail_mark === "name" ? colors.mail_mark : "both",
     },
     embed: {
       background: colors?.embed_background ?? "#ffffff",
