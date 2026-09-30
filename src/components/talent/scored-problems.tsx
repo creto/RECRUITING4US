@@ -1,14 +1,7 @@
 import { useState } from "react";
-import { createFileRoute, redirect } from "@tanstack/react-router";
 import { importQuestionCatalog, inviteToCode, listCodingQuestions } from "@/server/talent.functions";
 import { Alert, Button, Empty, Field, inputClass, Loading, refreshPage, useAuthed } from "@/components/talent/kit";
 import { DifficultyBadge } from "@/components/talent/code-block";
-
-export const Route = createFileRoute("/app/$companySlug/questions")({
-  beforeLoad: ({ params }) => {
-    throw redirect({ to: "/app/$companySlug/assessments", params: { companySlug: params.companySlug }, hash: "auto-scored-problems" });
-  },
-});
 
 export function ScoredProblems({ companySlug }: { companySlug: string }) {
   const state = useAuthed(() => listCodingQuestions({ data: { slug: companySlug } }), [companySlug]);

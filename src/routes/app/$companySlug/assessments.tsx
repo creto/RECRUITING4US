@@ -6,7 +6,7 @@ import { ExamPreview, type AssessmentPreview } from "@/components/talent/exam-pr
 import { examPaper } from "@/components/talent/exam-shell";
 import { DifficultyBadge, ProblemPrompt } from "@/components/talent/code-block";
 import { Alert, AppLink, Button, Empty, Field, inputClass, Loading, PageTitle, refreshPage, useAuthed, when } from "@/components/talent/kit";
-import { ScoredProblems } from "./questions";
+import { ScoredProblems } from "@/components/talent/scored-problems";
 
 export const Route = createFileRoute("/app/$companySlug/assessments")({ component: Assessments });
 
@@ -301,7 +301,7 @@ function Assessments() {
         <div className="mt-3 flex flex-wrap gap-2">
           {(["other", "bank", "read", "all"] as const).map((value) => (
             <Button key={value} type="button" variant={bankFilter === value ? "secondary" : "ghost"} onClick={() => { setBankFilter(value); setBankPage(0); }}>
-              {value === "all" ? "All" : value === "bank" ? "Coding bank" : value === "read" ? "Read-code bank" : "Other questions"}
+              {value === "all" ? "All" : value === "bank" ? "Exam code pool" : value === "read" ? "Read-code pool" : "Other questions"}
             </Button>
           ))}
         </div>

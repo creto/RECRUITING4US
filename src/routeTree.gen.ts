@@ -45,7 +45,6 @@ import { Route as AppCompanySlugMailRouteImport } from './routes/app/$companySlu
 import { Route as AppCompanySlugOffersRouteImport } from './routes/app/$companySlug/offers'
 import { Route as AppCompanySlugOnboardingRouteImport } from './routes/app/$companySlug/onboarding'
 import { Route as AppCompanySlugPlansRouteImport } from './routes/app/$companySlug/plans'
-import { Route as AppCompanySlugQuestionsRouteImport } from './routes/app/$companySlug/questions'
 import { Route as AppCompanySlugReportsRouteImport } from './routes/app/$companySlug/reports'
 import { Route as AppCompanySlugReviewsRouteImport } from './routes/app/$companySlug/reviews'
 import { Route as AppCompanySlugSandboxesRouteImport } from './routes/app/$companySlug/sandboxes'
@@ -247,11 +246,6 @@ const AppCompanySlugPlansRoute = AppCompanySlugPlansRouteImport.update({
   path: '/plans',
   getParentRoute: () => AppCompanySlugRouteRoute,
 } as any)
-const AppCompanySlugQuestionsRoute = AppCompanySlugQuestionsRouteImport.update({
-  id: '/questions',
-  path: '/questions',
-  getParentRoute: () => AppCompanySlugRouteRoute,
-} as any)
 const AppCompanySlugReportsRoute = AppCompanySlugReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
@@ -363,7 +357,6 @@ export interface FileRoutesByFullPath {
   '/app/$companySlug/offers': typeof AppCompanySlugOffersRoute
   '/app/$companySlug/onboarding': typeof AppCompanySlugOnboardingRoute
   '/app/$companySlug/plans': typeof AppCompanySlugPlansRoute
-  '/app/$companySlug/questions': typeof AppCompanySlugQuestionsRoute
   '/app/$companySlug/reports': typeof AppCompanySlugReportsRoute
   '/app/$companySlug/reviews': typeof AppCompanySlugReviewsRoute
   '/app/$companySlug/sandboxes': typeof AppCompanySlugSandboxesRoute
@@ -415,7 +408,6 @@ export interface FileRoutesByTo {
   '/app/$companySlug/offers': typeof AppCompanySlugOffersRoute
   '/app/$companySlug/onboarding': typeof AppCompanySlugOnboardingRoute
   '/app/$companySlug/plans': typeof AppCompanySlugPlansRoute
-  '/app/$companySlug/questions': typeof AppCompanySlugQuestionsRoute
   '/app/$companySlug/reports': typeof AppCompanySlugReportsRoute
   '/app/$companySlug/reviews': typeof AppCompanySlugReviewsRoute
   '/app/$companySlug/sandboxes': typeof AppCompanySlugSandboxesRoute
@@ -469,7 +461,6 @@ export interface FileRoutesById {
   '/app/$companySlug/offers': typeof AppCompanySlugOffersRoute
   '/app/$companySlug/onboarding': typeof AppCompanySlugOnboardingRoute
   '/app/$companySlug/plans': typeof AppCompanySlugPlansRoute
-  '/app/$companySlug/questions': typeof AppCompanySlugQuestionsRoute
   '/app/$companySlug/reports': typeof AppCompanySlugReportsRoute
   '/app/$companySlug/reviews': typeof AppCompanySlugReviewsRoute
   '/app/$companySlug/sandboxes': typeof AppCompanySlugSandboxesRoute
@@ -524,7 +515,6 @@ export interface FileRouteTypes {
     | '/app/$companySlug/offers'
     | '/app/$companySlug/onboarding'
     | '/app/$companySlug/plans'
-    | '/app/$companySlug/questions'
     | '/app/$companySlug/reports'
     | '/app/$companySlug/reviews'
     | '/app/$companySlug/sandboxes'
@@ -576,7 +566,6 @@ export interface FileRouteTypes {
     | '/app/$companySlug/offers'
     | '/app/$companySlug/onboarding'
     | '/app/$companySlug/plans'
-    | '/app/$companySlug/questions'
     | '/app/$companySlug/reports'
     | '/app/$companySlug/reviews'
     | '/app/$companySlug/sandboxes'
@@ -629,7 +618,6 @@ export interface FileRouteTypes {
     | '/app/$companySlug/offers'
     | '/app/$companySlug/onboarding'
     | '/app/$companySlug/plans'
-    | '/app/$companySlug/questions'
     | '/app/$companySlug/reports'
     | '/app/$companySlug/reviews'
     | '/app/$companySlug/sandboxes'
@@ -933,13 +921,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCompanySlugPlansRouteImport
       parentRoute: typeof AppCompanySlugRouteRoute
     }
-    '/app/$companySlug/questions': {
-      id: '/app/$companySlug/questions'
-      path: '/questions'
-      fullPath: '/app/$companySlug/questions'
-      preLoaderRoute: typeof AppCompanySlugQuestionsRouteImport
-      parentRoute: typeof AppCompanySlugRouteRoute
-    }
     '/app/$companySlug/reports': {
       id: '/app/$companySlug/reports'
       path: '/reports'
@@ -1069,7 +1050,6 @@ interface AppCompanySlugRouteRouteChildren {
   AppCompanySlugOffersRoute: typeof AppCompanySlugOffersRoute
   AppCompanySlugOnboardingRoute: typeof AppCompanySlugOnboardingRoute
   AppCompanySlugPlansRoute: typeof AppCompanySlugPlansRoute
-  AppCompanySlugQuestionsRoute: typeof AppCompanySlugQuestionsRoute
   AppCompanySlugReportsRoute: typeof AppCompanySlugReportsRoute
   AppCompanySlugReviewsRoute: typeof AppCompanySlugReviewsRoute
   AppCompanySlugSandboxesRoute: typeof AppCompanySlugSandboxesRoute
@@ -1094,7 +1074,6 @@ const AppCompanySlugRouteRouteChildren: AppCompanySlugRouteRouteChildren = {
   AppCompanySlugOffersRoute: AppCompanySlugOffersRoute,
   AppCompanySlugOnboardingRoute: AppCompanySlugOnboardingRoute,
   AppCompanySlugPlansRoute: AppCompanySlugPlansRoute,
-  AppCompanySlugQuestionsRoute: AppCompanySlugQuestionsRoute,
   AppCompanySlugReportsRoute: AppCompanySlugReportsRoute,
   AppCompanySlugReviewsRoute: AppCompanySlugReviewsRoute,
   AppCompanySlugSandboxesRoute: AppCompanySlugSandboxesRoute,
