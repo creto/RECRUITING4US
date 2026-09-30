@@ -1,10 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { applicationIdGateHint, assessmentInviteGateLede } from "@/domain/assessment-invite";
+import { assessmentInviteGateLede } from "@/domain/assessment-invite";
 import { attemptHrefWithAccess, storeAssessAccess } from "@/domain/assess-access-storage";
 import { storePortalAccess } from "@/domain/portal-access-storage";
 import {
-  openAssessmentInvite,
   peekAssessmentInvite,
   requestAssessOtp,
   verifyAssessOtp,
@@ -12,8 +11,6 @@ import {
 import { Alert, Button, Field, inputClass, Loading, PageTitle, Wordmark, when } from "@/components/talent/kit";
 
 export const Route = createFileRoute("/assess/$token")({ component: AssessInvite });
-
-type Mode = "otp" | "uuid";
 
 function AssessInvite() {
   const { token } = Route.useParams();
@@ -26,11 +23,9 @@ function AssessInvite() {
   } | null>(null);
   const [peekError, setPeekError] = useState<string | null>(null);
   const [peekLoading, setPeekLoading] = useState(true);
-  const [mode, setMode] = useState<Mode>("otp");
   const [phase, setPhase] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
-  const [applicationId, setApplicationId] = useState("");
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -102,30 +97,6 @@ function AssessInvite() {
     }
   }
 
-  async function onUuidUnlock(event: FormEvent) {
-    event.preventDefault();
-    setError(null);
-    const idHint = applicationIdGateHint(applicationId);
-    if (idHint) {
-      setError(idHint);
-      return;
-    }
-    setBusy(true);
-    try {
-      const result = await openAssessmentInvite({
-        data: {
-          token,
-          email: email.trim(),
-          applicationId: applicationId.trim(),
-        },
-      });
-      finishUnlock(result);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Could not open this assessment.");
-      setBusy(false);
-    }
-  }
-
   const locked =
     peek?.status === "COMPLETED" || peek?.status === "EXPIRED" || peek?.status === "CANCELLED";
 
@@ -146,7 +117,7 @@ function AssessInvite() {
           <p>Start by: {when(String(peek.startBy))}</p>
           <p>Duration: {Math.round(Number(peek.durationSeconds) / 60)} minutes (timer starts when you unlock).</p>
 
-          {mode === "otp" && phase === "email" ? (
+          {phase === "email" ? (
             <form className="space-y-3 pt-2" onSubmit={onRequestCode}>
               <Field label="Email from your application">
                 <input
@@ -165,21 +136,10 @@ function AssessInvite() {
               >
                 {busy ? "Sending…" : "Send one-time code"}
               </Button>
-              <button
-                type="button"
-                className="text-sm text-link"
-                onClick={() => {
-                  setMode("uuid");
-                  setError(null);
-                  setNote(null);
-                }}
-              >
-                Unlock with email + application id instead
-              </button>
             </form>
           ) : null}
 
-          {mode === "otp" && phase === "code" ? (
+          {phase === "code" ? (
             <form className="space-y-3 pt-2" onSubmit={onVerifyCode}>
               <Field label="One-time code">
                 <input
@@ -201,75 +161,16 @@ function AssessInvite() {
               >
                 {busy ? "Opening…" : "Open assessment"}
               </Button>
-              <div className="flex flex-wrap gap-3 text-sm">
-                <button
-                  type="button"
-                  className="text-link"
-                  onClick={() => {
-                    setPhase("email");
-                    setCode("");
-                    setNote(null);
-                  }}
-                >
-                  Resend / change email
-                </button>
-                <button
-                  type="button"
-                  className="text-link"
-                  onClick={() => {
-                    setMode("uuid");
-                    setError(null);
-                  }}
-                >
-                  Use application id instead
-                </button>
-              </div>
-            </form>
-          ) : null}
-
-          {mode === "uuid" ? (
-            <form className="space-y-3 pt-2" onSubmit={onUuidUnlock}>
-              <Field label="Email from your application">
-                <input
-                  className={inputClass}
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  required
-                />
-              </Field>
-              <Field label="Application id (full UUID, 36 characters)">
-                <input
-                  className={inputClass}
-                  value={applicationId}
-                  onChange={(event) => setApplicationId(event.target.value)}
-                  placeholder="bd546960-cae6-4cfd-873a-73e06c51015b"
-                  required
-                  minLength={36}
-                  maxLength={36}
-                  spellCheck={false}
-                  autoComplete="off"
-                  inputMode="text"
-                />
-              </Field>
-              <Button
-                type="submit"
-                className="rounded-full bg-[#cefa90] text-[#14221b]"
-                disabled={busy || locked}
-              >
-                {busy ? "Opening…" : "Open assessment"}
-              </Button>
               <button
                 type="button"
                 className="text-sm text-link"
                 onClick={() => {
-                  setMode("otp");
                   setPhase("email");
-                  setError(null);
+                  setCode("");
+                  setNote(null);
                 }}
               >
-                Prefer one-time code
+                Resend / change email
               </button>
             </form>
           ) : null}

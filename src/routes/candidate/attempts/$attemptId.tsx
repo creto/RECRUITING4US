@@ -77,7 +77,7 @@ function AuthedAttempt({ attemptId }: { attemptId: string }) {
   }
   const error =
     state.error === "Not found." || state.error === "Not found"
-      ? "This assessment was not found for your signed-in email. Open your invite link (/assess/…) and unlock with the invited email and application id."
+      ? "This assessment was not found for your signed-in email. Open your invite link (/assess/…) and unlock with the invited email and one-time code."
       : state.error;
   return (
     <main className={`${examPaper} min-h-screen bg-[#f4f7f5]`}>
@@ -110,7 +110,7 @@ function GuestAttempt({ attemptId, accessToken }: { attemptId: string; accessTok
         const message = err instanceof Error ? err.message : "Could not open this assessment.";
         setError(
           message === "Not found." || message === "Not found"
-            ? "This assessment session could not be loaded. Open your invite link again and unlock with email and application id."
+            ? "This assessment session could not be loaded. Open your invite link again and unlock with email and a one-time code."
             : message,
         );
       })

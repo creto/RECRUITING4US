@@ -94,7 +94,7 @@ export function assessmentNotice(input: {
     "",
     `Time limit: ${minutes} minutes.`,
     `Start by: ${input.startLabel}.`,
-    "Opening this email does not start the timer. On the page, enter the invited email and your application id. The timer starts when you press Start.",
+    "Opening this email does not start the timer. On the page, enter the invited email and the one-time code we send. The timer starts when you press Start.",
     "",
     input.link,
   ];

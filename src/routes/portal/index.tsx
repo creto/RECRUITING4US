@@ -1,10 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { createFileRoute, Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { applicationIdGateHint } from "@/domain/assessment-invite";
 import { applicationPortalGateLede } from "@/domain/application-portal";
 import { portalHrefWithAccess, storePortalAccess } from "@/domain/portal-access-storage";
 import {
-  openApplicationPortal,
   requestPortalOtp,
   verifyPortalOtp,
 } from "@/server/talent.functions";
@@ -24,7 +22,7 @@ type UnlockedApp = {
   accessToken: string;
 };
 
-type Step = "email" | "company" | "code" | "apps" | "uuid";
+type Step = "email" | "company" | "code" | "apps";
 
 function PortalGate() {
   const navigate = useNavigate();
@@ -41,7 +39,6 @@ function PortalGate() {
   const [code, setCode] = useState("");
   const [note, setNote] = useState<string | null>(null);
   const [apps, setApps] = useState<UnlockedApp[]>([]);
-  const [applicationId, setApplicationId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -127,30 +124,6 @@ function PortalGate() {
     }
   }
 
-  async function onUuidUnlock(event: FormEvent) {
-    event.preventDefault();
-    setError(null);
-    const idHint = applicationIdGateHint(applicationId);
-    if (idHint) {
-      setError(idHint);
-      return;
-    }
-    setBusy(true);
-    try {
-      const result = await openApplicationPortal({
-        data: {
-          email: email.trim(),
-          applicationId: applicationId.trim(),
-        },
-      });
-      storePortalAccess(result.applicationId, result.accessToken);
-      void navigate({ href: portalHrefWithAccess(result.applicationId, result.accessToken) });
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Could not open the portal.");
-      setBusy(false);
-    }
-  }
-
   return (
     <main className="mx-auto max-w-xl px-4 py-8">
       <Link to="/"><Wordmark /></Link>
@@ -196,17 +169,6 @@ function PortalGate() {
               {busy ? "Sending…" : "Send one-time code"}
             </Button>
           )}
-          <button
-            type="button"
-            className="text-sm text-link"
-            onClick={() => {
-              setStep("uuid");
-              setError(null);
-              setNote(null);
-            }}
-          >
-            Unlock with email + application id instead
-          </button>
         </form>
       ) : null}
 
@@ -234,32 +196,19 @@ function PortalGate() {
           <Button type="submit" className="rounded-full bg-[#cefa90] text-[#14221b]" disabled={busy}>
             {busy ? "Checking…" : "Unlock portal"}
           </Button>
-          <div className="flex flex-wrap gap-3 text-sm">
-            <button
-              type="button"
-              className="text-link"
-              disabled={busy}
-              onClick={() => {
-                setStep("email");
-                setCode("");
-                setNote(null);
-                setError(null);
-              }}
-            >
-              Use a different email
-            </button>
-            <button
-              type="button"
-              className="text-link"
-              disabled={busy}
-              onClick={() => {
-                setStep("uuid");
-                setError(null);
-              }}
-            >
-              Use application id instead
-            </button>
-          </div>
+          <button
+            type="button"
+            className="text-sm text-link"
+            disabled={busy}
+            onClick={() => {
+              setStep("email");
+              setCode("");
+              setNote(null);
+              setError(null);
+            }}
+          >
+            Use a different email
+          </button>
         </form>
       ) : null}
 
@@ -290,52 +239,6 @@ function PortalGate() {
             </ul>
           )}
         </div>
-      ) : null}
-
-      {step === "uuid" ? (
-        <form
-          className="space-y-3 rounded-[24px] border border-line bg-white p-5 shadow-[0_8px_24px_rgba(20,34,27,0.04)]"
-          onSubmit={onUuidUnlock}
-        >
-          <p className="text-sm text-muted">Fallback unlock with the application id from your confirmation.</p>
-          <Field label="Email from your application">
-            <input
-              className={inputClass}
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              required
-            />
-          </Field>
-          <Field label="Application id (full UUID, 36 characters)">
-            <input
-              className={inputClass}
-              value={applicationId}
-              onChange={(event) => setApplicationId(event.target.value)}
-              placeholder="bd546960-cae6-4cfd-873a-73e06c51015b"
-              required
-              minLength={36}
-              maxLength={36}
-              spellCheck={false}
-              autoComplete="off"
-              inputMode="text"
-            />
-          </Field>
-          <Button type="submit" className="rounded-full bg-[#cefa90] text-[#14221b]" disabled={busy}>
-            {busy ? "Opening…" : "Open portal"}
-          </Button>
-          <button
-            type="button"
-            className="text-sm text-link"
-            onClick={() => {
-              setStep("email");
-              setError(null);
-            }}
-          >
-            Prefer one-time code
-          </button>
-        </form>
       ) : null}
 
       <p className="mt-4 text-sm text-muted">
