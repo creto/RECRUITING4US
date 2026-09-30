@@ -47,6 +47,7 @@ import { ensureReview, rememberEvent } from "./workflows.server";
 import { endAttemptLive, ensureAttemptLive, mirrorAttemptLive, touchAttemptLive } from "./attempt-live.server";
 import { applicationIdGateHint, assessmentInviteHref, assessmentInvitePath, normalizeApplicationId } from "@/domain/assessment-invite";
 import { mintAssessAccess, verifyAssessAccess } from "@/domain/assessment-invite-access";
+import { mintPortalAccess } from "@/domain/application-portal-access";
 import { env } from "@/lib/env.server";
 
 
@@ -608,11 +609,18 @@ export async function openAssessmentInvite(input: {
     assignmentId: row.id,
     secret: assessAccessSecret(),
   });
+  const portalAccessToken = mintPortalAccess({
+    applicationId: row.application_id,
+    companyId,
+    secret: assessAccessSecret(),
+  });
   return {
     assignmentId: row.id,
     attemptId: started.attemptId,
+    applicationId: row.application_id,
     created: started.created,
     accessToken,
+    portalAccessToken,
     assessmentName: row.assessment_name,
     status: row.status,
     durationSeconds: Number(row.duration_seconds),
@@ -871,7 +879,7 @@ async function selectAttemptItems(versionId: string, attemptId: string) {
   return selected;
 }
 
-async function startAttemptForAssignment(
+export async function startAttemptForAssignment(
   companyId: string,
   assignmentId: string,
   userId: string | null,
@@ -1216,8 +1224,8 @@ export async function getAttemptByAccess(attemptId: string, accessToken: string)
       to_char(submitted_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as submitted_at
     from submission_snapshots where attempt_id = ${attemptId}
   `;
-  const release = await sql<{ score_release: string; name: string; instructions: string; proctored: unknown; duration_seconds: number }>`
-    select v.score_release, a.name, v.instructions, v.proctored, v.duration_seconds
+  const release = await sql<{ score_release: string; name: string; instructions: string; proctored: unknown; duration_seconds: number; application_id: string }>`
+    select v.score_release, a.name, v.instructions, v.proctored, v.duration_seconds, g.application_id
     from attempts t
     join assignments g on g.id = t.assignment_id
     join assessment_versions v on v.id = g.assessment_version_id
@@ -1244,6 +1252,7 @@ export async function getAttemptByAccess(attemptId: string, accessToken: string)
       reason: fresh.submission_reason,
     },
     assessmentName: release[0]?.name ?? "Assessment",
+    applicationId: release[0]?.application_id ?? null,
     instructions: release[0]?.instructions ?? "",
     proctored: flag(release[0]?.proctored),
     durationSeconds: Number(release[0]?.duration_seconds ?? 0),

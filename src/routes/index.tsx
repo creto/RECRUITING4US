@@ -10,7 +10,7 @@ function Home() {
       <header className="flex items-center justify-between gap-4">
         <Wordmark />
         <nav className="flex items-center gap-4">
-          <Link to="/track" className="text-sm text-link">Application status</Link>
+          <Link to="/portal" className="text-sm text-link">Applicant portal</Link>
           <SignInGate
             fallback={
               <Link to="/login" className="inline-flex min-h-11 items-center rounded-full bg-accent px-5 text-sm text-accent-ink">
@@ -71,7 +71,7 @@ function Home() {
           <Link to="/notice" hash="privacy" className="text-link">Privacy</Link>
           <Link to="/notice" hash="terms" className="text-link">Terms</Link>
           <Link to="/notice" hash="notice" className="text-link">Candidate notice</Link>
-          <Link to="/track" className="text-link">Application status</Link>
+          <Link to="/portal" className="text-link">Applicant portal</Link>
           <a href="/license.txt" className="text-link">License</a>
           <Link to="/status" className="text-link">Health</Link>
         </nav>

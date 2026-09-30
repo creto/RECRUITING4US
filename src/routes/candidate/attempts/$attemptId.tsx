@@ -5,8 +5,9 @@ import { questionIndex, saveStatusLabel } from "@/domain/rules";
 import { ExamProctor } from "@/components/talent/proctor";
 import { ExamDesk, PersonalityCard, examPaper } from "@/components/talent/exam-shell";
 import { answerComplete, type SavedAnswer } from "@/domain/candidate-view";
-import { Alert, Loading, PageTitle, useAuthed, when } from "@/components/talent/kit";
+import { Alert, AppLink, Loading, PageTitle, useAuthed, when } from "@/components/talent/kit";
 import { readAssessAccess, takeAssessAccessFromSearch } from "@/domain/assess-access-storage";
+import { portalHrefWithAccess, readPortalAccess } from "@/domain/portal-access-storage";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 
 export const Route = createFileRoute("/candidate/attempts/$attemptId")({
@@ -40,6 +41,7 @@ type AttemptView = {
   attempt: { id: string; status: string; deadline: string; startedAt: string; reason: string | null };
   items: Item[];
   receipt: { id: string; submittedAt: string; reason: string; answered: number; score: number | null } | null;
+  applicationId?: string | null;
   personality: {
     code: string | null;
     letters?: string | null;
@@ -116,9 +118,22 @@ function GuestAttempt({ attemptId, accessToken }: { attemptId: string; accessTok
     };
   }, [attemptId, accessToken]);
   if (loading) return <Loading />;
+  const portalAppId = view?.applicationId ?? null;
+  const portalAccess = portalAppId ? readPortalAccess(portalAppId) : null;
   return (
     <main className={`${examPaper} min-h-screen bg-[#f4f7f5]`}>
       <div className="mx-auto max-w-6xl px-4 py-6">
+        {portalAppId && portalAccess ? (
+          <p className="mb-4 text-sm">
+            <AppLink className="text-link" href={portalHrefWithAccess(portalAppId, portalAccess)}>
+              Back to applicant portal
+            </AppLink>
+          </p>
+        ) : portalAppId ? (
+          <p className="mb-4 text-sm">
+            <AppLink className="text-link" href="/portal">Applicant portal</AppLink>
+          </p>
+        ) : null}
         {error ? <Alert>{error}</Alert> : null}
         {view ? <Delivery key={view.receipt?.id ?? view.attempt.status} view={view} accessToken={accessToken} /> : null}
       </div>

@@ -27,6 +27,10 @@ function Track() {
     <main className="mx-auto max-w-3xl px-4 py-8">
       <Link to="/"><Wordmark /></Link>
       <PageTitle title="Application status" lede="Enter the email you applied with, the receipt from the apply form, or the application id. You see the stage only. Notes, scores, and pay stay with the employer." />
+      <p className="mb-4 text-sm text-muted">
+        For assessments, interviews, offers, and messages in one place, unlock the{" "}
+        <Link to="/portal" className="text-link">applicant portal</Link> with email + application id.
+      </p>
       <form className="space-y-3 rounded-[24px] border border-line bg-white p-4 shadow-[0_8px_24px_rgba(20,34,27,0.04)]" onSubmit={(event) => {
         event.preventDefault();
         const parsed = trackQuery(query);

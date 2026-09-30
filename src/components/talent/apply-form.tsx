@@ -85,7 +85,7 @@ export function ApplyForm({
       <section className="space-y-2 rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4" aria-live="polite">
         <h2 className="text-2xl">{done.title}</h2>
         {done.lines.map((line) => <p key={line} className="text-sm">{line}</p>)}
-        <a className="inline-flex text-sm text-link" href="/track">Track this application</a>
+        <a className="inline-flex text-sm text-link" href="/portal">Open applicant portal</a>
       </section>
     );
   }

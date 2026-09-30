@@ -17,7 +17,7 @@ function Portal() {
         <div className="flex items-center justify-between">
           <Link to="/"><Wordmark /></Link>
           <div className="flex items-center gap-4">
-            <Link to="/track" className="text-sm text-link">Application status</Link>
+            <Link to="/portal" className="text-sm text-link">Applicant portal</Link>
             <UserButton />
           </div>
         </div>

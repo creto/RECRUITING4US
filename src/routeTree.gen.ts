@@ -16,12 +16,14 @@ import { Route as StatusRouteImport } from './routes/status'
 import { Route as TrackRouteImport } from './routes/track'
 import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AppCompanySlugRouteRouteImport } from './routes/app/$companySlug/route'
+import { Route as AssessTokenRouteImport } from './routes/assess/$token'
 import { Route as BookTokenRouteImport } from './routes/book/$token'
 import { Route as CandidateIndexRouteImport } from './routes/candidate/index'
-import { Route as AssessTokenRouteImport } from './routes/assess/$token'
 import { Route as CodeTokenRouteImport } from './routes/code/$token'
 import { Route as InviteTokenRouteImport } from './routes/invite/$token'
 import { Route as LiveTokenRouteImport } from './routes/live/$token'
+import { Route as PortalIndexRouteImport } from './routes/portal/index'
+import { Route as PortalApplicationIdRouteImport } from './routes/portal/$applicationId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiHealthIndexRouteImport } from './routes/api/health/index'
 import { Route as ApiHealthLiveRouteImport } from './routes/api/health/live'
@@ -94,6 +96,11 @@ const AppCompanySlugRouteRoute = AppCompanySlugRouteRouteImport.update({
   path: '/app/$companySlug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AssessTokenRoute = AssessTokenRouteImport.update({
+  id: '/assess/$token',
+  path: '/assess/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BookTokenRoute = BookTokenRouteImport.update({
   id: '/book/$token',
   path: '/book/$token',
@@ -102,11 +109,6 @@ const BookTokenRoute = BookTokenRouteImport.update({
 const CandidateIndexRoute = CandidateIndexRouteImport.update({
   id: '/candidate/',
   path: '/candidate/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AssessTokenRoute = AssessTokenRouteImport.update({
-  id: '/assess/$token',
-  path: '/assess/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CodeTokenRoute = CodeTokenRouteImport.update({
@@ -122,6 +124,16 @@ const InviteTokenRoute = InviteTokenRouteImport.update({
 const LiveTokenRoute = LiveTokenRouteImport.update({
   id: '/live/$token',
   path: '/live/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PortalIndexRoute = PortalIndexRouteImport.update({
+  id: '/portal/',
+  path: '/portal/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PortalApplicationIdRoute = PortalApplicationIdRouteImport.update({
+  id: '/portal/$applicationId',
+  path: '/portal/$applicationId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
@@ -323,13 +335,15 @@ export interface FileRoutesByFullPath {
   '/status': typeof StatusRoute
   '/track': typeof TrackRoute
   '/app/$companySlug': typeof AppCompanySlugRouteRouteWithChildren
-  '/book/$token': typeof BookTokenRoute
   '/assess/$token': typeof AssessTokenRoute
+  '/book/$token': typeof BookTokenRoute
   '/code/$token': typeof CodeTokenRoute
   '/invite/$token': typeof InviteTokenRoute
   '/live/$token': typeof LiveTokenRoute
+  '/portal/$applicationId': typeof PortalApplicationIdRoute
   '/app/': typeof AppIndexRoute
   '/candidate/': typeof CandidateIndexRoute
+  '/portal/': typeof PortalIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/health/live': typeof ApiHealthLiveRoute
   '/api/health/ready': typeof ApiHealthReadyRoute
@@ -373,13 +387,15 @@ export interface FileRoutesByTo {
   '/notice': typeof NoticeRoute
   '/status': typeof StatusRoute
   '/track': typeof TrackRoute
-  '/book/$token': typeof BookTokenRoute
   '/assess/$token': typeof AssessTokenRoute
+  '/book/$token': typeof BookTokenRoute
   '/code/$token': typeof CodeTokenRoute
   '/invite/$token': typeof InviteTokenRoute
   '/live/$token': typeof LiveTokenRoute
+  '/portal/$applicationId': typeof PortalApplicationIdRoute
   '/app': typeof AppIndexRoute
   '/candidate': typeof CandidateIndexRoute
+  '/portal': typeof PortalIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/health/live': typeof ApiHealthLiveRoute
   '/api/health/ready': typeof ApiHealthReadyRoute
@@ -425,13 +441,15 @@ export interface FileRoutesById {
   '/status': typeof StatusRoute
   '/track': typeof TrackRoute
   '/app/$companySlug': typeof AppCompanySlugRouteRouteWithChildren
-  '/book/$token': typeof BookTokenRoute
   '/assess/$token': typeof AssessTokenRoute
+  '/book/$token': typeof BookTokenRoute
   '/code/$token': typeof CodeTokenRoute
   '/invite/$token': typeof InviteTokenRoute
   '/live/$token': typeof LiveTokenRoute
+  '/portal/$applicationId': typeof PortalApplicationIdRoute
   '/app/': typeof AppIndexRoute
   '/candidate/': typeof CandidateIndexRoute
+  '/portal/': typeof PortalIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/health/live': typeof ApiHealthLiveRoute
   '/api/health/ready': typeof ApiHealthReadyRoute
@@ -478,13 +496,15 @@ export interface FileRouteTypes {
     | '/status'
     | '/track'
     | '/app/$companySlug'
-    | '/book/$token'
     | '/assess/$token'
+    | '/book/$token'
     | '/code/$token'
     | '/invite/$token'
     | '/live/$token'
+    | '/portal/$applicationId'
     | '/app/'
     | '/candidate/'
+    | '/portal/'
     | '/api/auth/$'
     | '/api/health/live'
     | '/api/health/ready'
@@ -528,13 +548,15 @@ export interface FileRouteTypes {
     | '/notice'
     | '/status'
     | '/track'
-    | '/book/$token'
     | '/assess/$token'
+    | '/book/$token'
     | '/code/$token'
     | '/invite/$token'
     | '/live/$token'
+    | '/portal/$applicationId'
     | '/app'
     | '/candidate'
+    | '/portal'
     | '/api/auth/$'
     | '/api/health/live'
     | '/api/health/ready'
@@ -579,13 +601,15 @@ export interface FileRouteTypes {
     | '/status'
     | '/track'
     | '/app/$companySlug'
-    | '/book/$token'
     | '/assess/$token'
+    | '/book/$token'
     | '/code/$token'
     | '/invite/$token'
     | '/live/$token'
+    | '/portal/$applicationId'
     | '/app/'
     | '/candidate/'
+    | '/portal/'
     | '/api/auth/$'
     | '/api/health/live'
     | '/api/health/ready'
@@ -631,13 +655,15 @@ export interface RootRouteChildren {
   StatusRoute: typeof StatusRoute
   TrackRoute: typeof TrackRoute
   AppCompanySlugRouteRoute: typeof AppCompanySlugRouteRouteWithChildren
-  BookTokenRoute: typeof BookTokenRoute
   AssessTokenRoute: typeof AssessTokenRoute
+  BookTokenRoute: typeof BookTokenRoute
   CodeTokenRoute: typeof CodeTokenRoute
   InviteTokenRoute: typeof InviteTokenRoute
   LiveTokenRoute: typeof LiveTokenRoute
+  PortalApplicationIdRoute: typeof PortalApplicationIdRoute
   AppIndexRoute: typeof AppIndexRoute
   CandidateIndexRoute: typeof CandidateIndexRoute
+  PortalIndexRoute: typeof PortalIndexRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiHealthLiveRoute: typeof ApiHealthLiveRoute
   ApiHealthReadyRoute: typeof ApiHealthReadyRoute
@@ -704,6 +730,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCompanySlugRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/assess/$token': {
+      id: '/assess/$token'
+      path: '/assess/$token'
+      fullPath: '/assess/$token'
+      preLoaderRoute: typeof AssessTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/book/$token': {
       id: '/book/$token'
       path: '/book/$token'
@@ -716,13 +749,6 @@ declare module '@tanstack/react-router' {
       path: '/candidate'
       fullPath: '/candidate/'
       preLoaderRoute: typeof CandidateIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/assess/$token': {
-      id: '/assess/$token'
-      path: '/assess/$token'
-      fullPath: '/assess/$token'
-      preLoaderRoute: typeof AssessTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/code/$token': {
@@ -744,6 +770,20 @@ declare module '@tanstack/react-router' {
       path: '/live/$token'
       fullPath: '/live/$token'
       preLoaderRoute: typeof LiveTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/portal/': {
+      id: '/portal/'
+      path: '/portal'
+      fullPath: '/portal/'
+      preLoaderRoute: typeof PortalIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/portal/$applicationId': {
+      id: '/portal/$applicationId'
+      path: '/portal/$applicationId'
+      fullPath: '/portal/$applicationId'
+      preLoaderRoute: typeof PortalApplicationIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/$': {
@@ -1076,13 +1116,15 @@ const rootRouteChildren: RootRouteChildren = {
   StatusRoute: StatusRoute,
   TrackRoute: TrackRoute,
   AppCompanySlugRouteRoute: AppCompanySlugRouteRouteWithChildren,
-  BookTokenRoute: BookTokenRoute,
   AssessTokenRoute: AssessTokenRoute,
+  BookTokenRoute: BookTokenRoute,
   CodeTokenRoute: CodeTokenRoute,
   InviteTokenRoute: InviteTokenRoute,
   LiveTokenRoute: LiveTokenRoute,
+  PortalApplicationIdRoute: PortalApplicationIdRoute,
   AppIndexRoute: AppIndexRoute,
   CandidateIndexRoute: CandidateIndexRoute,
+  PortalIndexRoute: PortalIndexRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiHealthLiveRoute: ApiHealthLiveRoute,
   ApiHealthReadyRoute: ApiHealthReadyRoute,
@@ -1101,3 +1143,12 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}

@@ -1178,6 +1178,36 @@ export const openAssessmentInvite = createServerFn({ method: "POST" })
   }))
   .handler(async ({ data }) => (await import("./talent/assess.server")).openAssessmentInvite(data) as any);
 
+export const openApplicationPortal = createServerFn({ method: "POST" })
+  .validator(z.object({
+    email: z.string().trim().min(3).max(200),
+    applicationId: z.string().trim().min(36).max(36),
+  }))
+  .handler(async ({ data }) => (await import("./talent/portal.server")).openApplicationPortal(data) as any);
+
+export const getPortalApplication = createServerFn({ method: "POST" })
+  .validator(z.object({
+    applicationId: z.string().trim().min(36).max(36),
+    accessToken: z.string().min(20).max(500),
+  }))
+  .handler(async ({ data }) => (await import("./talent/portal.server")).getPortalApplication(data.applicationId, data.accessToken) as any);
+
+export const openPortalAssignment = createServerFn({ method: "POST" })
+  .validator(z.object({
+    applicationId: z.string().trim().min(36).max(36),
+    accessToken: z.string().min(20).max(500),
+    assignmentId: z.string().min(8).max(80),
+  }))
+  .handler(async ({ data }) => (await import("./talent/portal.server")).openPortalAssignment(data) as any);
+
+export const replyPortalMail = createServerFn({ method: "POST" })
+  .validator(z.object({
+    applicationId: z.string().trim().min(36).max(36),
+    accessToken: z.string().min(20).max(500),
+    body: z.string().min(2).max(4000),
+  }))
+  .handler(async ({ data }) => (await import("./talent/portal.server")).replyPortalMail(data) as any);
+
 export const getAssessmentInvite = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ token: z.string().uuid() })).handler(async ({ context, data }) => (await import("./talent/assess.server")).getAssessmentInvite(context.userId, data.token) as any);
 
 export const getAttemptByAccess = createServerFn({ method: "POST" })
