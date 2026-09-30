@@ -2,8 +2,8 @@ import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { deleteTemplate, listInbox, listMailbox, listTemplates, queuePlatformMail, saveTemplate, suppressAddress, unsuppressAddress } from "@/server/talent.functions";
 import { Alert, AppLink, Button, Empty, Field, inputClass, Loading, MailCard, PageTitle, refreshPage, useAuthed, useCompanyWorkspace, when } from "@/components/talent/kit";
-import { RichMailEditor, SafeMailBody, type MailTemplatePick } from "@/components/talent/mail-compose";
-import { plainToEditorHtml } from "@/domain/mail-html";
+import { RichMailEditor, SafeMailBody, TemplateChoices, type MailTemplatePick } from "@/components/talent/mail-compose";
+import { editorIsEmpty, plainToEditorHtml } from "@/domain/mail-html";
 
 export const Route = createFileRoute("/app/$companySlug/mail")({ component: Mail });
 
@@ -61,9 +61,28 @@ function Mail() {
       <p className="mb-4 text-sm text-muted">{templates.data?.note}</p>
       <div className="grid gap-6 lg:grid-cols-2">
         <section>
-          <h2 className="text-2xl">Templates</h2>
-          <p className="mt-2 text-sm text-muted">Press Use to send that template. With a To address, a name, or an application id filled in, it queues immediately. Tokens: {"{{candidate_name}} {{job_title}} {{company_name}} {{recruiter_name}}"}</p>
-          <div className="mt-3 space-y-2">
+          <h2 className="text-2xl">Write</h2>
+          <p className="mt-2 text-sm text-muted">Press a template to send it when To, a name, or an application id is filled. Otherwise it loads here so you can edit it, then queue it. Tokens: {"{{candidate_name}} {{job_title}} {{company_name}} {{recruiter_name}}"}</p>
+          <form className="mt-3 space-y-2" onSubmit={(event) => {
+            event.preventDefault();
+            const who = sendName.trim();
+            const id = sendId.trim();
+            const recipient = sendTo.trim();
+            if (who.length < 2 && id.length < 8 && !recipient.includes("@")) {
+              setError("Give a To address, a candidate name, or an application id.");
+              return;
+            }
+            if (sendSubject.trim().length < 2 || editorIsEmpty(sendBody)) {
+              setError("Write a subject and a message.");
+              return;
+            }
+            setError(null);
+            setPending(true);
+            queuePlatformMail({ data: { slug: companySlug, applicationId: id, candidateName: who, to: recipient, kind: "FOLLOW_UP", subject: sendSubject, body: sendBody, idempotencyKey: crypto.randomUUID() } })
+              .then(() => { setNotice("Queued. Stored, accepted, delivered, bounced, or failed shows in the delivery queue on this page."); refreshPage(); })
+              .catch((err) => setError(err instanceof Error ? err.message : "Could not queue."))
+              .finally(() => setPending(false));
+          }}>
             <Field label="To">
               <input className={inputClass} type="text" inputMode="email" value={sendTo} onChange={(event) => setSendTo(event.target.value)} placeholder="oscar@gmail.com or any outside inbox" />
             </Field>
@@ -74,7 +93,24 @@ function Mail() {
               <input className={inputClass} value={sendId} onChange={(event) => setSendId(event.target.value)} placeholder="Or paste an application id" />
             </Field>
             <p className="text-sm text-muted">To can be any address, including one that is not on your account. A name sends only when one application matches. If several match, the error lists their ids. An application id is used as written and ignores the name. With only a To address, the message is queued to that inbox.</p>
-          </div>
+            <TemplateChoices
+              templates={templates.data?.templates ?? []}
+              pendingId={pending ? "sending" : null}
+              hint="Press a template name to queue it now, or to load it into the message if no recipient is filled yet."
+              onChoose={loadTemplate}
+            />
+            {notice ? <p className="text-sm">{notice}</p> : null}
+            <Field label="Subject">
+              <input className={inputClass} value={sendSubject} onChange={(event) => setSendSubject(event.target.value)} />
+            </Field>
+            <Field label="Message">
+              <RichMailEditor key={sendKey} value={sendBody} onChange={setSendBody} />
+            </Field>
+            {sendBody.trim() ? <MailCard name={workspace.data?.company.name ?? "Company"} body={sendBody} /> : null}
+            <Button type="submit" disabled={pending}>Queue message</Button>
+          </form>
+          <h2 className="mt-8 text-2xl">Templates</h2>
+          <p className="mt-2 text-sm text-muted">Use sends that template with the To, name, or application id above. Edit changes the saved wording.</p>
           <ul className="mt-3 space-y-2">
             {(templates.data?.templates ?? []).map((template) => (
               <li key={template.id} className="rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-3 text-sm">
@@ -88,33 +124,6 @@ function Mail() {
               </li>
             ))}
           </ul>
-          {notice ? <p className="mt-3 text-sm">{notice}</p> : null}
-          <form className="mt-4 space-y-2" onSubmit={(event) => {
-            event.preventDefault();
-            const who = sendName.trim();
-            const id = sendId.trim();
-            const recipient = sendTo.trim();
-            if (who.length < 2 && id.length < 8 && !recipient.includes("@")) {
-              setError("Give a To address, a candidate name, or an application id.");
-              return;
-            }
-            setError(null);
-            setPending(true);
-            queuePlatformMail({ data: { slug: companySlug, applicationId: id, candidateName: who, to: recipient, kind: "FOLLOW_UP", subject: sendSubject, body: sendBody, idempotencyKey: crypto.randomUUID() } })
-              .then(() => { setNotice("Queued. Stored, accepted, delivered, bounced, or failed shows in the delivery queue on this page."); refreshPage(); })
-              .catch((err) => setError(err instanceof Error ? err.message : "Could not queue."))
-              .finally(() => setPending(false));
-          }}>
-            <h3 className="text-xl">Send this message</h3>
-            <Field label="Subject">
-              <input className={inputClass} value={sendSubject} onChange={(event) => setSendSubject(event.target.value)} required />
-            </Field>
-            <Field label="Message">
-              <RichMailEditor key={sendKey} value={sendBody} onChange={setSendBody} required />
-            </Field>
-            {sendBody.trim() ? <MailCard name={workspace.data?.company.name ?? "Company"} body={sendBody} /> : null}
-            <Button type="submit" disabled={pending}>Queue message</Button>
-          </form>
           <form className="mt-4 space-y-2" onSubmit={(event) => {
             event.preventDefault();
             saveTemplate({ data: { slug: companySlug, id: editing, name, subject, body } })

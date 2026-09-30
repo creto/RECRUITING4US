@@ -93,7 +93,6 @@ export function RichMailEditor({
   const [imageUrl, setImageUrl] = useState("");
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("https://");
-  const seeded = useRef(false);
 
   useEffect(() => {
     setPhone(readPhone());
@@ -102,22 +101,10 @@ export function RichMailEditor({
 
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!el || document.activeElement === el) return;
     const next = plainToEditorHtml(value);
-    if (!seeded.current) {
-      el.innerHTML = next;
-      seeded.current = true;
-      if (next !== value) onChange(next);
-      return;
-    }
-    if (value === "" && el.innerHTML !== "") {
-      el.innerHTML = "";
-      return;
-    }
-    if (el.innerHTML !== value && editorIsEmpty(el.innerHTML) && !editorIsEmpty(value)) {
-      el.innerHTML = next;
-    }
-  }, [value, onChange]);
+    if (el.innerHTML !== next) el.innerHTML = next;
+  }, [value]);
 
   function emit() {
     onChange(ref.current?.innerHTML ?? "");
@@ -219,6 +206,7 @@ export function RichMailEditor({
         role="textbox"
         aria-multiline="true"
         aria-label="Message"
+        tabIndex={0}
         contentEditable
         suppressContentEditableWarning
         className={`${inputClass} ${minHeightClass} py-2 whitespace-pre-wrap [&_img]:max-w-full [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:text-link [&_a]:underline`}
