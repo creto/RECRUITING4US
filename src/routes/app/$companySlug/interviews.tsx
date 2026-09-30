@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { cancelInterview, createSlot, feedbackFor, interviewIcs, listInterviews, listScoreboard, listSlots, refreshCalendar, scheduleInterview, submitFeedback } from "@/server/talent.functions";
 import { RATINGS } from "@/domain/scorecard";
 import { Alert, AppLink, Button, Empty, Field, inputClass, Loading, PageTitle, refreshPage, useAuthed, when } from "@/components/talent/kit";
+import { DateTimeLocalField } from "@/components/talent/datetime-local";
 
 export const Route = createFileRoute("/app/$companySlug/interviews")({ component: Interviews });
 
@@ -67,8 +68,8 @@ function Interviews() {
       }}>
         <h2 className="text-2xl md:col-span-2">Exclusive slots</h2>
         <Field label="Timezone"><input name="timezone" className={inputClass} defaultValue="America/New_York" /></Field>
-        <Field label="Local start"><input name="start" className={inputClass} placeholder="2026-10-08T15:00" required /></Field>
-        <Field label="Local end"><input name="end" className={inputClass} placeholder="2026-10-08T15:45" required /></Field>
+        <DateTimeLocalField label="Local start" name="start" required />
+        <DateTimeLocalField label="Local end" name="end" required />
         <Button type="submit">Add slot</Button>
         <ul className="md:col-span-2 text-sm text-muted">
           {(slots.data ?? []).map((slot: any) => (
@@ -105,8 +106,8 @@ function Interviews() {
         <Field label="Application id"><input name="applicationId" className={inputClass} placeholder="Or paste an application id" /></Field>
         <Field label="Title"><input name="title" className={inputClass} defaultValue="Interview" required /></Field>
         <Field label="Timezone"><input name="timezone" className={inputClass} defaultValue="America/New_York" required /></Field>
-        <Field label="Local start"><input name="start" className={inputClass} placeholder="2026-10-06T10:00" required /></Field>
-        <Field label="Local end"><input name="end" className={inputClass} placeholder="2026-10-06T11:00" required /></Field>
+        <DateTimeLocalField label="Local start" name="start" required />
+        <DateTimeLocalField label="Local end" name="end" required />
         <Field label="Location"><input name="location" className={inputClass} /></Field>
         <Field label="Meeting URL"><input name="url" className={inputClass} /></Field>
         <Button type="submit">Schedule</Button>

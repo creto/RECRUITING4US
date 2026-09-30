@@ -26,6 +26,7 @@ import {
   rejudgeSubmission,
 } from "@/server/talent.functions";
 import { Alert, Button, Field, inputClass, Loading, MailCard, PageTitle, money, refreshPage, useAuthed, useCompanyWorkspace, when } from "@/components/talent/kit";
+import { DateTimeLocalField } from "@/components/talent/datetime-local";
 import { RichMailEditor } from "@/components/talent/mail-compose";
 import { plainToEditorHtml } from "@/domain/mail-html";
 import { storedAnswerText } from "@/domain/sheet";
@@ -381,8 +382,8 @@ function ScheduleForm({ slug, applicationId, attributes, onDone, onError }: { sl
     }}>
       <Field label="Title"><input name="title" className={inputClass} defaultValue="Interview" required /></Field>
       <Field label="Timezone"><input name="timezone" className={inputClass} defaultValue="America/New_York" required /></Field>
-      <Field label="Local start"><input name="start" className={inputClass} placeholder="2026-10-06T10:00" required /></Field>
-      <Field label="Local end"><input name="end" className={inputClass} placeholder="2026-10-06T11:00" required /></Field>
+      <DateTimeLocalField label="Local start" name="start" required />
+      <DateTimeLocalField label="Local end" name="end" required />
       <Field label="Location"><input name="location" className={inputClass} /></Field>
       <Field label="Meeting URL"><input name="url" className={inputClass} /></Field>
       <div className="md:col-span-2 text-sm">
