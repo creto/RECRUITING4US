@@ -2,6 +2,7 @@ import { useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { getMyApplication, replyToMail, requestDeletion, startAttempt, withdrawMine } from "@/server/talent.functions";
 import { Alert, AppLink, Button, Field, Gate, inputClass, Loading, MailCard, money, PageTitle, refreshPage, StageBar, useAuthed, when } from "@/components/talent/kit";
+import { googleCalendarRenderUrl } from "@/domain/interview-invite";
 import { examPaper } from "@/components/talent/exam-shell";
 
 export const Route = createFileRoute("/candidate/applications/$applicationId")({ component: Mine });
@@ -80,7 +81,31 @@ function Mine() {
                 <article key={String(item.id)} className="rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4 text-sm">
                   <p>{String(item.title)}</p>
                   <p>{when(String(item.starts_at), String(item.timezone))}</p>
-                  <p className="text-muted">{String(item.location)} {String(item.meeting_url)}</p>
+                  <p className="text-muted">{String(item.location)}</p>
+                  {item.meeting_url ? (
+                    <p>
+                      <a className="text-link break-all" href={String(item.meeting_url)} target="_blank" rel="noreferrer">
+                        {String(item.meeting_url)}
+                      </a>
+                    </p>
+                  ) : null}
+                  <p className="mt-2">
+                    <a
+                      className="text-link"
+                      href={googleCalendarRenderUrl({
+                        title: String(item.title),
+                        startUtc: new Date(String(item.starts_at)),
+                        endUtc: new Date(String(item.ends_at)),
+                        details: item.meeting_url ? `Google Meet: ${String(item.meeting_url)}` : String(item.title),
+                        location: String(item.meeting_url || item.location || ""),
+                        timezone: String(item.timezone),
+                      })}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Add to Google Calendar
+                    </a>
+                  </p>
                 </article>
               ))}
             </section>

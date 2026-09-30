@@ -1,5 +1,10 @@
 import { normalizeRuleDraft } from "@/domain/ops";
 import { assertSameSiteRequest } from "@/lib/auth/isolation.server";
+import {
+  formatInterviewWhen,
+  googleCalendarRenderUrl,
+  interviewInviteBody,
+} from "@/domain/interview-invite";
 import { buildIcs, canSeeCompensation, canSeePeerFeedback, reportDayWindow, roleHas, zonedLocalToUtc, assertSafeOutboundUrl } from "@/domain/rules";
 import {
   attributesOrDefault,
@@ -93,8 +98,8 @@ export async function scheduleInterview(
     select id from applications where id = ${applicationId} and company_id = ${actor.companyId} and lifecycle = 'ACTIVE'
   `;
   if (!apps[0]) throw new Error("Not found.");
-  const jobs = await sql<{ scorecard_attributes: unknown }>`
-    select j.scorecard_attributes
+  const jobs = await sql<{ scorecard_attributes: unknown; job_title: string }>`
+    select j.scorecard_attributes, j.title as job_title
     from applications a
     join jobs j on j.id = a.job_id and j.company_id = a.company_id
     where a.id = ${applicationId} and a.company_id = ${actor.companyId}
@@ -107,14 +112,63 @@ export async function scheduleInterview(
       and starts_at < ${end.toISOString()} and ends_at > ${start.toISOString()}
   `;
   if (clash[0]) throw new Error("That time overlaps another interview in this company.");
+  const people = await sql<{ email: string; name: string }>`
+    select c.email, c.name from applications a join candidates c on c.id = a.candidate_id where a.id = ${applicationId}
+  `;
+  const candidateEmail = (people[0]?.email ?? "").trim().toLowerCase();
+  const candidateName = people[0]?.name ?? input.candidateName ?? "Candidate";
+  const jobTitle = jobs[0]?.job_title ?? "";
+  const providedMeet = input.meetingUrl.trim();
+  const attendees = [actor.email, candidateEmail].filter((email, index, all) => email.includes("@") && all.indexOf(email) === index);
+  const whenLabel = formatInterviewWhen(input.localStart, input.localEnd, input.timezone);
   const id = nid();
   const uid = `${id}@talentflow.example`;
+
+  const { createGoogleMeetInterview } = await import("./calendar.server");
+  const meet = await createGoogleMeetInterview(actor.companyId, {
+    title: input.title.trim(),
+    description: [
+      `${actor.companyName} · ${jobTitle}`,
+      `Interview: ${input.title.trim()}`,
+      `When: ${whenLabel}`,
+      providedMeet ? `Meeting link: ${providedMeet}` : "",
+      `Organizer: ${actor.name} <${actor.email}>`,
+      candidateEmail ? `Candidate: ${candidateName} <${candidateEmail}>` : "",
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    startsAt: start.toISOString(),
+    endsAt: end.toISOString(),
+    timezone: input.timezone,
+    location: providedMeet || input.location.trim(),
+    attendees,
+    requestMeet: !providedMeet,
+    idempotencyKey: `interview-meet:${id}`,
+  });
+  const meetingUrl = (providedMeet || meet.meetUrl || "").slice(0, 300);
+  const googleCalendarUrl = googleCalendarRenderUrl({
+    title: `${input.title.trim()} · ${jobTitle || actor.companyName}`,
+    startUtc: start,
+    endUtc: end,
+    details: [
+      meetingUrl ? `Google Meet: ${meetingUrl}` : "",
+      `Company: ${actor.companyName}`,
+      jobTitle ? `Role: ${jobTitle}` : "",
+      attendees.length ? `Attendees: ${attendees.join(", ")}` : "",
+      meet.htmlLink ? `Calendar event: ${meet.htmlLink}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    location: meetingUrl || input.location.trim(),
+    timezone: input.timezone,
+  });
+
   await sql`
     insert into interviews (
       id, company_id, application_id, title, starts_at, ends_at, timezone, location, meeting_url, ics_uid, focus_attributes
     ) values (
       ${id}, ${actor.companyId}, ${applicationId}, ${input.title.trim()}, ${start.toISOString()},
-      ${end.toISOString()}, ${input.timezone}, ${input.location}, ${input.meetingUrl}, ${uid},
+      ${end.toISOString()}, ${input.timezone}, ${input.location}, ${meetingUrl}, ${uid},
       ${json(focus.attributes)}::jsonb
     )
   `;
@@ -122,37 +176,80 @@ export async function scheduleInterview(
     insert into interview_participants (id, company_id, interview_id, user_id)
     values (${nid()}, ${actor.companyId}, ${id}, ${actor.userId})
   `;
-  const people = await sql<{ email: string }>`
-    select c.email from applications a join candidates c on c.id = a.candidate_id where a.id = ${applicationId}
-  `;
-  if (people[0]) {
+  try {
+    await sql`
+      insert into calendar_events (id, company_id, slot_id, provider, external_id, status, title, starts_at, ends_at, detail)
+      values (
+        ${nid()}, ${actor.companyId}, null, ${meet.provider}, ${meet.externalId}, ${meet.status},
+        ${input.title.trim()}, ${start.toISOString()}, ${end.toISOString()}, ${meet.detail.slice(0, 500)}
+      )
+    `;
+  } catch {
+    // calendar_events is optional bookkeeping; interview row is the source of truth.
+  }
+
+  const inviteBody = interviewInviteBody({
+    title: input.title.trim(),
+    whenLabel,
+    timezone: input.timezone,
+    meetUrl: meetingUrl,
+    location: input.location.trim(),
+    attendees,
+    jobTitle,
+    companyName: actor.companyName,
+    recruiterName: actor.name,
+    candidateName,
+    appLink: "",
+    googleCalendarUrl,
+  });
+
+  if (candidateEmail) {
     await sql`
       insert into mail_messages (id, company_id, to_email, subject, body, status, related_id)
       values (
-        ${nid()}, ${actor.companyId}, ${people[0].email}, ${"Interview: " + input.title.trim()},
-        ${"A time was saved in this product. An outside email is queued separately and is not delivered unless a mail provider is configured."},
+        ${nid()}, ${actor.companyId}, ${candidateEmail}, ${"Interview: " + input.title.trim()},
+        ${inviteBody},
         'CAPTURED', ${id}
       )
     `;
   }
-  await audit(actor, "interview.schedule", "interview", id, "Interview scheduled.");
+  await audit(actor, "interview.schedule", "interview", id, meetingUrl ? "Interview scheduled with meeting link." : "Interview scheduled.");
   try {
     const { appLink, queueMail } = await import("./platform.server");
-    const where = input.location.trim();
-    const meet = /^https?:\/\//i.test(input.meetingUrl.trim()) ? `\n${input.meetingUrl.trim()}` : "";
+    const portal = appLink(`/candidate/applications/${applicationId}`);
+    const body = interviewInviteBody({
+      title: input.title.trim(),
+      whenLabel,
+      timezone: input.timezone,
+      meetUrl: meetingUrl,
+      location: input.location.trim(),
+      attendees,
+      jobTitle: "{{job_title}}",
+      companyName: "{{company_name}}",
+      recruiterName: "{{recruiter_name}}",
+      candidateName: "{{candidate_name}}",
+      appLink: portal,
+      googleCalendarUrl,
+    });
     await queueMail(userId, input.slug, {
       applicationId,
       kind: "INTERVIEW",
-      subject: "Interview for {{job_title}}",
-      body: `Hello {{candidate_name}},\n\n{{company_name}} scheduled ${input.title.trim()} for {{job_title}}.\n\nWhen: ${input.localStart} to ${input.localEnd} (${input.timezone}).${where ? `\nWhere: ${where}.` : ""}${meet}\n\nThe time is also on your application page.\n${appLink(`/candidate/applications/${applicationId}`)}\n\n{{recruiter_name}}`,
-      cc: "",
+      subject: "Interview: " + input.title.trim() + " · {{job_title}}",
+      body,
+      cc: attendees.filter((email) => email !== candidateEmail).join(", "),
       bcc: "",
       idempotencyKey: `interview:${id}`,
     });
   } catch {
     // The interview is already stored. Mail failure is visible in the delivery log.
   }
-  return { id };
+  return {
+    id,
+    meetingUrl,
+    googleCalendarUrl,
+    calendarStatus: meet.status,
+    calendarDetail: meet.detail,
+  };
 }
 
 export async function interviewIcs(userId: string, slug: string, interviewId: string) {
@@ -167,23 +264,54 @@ export async function interviewIcs(userId: string, slug: string, interviewId: st
     status: string;
     ics_uid: string;
     ics_sequence: number;
+    timezone: string;
+    job_title: string;
+    candidate_email: string;
+    candidate_name: string;
   }>`
-    select title, starts_at::text as starts_at, ends_at::text as ends_at, location, meeting_url, status, ics_uid, ics_sequence
-    from interviews where id = ${interviewId} and company_id = ${actor.companyId}
+    select i.title, i.starts_at::text as starts_at, i.ends_at::text as ends_at, i.location, i.meeting_url,
+      i.status, i.ics_uid, i.ics_sequence, i.timezone, j.title as job_title, c.email as candidate_email, c.name as candidate_name
+    from interviews i
+    join applications a on a.id = i.application_id and a.company_id = i.company_id
+    join candidates c on c.id = a.candidate_id and c.company_id = a.company_id
+    join jobs j on j.id = a.job_id and j.company_id = a.company_id
+    where i.id = ${interviewId} and i.company_id = ${actor.companyId}
   `;
   const row = rows[0];
   if (!row) throw new Error("Not found.");
+  const attendees = [actor.email, row.candidate_email]
+    .map((email) => email.trim().toLowerCase())
+    .filter((email, index, all) => email.includes("@") && all.indexOf(email) === index);
+  const startUtc = new Date(row.starts_at);
+  const endUtc = new Date(row.ends_at);
+  const description = [
+    row.meeting_url ? `Google Meet: ${row.meeting_url}` : "RECRUIT4US interview",
+    `Company: ${actor.companyName}`,
+    `Role: ${row.job_title}`,
+    attendees.length ? `Attendees: ${attendees.join(", ")}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
   const ics = buildIcs({
     uid: row.ics_uid,
     sequence: row.ics_sequence,
     title: row.title,
-    description: row.meeting_url || "RECRUIT4US interview",
-    startUtc: new Date(row.starts_at),
-    endUtc: new Date(row.ends_at),
+    description,
+    startUtc,
+    endUtc,
     location: row.location || row.meeting_url,
     status: row.status === "CANCELLED" ? "CANCELLED" : "CONFIRMED",
+    attendees,
   });
-  return { ics, filename: "interview.ics" };
+  const googleCalendarUrl = googleCalendarRenderUrl({
+    title: `${row.title} · ${row.job_title}`,
+    startUtc,
+    endUtc,
+    details: description,
+    location: row.location || row.meeting_url,
+    timezone: row.timezone,
+  });
+  return { ics, filename: "interview.ics", googleCalendarUrl, meetingUrl: row.meeting_url };
 }
 
 export async function cancelInterview(userId: string, input: { slug: string; interviewId: string }) {

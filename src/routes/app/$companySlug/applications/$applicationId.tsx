@@ -28,6 +28,7 @@ import {
 } from "@/server/talent.functions";
 import { Alert, Button, Field, inputClass, Loading, MailCard, PageTitle, money, refreshPage, useAuthed, useCompanyWorkspace, when } from "@/components/talent/kit";
 import { DateTimeLocalField } from "@/components/talent/datetime-local";
+import { googleCalendarRenderUrl } from "@/domain/interview-invite";
 import { RichMailEditor, TemplateChoices, type MailTemplatePick } from "@/components/talent/mail-compose";
 import { plainToEditorHtml } from "@/domain/mail-html";
 import { storedAnswerText } from "@/domain/sheet";
@@ -272,7 +273,31 @@ function ApplicationPage() {
             <article key={String(item.id)} className="rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4 text-sm">
               <h2 className="text-xl">{String(item.title)}</h2>
               <p>{when(String(item.starts_at), String(item.timezone))} · {String(item.status)}</p>
-              <p className="text-muted">{String(item.location)} {String(item.meeting_url)}</p>
+              <p className="text-muted">{String(item.location)}</p>
+              {item.meeting_url ? (
+                <p>
+                  <a className="text-link break-all" href={String(item.meeting_url)} target="_blank" rel="noreferrer">
+                    {String(item.meeting_url)}
+                  </a>
+                </p>
+              ) : null}
+              <p className="mt-2">
+                <a
+                  className="text-link"
+                  href={googleCalendarRenderUrl({
+                    title: String(item.title),
+                    startUtc: new Date(String(item.starts_at)),
+                    endUtc: new Date(String(item.ends_at)),
+                    details: item.meeting_url ? `Google Meet: ${String(item.meeting_url)}` : String(item.title),
+                    location: String(item.meeting_url || item.location || ""),
+                    timezone: String(item.timezone),
+                  })}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Add to Google Calendar
+                </a>
+              </p>
             </article>
           ))}
           <ScheduleForm slug={companySlug} applicationId={applicationId} attributes={state.data.scorecardAttributes ?? []} onDone={() => refreshPage()} onError={setError} />
@@ -402,7 +427,7 @@ function ScheduleForm({ slug, applicationId, attributes, onDone, onError }: { sl
       <DateTimeLocalField label="Local start" name="start" required />
       <DateTimeLocalField label="Local end" name="end" required />
       <Field label="Location"><input name="location" className={inputClass} /></Field>
-      <Field label="Meeting URL"><input name="url" className={inputClass} /></Field>
+      <Field label="Meeting URL (optional)"><input name="url" className={inputClass} placeholder="Blank creates Google Meet when Calendar is connected" /></Field>
       <div className="md:col-span-2 text-sm">
         <p className="mb-1">Scorecard focus</p>
         {attributes.map((item) => (

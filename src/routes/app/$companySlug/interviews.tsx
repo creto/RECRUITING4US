@@ -4,6 +4,7 @@ import { cancelInterview, createSlot, feedbackFor, interviewIcs, listInterviews,
 import { RATINGS } from "@/domain/scorecard";
 import { Alert, AppLink, Button, Empty, Field, inputClass, Loading, PageTitle, refreshPage, useAuthed, when } from "@/components/talent/kit";
 import { DateTimeLocalField } from "@/components/talent/datetime-local";
+import { googleCalendarRenderUrl } from "@/domain/interview-invite";
 import { SchedulingDesk } from "./calendar";
 
 export const Route = createFileRoute("/app/$companySlug/interviews")({ component: Interviews });
@@ -112,7 +113,8 @@ function Interviews() {
         <DateTimeLocalField label="Local start" name="start" required />
         <DateTimeLocalField label="Local end" name="end" required />
         <Field label="Location"><input name="location" className={inputClass} /></Field>
-        <Field label="Meeting URL"><input name="url" className={inputClass} /></Field>
+        <Field label="Meeting URL (optional)"><input name="url" className={inputClass} placeholder="Blank = create Google Meet when Calendar is connected" /></Field>
+        <p className="text-sm text-muted md:col-span-2">Invites recruiter + candidate, includes Add to calendar + ICS, and creates Google Meet when Google Calendar OAuth is connected.</p>
         <Button type="submit">Schedule</Button>
       </form>
           </div>
@@ -130,6 +132,8 @@ type InterviewRow = {
   title: string;
   status: string;
   timezone: string;
+  location?: string;
+  meeting_url?: string;
   candidate_name: string;
   job_title: string;
   starts_at: string;
@@ -172,8 +176,24 @@ function InterviewList({ slug, rows, onError }: { slug: string; rows: InterviewR
             <h3 className="text-xl">{item.title}</h3>
             <p>{item.candidate_name} · {item.job_title}</p>
             <p>{when(item.starts_at, item.timezone)} · {status}</p>
+            {item.meeting_url ? (
+              <p className="mt-1">
+                <a className="text-link break-all" href={item.meeting_url} target="_blank" rel="noreferrer">
+                  {item.meeting_url}
+                </a>
+              </p>
+            ) : (
+              <p className="mt-1 text-muted">No Meet link yet. Connect Google Calendar or paste a meeting URL when scheduling.</p>
+            )}
             <div className="mt-2 flex flex-wrap gap-2">
-              <Button type="button" variant="secondary" onClick={() => interviewIcs({ data: { slug, interviewId: item.id } }).then((file) => download(file.ics, file.filename))}>Calendar file</Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => window.open(interviewGoogleUrl(item), "_blank", "noopener,noreferrer")}
+              >
+                Add to Google Calendar
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => interviewIcs({ data: { slug, interviewId: item.id } }).then((file) => download(file.ics, file.filename))}>Download ICS</Button>
               {item.status === "SCHEDULED" && status !== "Complete" ? <Button type="button" variant="danger" onClick={() => cancelInterview({ data: { slug, interviewId: item.id } }).then(() => refreshPage()).catch((err) => onError(err.message))}>Cancel</Button> : null}
             </div>
             <Feedback slug={slug} interviewId={item.id} />
@@ -182,6 +202,24 @@ function InterviewList({ slug, rows, onError }: { slug: string; rows: InterviewR
       })}
     </ul>
   );
+}
+
+
+function interviewGoogleUrl(item: InterviewRow) {
+  const meet = String(item.meeting_url ?? "");
+  const details = [
+    meet ? `Google Meet: ${meet}` : "",
+    `Candidate: ${String(item.candidate_name)}`,
+    `Role: ${String(item.job_title)}`,
+  ].filter(Boolean).join(String.fromCharCode(10));
+  return googleCalendarRenderUrl({
+    title: `${String(item.title)} · ${String(item.job_title)}`,
+    startUtc: new Date(String(item.starts_at)),
+    endUtc: new Date(String(item.ends_at)),
+    details,
+    location: meet || String(item.location ?? ""),
+    timezone: String(item.timezone),
+  });
 }
 
 function download(text: string, filename: string) {

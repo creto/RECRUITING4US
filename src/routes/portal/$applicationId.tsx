@@ -22,6 +22,7 @@ import {
   when,
 } from "@/components/talent/kit";
 import { examPaper } from "@/components/talent/exam-shell";
+import { googleCalendarRenderUrl } from "@/domain/interview-invite";
 
 export const Route = createFileRoute("/portal/$applicationId")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -68,6 +69,7 @@ type PortalData = {
     location: string;
     meeting_url: string;
     starts_at: string;
+    ends_at: string;
   }>;
   messages: Array<{
     id: string;
@@ -283,7 +285,31 @@ function PortalBody({ applicationId, accessToken }: { applicationId: string; acc
               <article key={String(item.id)} className="rounded-[24px] border border-line bg-white p-4 text-sm shadow-[0_8px_24px_rgba(20,34,27,0.04)]">
                 <p>{String(item.title)}</p>
                 <p>{when(String(item.starts_at), String(item.timezone))}</p>
-                <p className="text-muted">{String(item.location)} {String(item.meeting_url)}</p>
+                <p className="text-muted">{String(item.location)}</p>
+                {item.meeting_url ? (
+                  <p>
+                    <a className="text-link break-all" href={String(item.meeting_url)} target="_blank" rel="noreferrer">
+                      {String(item.meeting_url)}
+                    </a>
+                  </p>
+                ) : null}
+                <p className="mt-2">
+                  <a
+                    className="text-link"
+                    href={googleCalendarRenderUrl({
+                      title: String(item.title),
+                      startUtc: new Date(String(item.starts_at)),
+                      endUtc: new Date(String(item.ends_at)),
+                      details: item.meeting_url ? `Google Meet: ${String(item.meeting_url)}` : String(item.title),
+                      location: String(item.meeting_url || item.location || ""),
+                      timezone: String(item.timezone),
+                    })}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Add to Google Calendar
+                  </a>
+                </p>
               </article>
             ))}
           </section>

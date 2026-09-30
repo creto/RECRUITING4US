@@ -1,5 +1,10 @@
 import { assertSameSiteRequest } from "@/lib/auth/isolation.server";
 import { calendarSetupCopy, calendarTokenForm, googleAuthUrl, interpretCalendarWrite, parseOAuthToken } from "@/domain/platform/adapters";
+import {
+  GOOGLE_CALENDAR_EVENTS_URL,
+  googleMeetEventBody,
+  parseGoogleMeetResponse,
+} from "@/domain/interview-invite";
 import { moveBooking } from "@/domain/platform/booking";
 import { enterTenant } from "@/lib/tenant";
 import { postForm, postJson } from "./outbound.server";
@@ -225,3 +230,76 @@ export async function revokeCalendar(userId: string, slug: string) {
   await audit(actor, "calendar.revoke", "calendar_connection", actor.companyId, "REVOKED");
   return { status: "REVOKED" };
 }
+
+export type MeetCreateResult = {
+  provider: string;
+  externalId: string;
+  meetUrl: string;
+  htmlLink: string;
+  status: string;
+  detail: string;
+};
+
+/**
+ * Creates a Google Calendar event with Meet + attendees when an access token is available.
+ * Without credentials, returns an empty meetUrl so callers can still ship ICS + deep links.
+ */
+export async function createGoogleMeetInterview(
+  companyId: string,
+  input: {
+    title: string;
+    description: string;
+    startsAt: string;
+    endsAt: string;
+    timezone: string;
+    location: string;
+    attendees: string[];
+    requestMeet: boolean;
+    idempotencyKey: string;
+  },
+): Promise<MeetCreateResult> {
+  const token = await bearer(companyId);
+  if (!token) {
+    return {
+      provider: "sandbox",
+      externalId: "",
+      meetUrl: "",
+      htmlLink: "",
+      status: "LOCAL",
+      detail: "No Google Calendar credential. Interview stored here. Use Add to Google Calendar or the ICS download.",
+    };
+  }
+  const body = googleMeetEventBody({
+    title: input.title,
+    description: input.description,
+    startIso: input.startsAt,
+    endIso: input.endsAt,
+    timezone: input.timezone,
+    location: input.location,
+    attendees: input.attendees,
+    requestMeet: input.requestMeet,
+    requestId: input.idempotencyKey.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64) || crypto.randomUUID(),
+  });
+  try {
+    const response = await postJson(GOOGLE_CALENDAR_EVENTS_URL, token, body);
+    const parsed = parseGoogleMeetResponse(response.status, response.body);
+    return {
+      provider: "google",
+      externalId: parsed.externalId,
+      meetUrl: parsed.meetUrl,
+      htmlLink: parsed.htmlLink,
+      status: parsed.ok ? "CONFIRMED" : "SYNC_FAILED",
+      detail: parsed.detail,
+    };
+  } catch (error) {
+    return {
+      provider: "google",
+      externalId: "",
+      meetUrl: "",
+      htmlLink: "",
+      status: "SYNC_FAILED",
+      detail: error instanceof Error ? error.message : "Google Calendar could not be reached. The interview stays here.",
+    };
+  }
+}
+

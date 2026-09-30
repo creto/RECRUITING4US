@@ -573,11 +573,17 @@ export function buildIcs(input: {
   location: string;
   status: "CONFIRMED" | "CANCELLED";
   stamp?: Date;
+  attendees?: string[];
 }): string {
   const stamp = input.stamp ?? input.startUtc;
   const fmt = (date: Date) => date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
   const text = (value: string) =>
     value.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
+  const attendeeLines = (input.attendees ?? [])
+    .map((email) => email.trim().toLowerCase())
+    .filter((email) => email.includes("@"))
+    .slice(0, 20)
+    .map((email) => "ATTENDEE;RSVP=TRUE:mailto:" + text(email));
   return [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
@@ -594,6 +600,7 @@ export function buildIcs(input: {
     "DESCRIPTION:" + text(input.description),
     "LOCATION:" + text(input.location),
     "STATUS:" + input.status,
+    ...attendeeLines,
     "END:VEVENT",
     "END:VCALENDAR",
     "",

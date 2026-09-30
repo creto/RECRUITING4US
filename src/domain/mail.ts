@@ -12,7 +12,7 @@ export const DEFAULT_MAIL_TEMPLATES = [
   {
     name: "Interview",
     subject: "Interview for {{job_title}}",
-    body: "Hello {{candidate_name}},\n\n{{company_name}} would like to talk with you about {{job_title}}. A scheduled time, if there is one, is on your candidate portal.\n\n{{recruiter_name}}",
+    body: "Hello {{candidate_name}},\n\n{{company_name}} invited you to an interview for {{job_title}}. The invite includes the date and time (with timezone), Google Meet link when available, attendees, and an Add to Google Calendar link. Details are also on your candidate portal.\n\n{{recruiter_name}}",
   },
   {
     name: "Moving forward",
