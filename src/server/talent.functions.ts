@@ -633,6 +633,7 @@ export const assignAssessment = createServerFn({ method: "POST" })
     startBy: z.string().max(40),
     multiplierBasisPoints: z.number().int().min(10000).max(30000),
     extraSeconds: z.number().int().min(0).max(7200),
+    proctored: z.boolean().optional(),
   }))
   .handler(async ({ context, data }) => {
     const userId = context.userId;
@@ -1114,6 +1115,64 @@ export const recordProctorEvent = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const api = await import("./talent/assess.server");
     return api.recordProctorEvent(context.userId, data);
+  });
+
+export const recordProctorEventByAccess = createServerFn({ method: "POST" })
+  .validator(z.object({
+    accessToken: z.string().min(20).max(500),
+    attemptId: z.string().min(8).max(80),
+    kind: z.string().max(40),
+    detail: z.string().max(300),
+  }))
+  .handler(async ({ data }) => {
+    const { accessToken, ...input } = data;
+    return (await import("./talent/assess.server")).recordProctorEventByAccess(accessToken, input);
+  });
+
+export const readExamLiveChat = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ attemptId: z.string().min(8).max(80) }))
+  .handler(async ({ context, data }) => (await import("./talent/assess.server")).readExamLiveChat(context.userId, data.attemptId) as any);
+
+export const readExamLiveChatByAccess = createServerFn({ method: "POST" })
+  .validator(z.object({ attemptId: z.string().min(8).max(80), accessToken: z.string().min(20).max(500) }))
+  .handler(async ({ data }) => (await import("./talent/assess.server")).readExamLiveChat(null, data.attemptId, data.accessToken) as any);
+
+export const postExamLiveChat = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ attemptId: z.string().min(8).max(80), body: z.string().min(1).max(1000) }))
+  .handler(async ({ context, data }) => (await import("./talent/assess.server")).postExamLiveChat(context.userId, data) as any);
+
+export const postExamLiveChatByAccess = createServerFn({ method: "POST" })
+  .validator(z.object({
+    accessToken: z.string().min(20).max(500),
+    attemptId: z.string().min(8).max(80),
+    body: z.string().min(1).max(1000),
+  }))
+  .handler(async ({ data }) => {
+    const { accessToken, ...input } = data;
+    return (await import("./talent/assess.server")).postExamLiveChat(null, input, accessToken) as any;
+  });
+
+export const pushExamLiveBuffer = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    attemptId: z.string().min(8).max(80),
+    itemId: z.string().min(8).max(80),
+    text: z.string().max(20000),
+  }))
+  .handler(async ({ context, data }) => (await import("./talent/assess.server")).pushExamLiveBuffer(context.userId, data) as any);
+
+export const pushExamLiveBufferByAccess = createServerFn({ method: "POST" })
+  .validator(z.object({
+    accessToken: z.string().min(20).max(500),
+    attemptId: z.string().min(8).max(80),
+    itemId: z.string().min(8).max(80),
+    text: z.string().max(20000),
+  }))
+  .handler(async ({ data }) => {
+    const { accessToken, ...input } = data;
+    return (await import("./talent/assess.server")).pushExamLiveBuffer(null, input, accessToken) as any;
   });
 
 export const getConnectors = createServerFn({ method: "POST" })

@@ -46,7 +46,7 @@ import { candidateItem, answerComplete, coerceAnswer, orderedOptions } from "@/d
 import { isCodingLanguageId, sampleRunBlockedReason } from "@/domain/coding-languages";
 import { readPersonality, scorePersonality, type PersonalityResult } from "@/domain/personality";
 import { ensureReview, rememberEvent } from "./workflows.server";
-import { endAttemptLive, ensureAttemptLive, mirrorAttemptLive, touchAttemptLive } from "./attempt-live.server";
+import { endAttemptLive, ensureAttemptLive, liveTokenForAttempt, mirrorAttemptLive, postAttemptLiveChat, pushAttemptLiveBuffer, readAttemptLiveChat, touchAttemptLive } from "./attempt-live.server";
 import { applicationIdGateHint, assessmentInviteHref, assessmentInvitePath, normalizeApplicationId } from "@/domain/assessment-invite";
 import { applicationPortalPath } from "@/domain/application-portal";
 import { mintAssessAccess, verifyAssessAccess } from "@/domain/assessment-invite-access";
@@ -448,6 +448,7 @@ export async function assignAssessment(
     startBy: string;
     multiplierBasisPoints: number;
     extraSeconds: number;
+    proctored?: boolean;
   },
 ) {
   assertSameSiteRequest();
@@ -472,10 +473,11 @@ export async function assignAssessment(
   await sql`
     insert into assignments (
       id, company_id, application_id, assessment_version_id, status, start_by,
-      duration_seconds, multiplier_basis_points, extra_seconds, invite_token
+      duration_seconds, multiplier_basis_points, extra_seconds, invite_token, proctored
     ) values (
       ${id}, ${actor.companyId}, ${input.applicationId}, ${versions[0].id}, 'INVITED', ${startBy.toISOString()},
-      ${versions[0].duration_seconds}, ${input.multiplierBasisPoints}, ${input.extraSeconds}, ${inviteToken}
+      ${versions[0].duration_seconds}, ${input.multiplierBasisPoints}, ${input.extraSeconds}, ${inviteToken},
+      ${input.proctored === true}
     )
   `;
   const people = await sql<{ email: string; name: string; candidate_name: string; job_title: string }>`
@@ -1041,8 +1043,8 @@ export async function getAttempt(userId: string, attemptId: string) {
       to_char(submitted_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as submitted_at
     from submission_snapshots where attempt_id = ${attemptId}
   `;
-  const release = await sql<{ score_release: string; name: string; instructions: string; proctored: unknown; duration_seconds: number }>`
-    select v.score_release, a.name, v.instructions, v.proctored, v.duration_seconds
+  const release = await sql<{ score_release: string; name: string; instructions: string; version_proctored: unknown; assignment_proctored: unknown; duration_seconds: number }>`
+    select v.score_release, a.name, v.instructions, v.proctored as version_proctored, g.proctored as assignment_proctored, v.duration_seconds
     from attempts t
     join assignments g on g.id = t.assignment_id
     join assessment_versions v on v.id = g.assessment_version_id
@@ -1059,6 +1061,7 @@ export async function getAttempt(userId: string, attemptId: string) {
     if (evals[0]?.status === "FINAL") score = evals[0].basis_points;
   }
   const now = await dbNow();
+  const liveToken = await liveTokenForAttempt(fresh.attempt.company_id, attemptId, fresh.attempt.status);
   return {
     serverNow: now.toISOString(),
     attempt: {
@@ -1070,7 +1073,8 @@ export async function getAttempt(userId: string, attemptId: string) {
     },
     assessmentName: release[0]?.name ?? "Assessment",
     instructions: release[0]?.instructions ?? "",
-    proctored: flag(release[0]?.proctored),
+    proctored: flag(release[0]?.assignment_proctored) || flag(release[0]?.version_proctored),
+    liveToken,
     durationSeconds: Number(release[0]?.duration_seconds ?? 0),
     runner: runnerAvailability(),
     items: items.map((item) => candidateItem({
@@ -1099,24 +1103,34 @@ export async function getAttempt(userId: string, attemptId: string) {
   };
 }
 
-export async function recordProctorEvent(
-  userId: string,
+export async function recordProctorEventByAccess(
+  accessToken: string,
   input: { attemptId: string; kind: string; detail: string },
+) {
+  return recordProctorEvent(null, input, accessToken);
+}
+
+export async function recordProctorEvent(
+  userId: string | null,
+  input: { attemptId: string; kind: string; detail: string },
+  accessToken?: string,
 ) {
   assertSameSiteRequest();
   const kind = proctorKind(input.kind);
   if (!kind) throw new Error("That proctor note is not recognized.");
-  const ctx = await loadOwnedAttempt(userId, input.attemptId);
+  const ctx = userId
+    ? await loadOwnedAttempt(userId, input.attemptId)
+    : await loadAttemptByAccess(input.attemptId, accessToken ?? "");
   if (ctx.attempt.status !== "IN_PROGRESS") return { ok: true, stored: false };
   const sql = await db();
-  const versions = await sql<{ proctored: unknown }>`
-    select v.proctored
+  const versions = await sql<{ version_proctored: unknown; assignment_proctored: unknown }>`
+    select v.proctored as version_proctored, g.proctored as assignment_proctored
     from attempts t
     join assignments g on g.id = t.assignment_id
     join assessment_versions v on v.id = g.assessment_version_id
     where t.id = ${input.attemptId} and t.company_id = ${ctx.attempt.company_id}
   `;
-  if (!flag(versions[0]?.proctored)) return { ok: true, stored: false };
+  if (!flag(versions[0]?.assignment_proctored) && !flag(versions[0]?.version_proctored)) return { ok: true, stored: false };
   if (kind === "HEARTBEAT") {
     const recent = await sql<{ id: string }>`
       select id from proctor_events
@@ -1233,8 +1247,8 @@ export async function getAttemptByAccess(attemptId: string, accessToken: string)
       to_char(submitted_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as submitted_at
     from submission_snapshots where attempt_id = ${attemptId}
   `;
-  const release = await sql<{ score_release: string; name: string; instructions: string; proctored: unknown; duration_seconds: number; application_id: string }>`
-    select v.score_release, a.name, v.instructions, v.proctored, v.duration_seconds, g.application_id
+  const release = await sql<{ score_release: string; name: string; instructions: string; version_proctored: unknown; assignment_proctored: unknown; duration_seconds: number; application_id: string }>`
+    select v.score_release, a.name, v.instructions, v.proctored as version_proctored, g.proctored as assignment_proctored, v.duration_seconds, g.application_id
     from attempts t
     join assignments g on g.id = t.assignment_id
     join assessment_versions v on v.id = g.assessment_version_id
@@ -1251,6 +1265,7 @@ export async function getAttemptByAccess(attemptId: string, accessToken: string)
     if (evals[0]?.status === "FINAL") score = evals[0].basis_points;
   }
   const now = await dbNow();
+  const liveToken = await liveTokenForAttempt(fresh.company_id, attemptId, fresh.status);
   return {
     serverNow: now.toISOString(),
     attempt: {
@@ -1263,7 +1278,8 @@ export async function getAttemptByAccess(attemptId: string, accessToken: string)
     assessmentName: release[0]?.name ?? "Assessment",
     applicationId: release[0]?.application_id ?? null,
     instructions: release[0]?.instructions ?? "",
-    proctored: flag(release[0]?.proctored),
+    proctored: flag(release[0]?.assignment_proctored) || flag(release[0]?.version_proctored),
+    liveToken,
     durationSeconds: Number(release[0]?.duration_seconds ?? 0),
     runner: runnerAvailability(),
     items: items.map((item) => candidateItem({
@@ -2328,4 +2344,59 @@ export async function judgeCodeBoard(userId: string, slug: string) {
     judged: pending.length,
     remaining: Math.max(0, rows.filter((row) => !row.judge_status).length - pending.length),
   };
+}
+
+
+export async function readExamLiveChat(userId: string | null, attemptId: string, accessToken?: string) {
+  const ctx = userId
+    ? await loadOwnedAttempt(userId, attemptId)
+    : await loadAttemptByAccess(attemptId, accessToken ?? "");
+  if (ctx.attempt.status === "IN_PROGRESS") {
+    await touchAttemptLive(ctx.attempt.company_id, attemptId);
+  }
+  return readAttemptLiveChat(ctx.attempt.company_id, attemptId);
+}
+
+export async function postExamLiveChat(
+  userId: string | null,
+  input: { attemptId: string; body: string },
+  accessToken?: string,
+) {
+  assertSameSiteRequest();
+  const ctx = userId
+    ? await loadOwnedAttempt(userId, input.attemptId)
+    : await loadAttemptByAccess(input.attemptId, accessToken ?? "");
+  if (ctx.attempt.status !== "IN_PROGRESS") {
+    return readAttemptLiveChat(ctx.attempt.company_id, input.attemptId);
+  }
+  const people = await (await db())<{ name: string }>`
+    select coalesce(c.name, c.email, 'Candidate') as name
+    from attempts t
+    join assignments g on g.id = t.assignment_id and g.company_id = t.company_id
+    join applications a on a.id = g.application_id and a.company_id = t.company_id
+    join candidates c on c.id = a.candidate_id and c.company_id = t.company_id
+    where t.company_id = ${ctx.attempt.company_id} and t.id = ${input.attemptId}
+    limit 1
+  `;
+  return postAttemptLiveChat(ctx.attempt.company_id, input.attemptId, {
+    body: input.body,
+    author: people[0]?.name ?? "Candidate",
+  });
+}
+
+export async function pushExamLiveBuffer(
+  userId: string | null,
+  input: { attemptId: string; itemId: string; text: string },
+  accessToken?: string,
+) {
+  assertSameSiteRequest();
+  const ctx = userId
+    ? await loadOwnedAttempt(userId, input.attemptId)
+    : await loadAttemptByAccess(input.attemptId, accessToken ?? "");
+  if (ctx.attempt.status !== "IN_PROGRESS") return { ok: false as const };
+  const result = await pushAttemptLiveBuffer(ctx.attempt.company_id, input.attemptId, {
+    itemId: input.itemId,
+    text: input.text,
+  });
+  return { ok: Boolean(result), revision: result?.revision ?? 0, liveToken: result?.token ?? null };
 }

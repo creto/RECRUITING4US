@@ -63,6 +63,7 @@ function Assessments() {
   );
   const [sendApplicationId, setSendApplicationId] = useState("");
   const [sendAssessmentId, setSendAssessmentId] = useState("");
+  const [sendProctored, setSendProctored] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const preview = useAuthed(
     () => previewAssessment({ data: { slug: companySlug, assessmentId: previewId ?? "" } }) as Promise<AssessmentPreview>,
@@ -93,6 +94,7 @@ function Assessments() {
           startBy: new Date(Date.now() + 14 * 86400000).toISOString(),
           multiplierBasisPoints: 10000,
           extraSeconds: 0,
+          proctored: sendProctored,
         },
       });
       const path = result.invitePath || (result.inviteToken ? `/assess/${result.inviteToken}` : "");
@@ -267,7 +269,12 @@ function Assessments() {
             <input className={inputClass} value={sendApplicationId} onChange={(event) => setSendApplicationId(event.target.value)} placeholder="Application id" />
           </Field>
           <Field label="Published assessment">
-            <select className={inputClass} value={sendAssessmentId} onChange={(event) => setSendAssessmentId(event.target.value)}>
+            <select className={inputClass} value={sendAssessmentId} onChange={(event) => {
+              const id = event.target.value;
+              setSendAssessmentId(id);
+              const picked = published.find((test: { id?: string; proctored?: unknown }) => String(test.id) === id);
+              if (picked && typeof picked.proctored === "boolean") setSendProctored(Boolean(picked.proctored));
+            }}>
               <option value="">Choose</option>
               {published.map((test: { id?: string; name?: string }) => (
                 <option key={String(test.id)} value={String(test.id)}>{String(test.name)}</option>
@@ -275,6 +282,10 @@ function Assessments() {
             </select>
           </Field>
           {published.length === 0 ? <p className="text-sm text-muted md:col-span-2">Publish an assessment before sending it.</p> : null}
+          <label className="flex min-h-11 items-center gap-2 text-sm md:col-span-2">
+            <input type="checkbox" checked={sendProctored} onChange={(event) => setSendProctored(event.target.checked)} />
+            Proctor this send (camera on, focus and clipboard noted, no video stored)
+          </label>
           <div>
             <Button type="submit" disabled={published.length === 0}>Send assessment</Button>
           </div>

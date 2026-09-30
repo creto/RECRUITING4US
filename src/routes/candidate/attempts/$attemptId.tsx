@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link, useRouterState } from "@tanstack/react-router";
-import { getAttempt, getAttemptByAccess, requestSampleRun, requestSampleRunByAccess, saveResponse, saveResponseByAccess, submitAttempt, submitAttemptByAccess } from "@/server/talent.functions";
+import { getAttempt, getAttemptByAccess, postExamLiveChat, postExamLiveChatByAccess, pushExamLiveBuffer, pushExamLiveBufferByAccess, readExamLiveChat, readExamLiveChatByAccess, requestSampleRun, requestSampleRunByAccess, saveResponse, saveResponseByAccess, submitAttempt, submitAttemptByAccess } from "@/server/talent.functions";
 import { questionIndex, saveStatusLabel } from "@/domain/rules";
 import { ExamProctor } from "@/components/talent/proctor";
-import { ExamDesk, PersonalityCard, examPaper } from "@/components/talent/exam-shell";
+import { ExamDesk, ExamLiveChat, PersonalityCard, examPaper, type ExamChatLine } from "@/components/talent/exam-shell";
 import { answerComplete, type SavedAnswer } from "@/domain/candidate-view";
 import { Alert, AppLink, Loading, PageTitle, useAuthed, when } from "@/components/talent/kit";
 import { readAssessAccess, takeAssessAccessFromSearch } from "@/domain/assess-access-storage";
@@ -37,6 +37,7 @@ type AttemptView = {
   instructions: string;
   runner: { available: boolean; reason: string; mode?: string };
   proctored: boolean;
+  liveToken?: string | null;
   durationSeconds: number;
   attempt: { id: string; status: string; deadline: string; startedAt: string; reason: string | null };
   items: Item[];
@@ -173,15 +174,44 @@ function Taker({ view, accessToken }: { view: AttemptView; accessToken?: string 
   revisionsRef.current = revisions;
   saveRef.current = saveState;
   const [cameraReady, setCameraReady] = useState(!view.proctored);
+  const [chatLines, setChatLines] = useState<ExamChatLine[]>([]);
+  const [chatDraft, setChatDraft] = useState("");
+  const [chatNotice, setChatNotice] = useState<string | null>(null);
+  const liveTimers = useRef<Record<string, number>>({});
   const item = view.items[index];
   const locked = view.proctored && !cameraReady;
 
   useEffect(() => {
     const handles = timers.current;
+    const liveHandles = liveTimers.current;
     return () => {
       for (const timer of Object.values(handles)) window.clearTimeout(timer);
+      for (const timer of Object.values(liveHandles)) window.clearTimeout(timer);
     };
   }, []);
+
+  useEffect(() => {
+    let live = true;
+    function loadChat() {
+      const req = accessToken
+        ? readExamLiveChatByAccess({ data: { attemptId: view.attempt.id, accessToken } })
+        : readExamLiveChat({ data: { attemptId: view.attempt.id } });
+      req.then((row) => {
+        if (!live) return;
+        setChatLines((row.chat ?? []) as ExamChatLine[]);
+        setChatNotice(null);
+      }).catch((err: unknown) => {
+        if (!live) return;
+        setChatNotice(err instanceof Error ? err.message : "Chat could not load.");
+      });
+    }
+    loadChat();
+    const timer = window.setInterval(loadChat, 2500);
+    return () => {
+      live = false;
+      window.clearInterval(timer);
+    };
+  }, [view.attempt.id, accessToken]);
 
   async function persist(next: Item, answer: Answer, expected: number): Promise<number> {
     setSaveState((current) => ({ ...current, [next.id]: "saving" }));
@@ -238,6 +268,35 @@ function Taker({ view, accessToken }: { view: AttemptView; accessToken?: string 
       setSaveState((current) => ({ ...current, [itemId]: "unsaved" }));
       void persist(item, answer, revisionsRef.current[itemId] ?? 0);
     }, answerComplete(itemType, answer) ? 80 : 450);
+    if ((itemType === "code" || itemType === "sql" || itemType === "text") && typeof answer.text === "string") {
+      const liveExisting = liveTimers.current[itemId];
+      if (liveExisting) window.clearTimeout(liveExisting);
+      const bufferText = answer.text;
+      liveTimers.current[itemId] = window.setTimeout(() => {
+        delete liveTimers.current[itemId];
+        const push = accessToken
+          ? pushExamLiveBufferByAccess({ data: { accessToken, attemptId: view.attempt.id, itemId, text: bufferText } })
+          : pushExamLiveBuffer({ data: { attemptId: view.attempt.id, itemId, text: bufferText } });
+        void push.catch(() => {
+          // Live pad is best-effort; saving the answer still works.
+        });
+      }, 400);
+    }
+  }
+
+  function sendChat() {
+    const body = chatDraft.trim();
+    if (!body) return;
+    setChatNotice(null);
+    const req = accessToken
+      ? postExamLiveChatByAccess({ data: { accessToken, attemptId: view.attempt.id, body } })
+      : postExamLiveChat({ data: { attemptId: view.attempt.id, body } });
+    req.then((row) => {
+      setChatLines((row.chat ?? []) as ExamChatLine[]);
+      setChatDraft("");
+    }).catch((err: unknown) => {
+      setChatNotice(err instanceof Error ? err.message : "Could not send chat.");
+    });
   }
 
   async function flushCurrent() {
@@ -317,7 +376,7 @@ function Taker({ view, accessToken }: { view: AttemptView; accessToken?: string 
 
   return (
     <div className="space-y-4">
-      {view.proctored ? <ExamProctor liveAttemptId={view.attempt.id} onCamera={setCameraReady} /> : null}
+      {view.proctored ? <ExamProctor liveAttemptId={view.attempt.id} accessToken={accessToken} onCamera={setCameraReady} /> : null}
       {locked ? <Alert>Allow the camera to see the questions. The picture stays on this device and is not uploaded.</Alert> : (
         <ExamClock
           view={view}
@@ -329,6 +388,11 @@ function Taker({ view, accessToken }: { view: AttemptView; accessToken?: string 
           item={item}
           runnerNote={runnerNote}
           runnerOk={runnerOk}
+          chatLines={chatLines}
+          chatDraft={chatDraft}
+          chatNotice={chatNotice}
+          onChatDraft={setChatDraft}
+          onChatSend={sendChat}
           onSelect={(next) => {
             setIndex(next);
             void flushCurrent();
@@ -359,7 +423,7 @@ function Taker({ view, accessToken }: { view: AttemptView; accessToken?: string 
 }
 
 function ExamClock({
-  view, index, answers, saveState, unanswered, error, item, runnerNote, runnerOk, onSelect, onAnswer, onSubmit, onSample,
+  view, index, answers, saveState, unanswered, error, item, runnerNote, runnerOk, chatLines, chatDraft, chatNotice, onChatDraft, onChatSend, onSelect, onAnswer, onSubmit, onSample,
 }: {
   view: AttemptView;
   index: number;
@@ -370,6 +434,11 @@ function ExamClock({
   item: Item;
   runnerNote: string | null;
   runnerOk: boolean | null;
+  chatLines: ExamChatLine[];
+  chatDraft: string;
+  chatNotice: string | null;
+  onChatDraft: (value: string) => void;
+  onChatSend: () => void;
   onSelect: (next: number) => void;
   onAnswer: (answer: Answer) => void;
   onSubmit: () => void;
@@ -392,6 +461,15 @@ function ExamClock({
         onSelect={onSelect}
         onAnswer={onAnswer}
         onSubmit={onSubmit}
+        livePanel={
+          <ExamLiveChat
+            lines={chatLines}
+            draft={chatDraft}
+            onDraft={onChatDraft}
+            onSend={onChatSend}
+            notice={chatNotice}
+          />
+        }
         toolbar={item.type === "code" ? (
           <div className="space-y-2">
             <button type="button" className="min-h-10 w-full rounded-full border border-line px-3 text-xs" onClick={onSample}>

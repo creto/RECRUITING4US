@@ -1028,7 +1028,6 @@ export async function listCandidates(
     history: unknown;
     years: number | null;
     is_indexed: boolean;
-    indexed_text: string | null;
     answers_text: string | null;
     website: string | null;
     knockout: string | null;
@@ -1043,8 +1042,7 @@ export async function listCandidates(
         where ct.candidate_id = c.id and ct.company_id = c.company_id
       ) as tags,
       profile.titles, profile.skills, profile.education, profile.locations, profile.history, profile.years,
-      (coalesce(trim(profile.indexed_text), '') <> '') as is_indexed,
-      case when ${searching} then profile.indexed_text else null end as indexed_text,
+      profile.is_indexed,
       case when ${searching} then (
         select string_agg(aa.value::text, ' ')
         from application_answers aa
@@ -1072,7 +1070,8 @@ export async function listCandidates(
       ) as application_lines
     from candidates c
     left join lateral (
-      select p.titles, p.skills, p.education, p.locations, p.history, p.years, p.indexed_text
+      select p.titles, p.skills, p.education, p.locations, p.history, p.years,
+        (coalesce(trim(p.indexed_text), '') <> '') as is_indexed
       from candidate_profiles p
       join applications a on a.id = p.application_id and a.company_id = p.company_id
       where a.candidate_id = c.id and p.company_id = c.company_id
@@ -1089,20 +1088,20 @@ export async function listCandidates(
         )
       )
     order by c.created_at desc
-    limit 100
+    limit 50
   `;
   const location = (input.location ?? "").trim();
   const education = (input.education ?? "").trim();
   const criteria = (input.criteria ?? "").trim();
   return rows.filter((row) => {
     const lines = applicationLines(row.application_lines);
-    const haystack = `${row.name}\n${row.email}\n${row.indexed_text ?? ""}\n${row.answers_text ?? ""}\n${lines.map((line) => line.id).join(" ")}`;
+    const haystack = `${row.name}\n${row.email}\n${row.answers_text ?? ""}\n${lines.map((line) => line.id).join(" ")}`;
     if (compiled && "match" in compiled && !compiled.match(haystack)) return false;
     if (location && !termPresent(`${stringList(row.locations).join(" ")} ${haystack}`, location)) return false;
     if (education && !termPresent(`${stringList(row.education).join(" ")} ${haystack}`, education)) return false;
     if (criteria && !termPresent(haystack, criteria)) return false;
     return true;
-  }).slice(0, 100).map((row) => ({
+  }).slice(0, 50).map((row) => ({
     id: row.id,
     name: row.name,
     email: row.email,

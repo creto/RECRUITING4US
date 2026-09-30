@@ -227,3 +227,140 @@ export async function listActiveAttempts(userId: string, slug: string) {
   }
   return { items, polledAt: new Date().toISOString() };
 }
+
+
+/** Create the pad if missing; do not rebuild source when it already exists (keeps typing buffer). */
+async function ensureAttemptLiveSession(companyId: string, attemptId: string): Promise<{ token: string; id: string } | null> {
+  enterTenant({ companyId, publicSlug: "" });
+  const sql = await db();
+  const existing = await sql<{ id: string; token: string; status: string }>`
+    select id, token, status from live_sessions
+    where company_id = ${companyId} and attempt_id = ${attemptId}
+    limit 1
+  `;
+  if (existing[0]) {
+    if (existing[0].status === "ENDED") {
+      await sql`
+        update live_sessions set status = 'LIVE'
+        where company_id = ${companyId} and id = ${existing[0].id}
+      `;
+    }
+    return { token: existing[0].token, id: existing[0].id };
+  }
+  return ensureAttemptLive(companyId, attemptId);
+}
+
+/** Push the in-progress editor buffer so /live/$token shows typing before save. */
+export async function pushAttemptLiveBuffer(
+  companyId: string,
+  attemptId: string,
+  input: { text: string; itemId: string },
+): Promise<{ revision: number; token: string } | null> {
+  try {
+    enterTenant({ companyId, publicSlug: "" });
+    const ensured = await ensureAttemptLiveSession(companyId, attemptId);
+    if (!ensured) return null;
+    const sql = await db();
+    const items = await sql<{ id: string; position: number; type: string }>`
+      select i.id, i.position, q.type
+      from attempt_items i
+      join question_versions v on v.id = i.question_version_id
+      join questions q on q.id = v.question_id
+      where i.company_id = ${companyId} and i.attempt_id = ${attemptId} and i.id = ${input.itemId}
+      limit 1
+    `;
+    const item = items[0];
+    if (!item) return null;
+    const ext = item.type === "sql" ? "sql" : item.type === "code" ? "js" : item.type === "text" ? "md" : null;
+    if (!ext) return null;
+    const fileName = `q${item.position}.${ext}`;
+    const text = input.text.slice(0, 20000);
+    const sessions = await sql<{ revision: number; files: unknown; active_file: string }>`
+      select revision, files, active_file from live_sessions
+      where company_id = ${companyId} and id = ${ensured.id}
+    `;
+    const session = sessions[0];
+    if (!session) return null;
+    const files = Array.isArray(session.files) ? [...(session.files as { name: string; body: string }[])] : [];
+    const nextFiles = files.map((file) => (file.name === fileName ? { ...file, body: text } : file));
+    if (!nextFiles.some((file) => file.name === fileName)) {
+      nextFiles.push({ name: fileName, body: text });
+    }
+    const activeFile = session.active_file === fileName || item.type === "code" || item.type === "sql"
+      ? fileName
+      : session.active_file;
+    const updated = await sql<{ revision: number }>`
+      update live_sessions
+      set source = ${text},
+          files = ${json(nextFiles)}::jsonb,
+          active_file = ${activeFile},
+          revision = revision + 1
+      where company_id = ${companyId} and id = ${ensured.id}
+      returning revision
+    `;
+    await sql`
+      update live_people set last_seen = now()
+      where company_id = ${companyId} and session_id = ${ensured.id} and role = 'CANDIDATE'
+    `;
+    return { revision: updated[0]?.revision ?? session.revision + 1, token: ensured.token };
+  } catch (error) {
+    console.error("attempt live buffer", error instanceof Error ? error.message.slice(0, 200) : "failed");
+    return null;
+  }
+}
+
+/** Read public chat lines for an attempt live pad (no private interviewer notes). */
+export async function readAttemptLiveChat(companyId: string, attemptId: string) {
+  enterTenant({ companyId, publicSlug: "" });
+  const sql = await db();
+  const sessions = await sql<{ id: string; token: string }>`
+    select id, token from live_sessions
+    where company_id = ${companyId} and attempt_id = ${attemptId}
+    limit 1
+  `;
+  if (!sessions[0]) {
+    const ensured = await ensureAttemptLive(companyId, attemptId);
+    if (!ensured) return { liveToken: null as string | null, chat: [] as { author: string; body: string }[] };
+    return { liveToken: ensured.token, chat: [] as { author: string; body: string }[] };
+  }
+  const chat = await sql<{ author: string; body: string }>`
+    select author, body from live_chat
+    where company_id = ${companyId} and session_id = ${sessions[0].id} and private_note = false
+    order by created_at asc
+    limit 200
+  `;
+  return { liveToken: sessions[0].token, chat };
+}
+
+/** Candidate posts a chat line on the attempt live pad (server-side; no staff auth). */
+export async function postAttemptLiveChat(
+  companyId: string,
+  attemptId: string,
+  input: { body: string; author: string },
+) {
+  enterTenant({ companyId, publicSlug: "" });
+  const body = input.body.trim().slice(0, 1000);
+  if (!body) return readAttemptLiveChat(companyId, attemptId);
+  const ensured = await ensureAttemptLiveSession(companyId, attemptId);
+  if (!ensured) return { liveToken: null as string | null, chat: [] as { author: string; body: string }[] };
+  const sql = await db();
+  await sql`
+    insert into live_chat (id, company_id, session_id, author, body, private_note)
+    values (${nid()}, ${companyId}, ${ensured.id}, ${input.author.slice(0, 120)}, ${body}, false)
+  `;
+  return readAttemptLiveChat(companyId, attemptId);
+}
+
+/** Resolve live token for an open attempt (create pad if needed). */
+export async function liveTokenForAttempt(companyId: string, attemptId: string, status: string): Promise<string | null> {
+  if (status !== "IN_PROGRESS") {
+    const sql = await db();
+    enterTenant({ companyId, publicSlug: "" });
+    const rows = await sql<{ token: string }>`
+      select token from live_sessions where company_id = ${companyId} and attempt_id = ${attemptId} limit 1
+    `;
+    return rows[0]?.token ?? null;
+  }
+  const ensured = await ensureAttemptLive(companyId, attemptId);
+  return ensured?.token ?? null;
+}

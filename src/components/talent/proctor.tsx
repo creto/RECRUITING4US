@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { proctorKind, type ProctorKind } from "@/domain/proctor";
-import { recordProctorEvent } from "@/server/talent.functions";
+import { recordProctorEvent, recordProctorEventByAccess } from "@/server/talent.functions";
 
 type FaceBox = { boundingBox?: { x: number; y: number; width: number; height: number } };
 
@@ -20,9 +20,11 @@ function detector(): Detector | null {
 
 export function ExamProctor({
   liveAttemptId,
+  accessToken,
   onCamera,
 }: {
   liveAttemptId?: string;
+  accessToken?: string;
   onCamera?: (ready: boolean) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -45,7 +47,10 @@ export function ExamProctor({
       return [{ id, text }, ...current].slice(0, 6);
     });
     if (!liveAttemptId) return;
-    void recordProctorEvent({ data: { attemptId: liveAttemptId, kind, detail } }).catch(() => {
+    const req = accessToken
+      ? recordProctorEventByAccess({ data: { accessToken, attemptId: liveAttemptId, kind, detail } })
+      : recordProctorEvent({ data: { attemptId: liveAttemptId, kind, detail } });
+    void req.catch(() => {
       setLog((current) => {
         const text = "A proctor note could not be saved.";
         if (current[0]?.text === text) return current;

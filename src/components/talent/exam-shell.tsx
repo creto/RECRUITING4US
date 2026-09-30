@@ -1,4 +1,4 @@
-import { memo, useState, type ReactNode } from "react";
+import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { answerComplete, type SavedAnswer } from "@/domain/candidate-view";
 import { ProblemPrompt } from "@/components/talent/code-block";
 import {
@@ -43,6 +43,7 @@ export function ExamDesk({
   onSubmit,
   submitLabel = "Submit",
   toolbar,
+  livePanel,
 }: {
   kicker: string;
   title: string;
@@ -60,6 +61,7 @@ export function ExamDesk({
   onSubmit?: () => void;
   submitLabel?: string;
   toolbar?: ReactNode;
+  livePanel?: ReactNode;
 }) {
   const [blocked, setBlocked] = useState<string | null>(null);
   const item = items[index];
@@ -107,7 +109,7 @@ export function ExamDesk({
         </div>
         <TimeRing secondsLeft={secondsLeft} totalSeconds={totalSeconds} />
       </div>
-      <div className="grid gap-0 lg:grid-cols-[232px_1fr]">
+      <div className={`grid gap-0 ${livePanel ? "lg:grid-cols-[200px_1fr_240px]" : "lg:grid-cols-[232px_1fr]"}`}>
         <aside className="border-t border-line px-4 py-4 lg:border-r lg:border-t-0">
           <p className="px-1 text-[11px] uppercase tracking-[0.18em] text-[#44574e]">{answeredCount} of {items.length} answered</p>
           <div className="mt-3 flex gap-2 overflow-x-auto pb-1 lg:grid lg:max-h-[28rem] lg:grid-cols-5 lg:overflow-y-auto" aria-label="Questions">
@@ -172,6 +174,11 @@ export function ExamDesk({
             </div>
           ) : null}
         </div>
+      {livePanel ? (
+        <aside className="border-t border-line px-4 py-4 lg:border-l lg:border-t-0">
+          {livePanel}
+        </aside>
+      ) : null}
       </div>
       {instructions ? <p className="border-t border-[#d7e1da] bg-[#f7faf8] px-5 py-3 text-xs leading-relaxed text-[#44574e] sm:px-7">{instructions}</p> : null}
     </section>
@@ -466,4 +473,57 @@ function formatClock(totalSeconds: number) {
   const seconds = totalSeconds % 60;
   const clock = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   return hours > 0 ? `${hours}:${clock}` : clock;
+}
+
+
+export type ExamChatLine = { author: string; body: string };
+
+/** Candidate-side chat against the attempt live_session (works for guest ?access= too). */
+export function ExamLiveChat({
+  lines,
+  draft,
+  onDraft,
+  onSend,
+  notice,
+}: {
+  lines: ExamChatLine[];
+  draft: string;
+  onDraft: (value: string) => void;
+  onSend: () => void;
+  notice?: string | null;
+}) {
+  const bottom = useRef<HTMLUListElement | null>(null);
+  useEffect(() => {
+    bottom.current?.scrollTo({ top: bottom.current.scrollHeight });
+  }, [lines.length]);
+  return (
+    <div className="flex h-full min-h-[16rem] flex-col">
+      <p className="text-[11px] uppercase tracking-[0.18em] text-[#44574e]">Live chat</p>
+      <p className="mt-1 text-xs text-[#44574e]">Messages reach the recruiter watching this attempt. Private interviewer notes stay with them.</p>
+      <ul ref={bottom} className="mt-3 max-h-48 flex-1 space-y-2 overflow-auto text-sm text-[#17211c]">
+        {lines.length === 0 ? <li className="text-[#44574e]">No messages yet.</li> : null}
+        {lines.map((line, index) => (
+          <li key={`${line.author}-${index}`} className="rounded-xl border border-[#d7e1da] bg-[#f7faf8] px-3 py-2">
+            <span className="font-medium">{line.author}: </span>{line.body}
+          </li>
+        ))}
+      </ul>
+      {notice ? <p className="mt-2 text-xs text-[#9f1239]" role="status">{notice}</p> : null}
+      <label className="mt-3 block text-xs text-[#44574e]" htmlFor="exam-live-chat">Message</label>
+      <textarea
+        id="exam-live-chat"
+        className="mt-1 min-h-16 w-full rounded-xl border border-[#d7e1da] bg-white px-3 py-2 text-sm text-[#17211c] outline-none focus:border-[#4c6b16]"
+        value={draft}
+        onChange={(event) => onDraft(event.target.value)}
+      />
+      <button
+        type="button"
+        className="mt-2 min-h-10 w-full rounded-full bg-[#cefa90] px-3 text-sm font-medium text-[#14221b] disabled:opacity-40"
+        disabled={!draft.trim()}
+        onClick={onSend}
+      >
+        Send
+      </button>
+    </div>
+  );
 }

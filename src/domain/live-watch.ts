@@ -57,7 +57,7 @@ export function buildAttemptLivePad(input: {
     `${input.candidateName} · ${input.jobTitle}`,
     `Progress: ${answered} of ${total} answered.`,
     "",
-    "This pad mirrors the open exam. Answers update when the candidate saves. Watching does not change a score.",
+    "This pad mirrors the open exam. Code updates as the candidate types. Watching does not change a score.",
     "",
   ];
   const files: AttemptLiveFile[] = [];
@@ -85,7 +85,7 @@ export function buildAttemptLivePad(input: {
   const activeFile = codeFile?.name ?? "progress.md";
   const source = files.find((file) => file.name === activeFile)?.body ?? files[0]!.body;
   return {
-    prompt: `${input.assessmentName}\n\nLive exam watch for ${input.candidateName} (${input.jobTitle}). Answers appear here as they save. This does not change a score.`,
+    prompt: `${input.assessmentName}\n\nLive exam watch for ${input.candidateName} (${input.jobTitle}). Code appears here as they type. This does not change a score.`,
     files,
     activeFile,
     source,
