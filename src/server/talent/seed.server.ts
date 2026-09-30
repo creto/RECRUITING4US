@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { calculateWeightedScore } from "@/domain/rules";
+import { CODING_LANGUAGE_IDS } from "@/domain/coding-languages";
 import { enterTenant } from "@/lib/tenant";
 import { audit, db, json, requireUser } from "./db.server";
 
@@ -318,7 +319,7 @@ export async function seedDemo(userId: string) {
     "dedupe",
     "code",
     "Implement deduplicateEvents(events, windowMs). Keep the first event for an id. Drop a later event for that id when its timestamp is within windowMs, inclusive, of the last retained event. A dropped event must not extend the window. Submitted answers are judged in a separate process and ranked by estimated time class, then space, then measured time. A wrong answer does not rank above a correct one. A sample run is not that score.\n\nSample: [{id:a,timestampMs:0},{id:a,timestampMs:5},{id:b,timestampMs:6},{id:a,timestampMs:10},{id:a,timestampMs:11}] with a 10ms window retains the events at 0, 6, and 11.",
-    { mode: "code", languages: ["typescript"] },
+    { mode: "code", languages: [...CODING_LANGUAGE_IDS] },
     {},
     1,
   );

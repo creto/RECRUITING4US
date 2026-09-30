@@ -62,8 +62,10 @@ export function describeSavedAnswer(input: {
   }
   const text = typeof answer?.text === "string" ? answer.text.trim() : "";
   if (!text) return empty(input.submitted, points, false);
-  if (!input.submitted) return { text, result: "saved", earned: null, possible: points };
-  return { text, result: "pending", earned: null, possible: points };
+  const language = typeof answer?.language === "string" && answer.language.trim() ? answer.language.trim() : "";
+  const labeled = language ? `[${language}]\n${text}` : text;
+  if (!input.submitted) return { text: labeled, result: "saved", earned: null, possible: points };
+  return { text: labeled, result: "pending", earned: null, possible: points };
 }
 
 export function responseResultLabel(input: { result: ResponseResult; earned: number | null; possible: number }): string {
@@ -90,7 +92,7 @@ function graded(text: string, credit: number, points: number) {
   };
 }
 
-function asRecord(value: unknown): { optionId?: unknown; optionIds?: unknown; value?: unknown; text?: unknown } | null {
+function asRecord(value: unknown): { optionId?: unknown; optionIds?: unknown; value?: unknown; text?: unknown; language?: unknown } | null {
   if (!value || typeof value !== "object") return null;
-  return value as { optionId?: unknown; optionIds?: unknown; value?: unknown; text?: unknown };
+  return value as { optionId?: unknown; optionIds?: unknown; value?: unknown; text?: unknown; language?: unknown };
 }

@@ -19,7 +19,7 @@ const WRITE_FN = /^Write\s+(\w+\([^\n;`]*\))(?:\s+that\b|\s*\.|\s+)([\s\S]*)$/i;
 const EXAMPLE_HEAD = /^(examples?|sample|samples|input\/output)\s*:?\s*$/i;
 const SECTION_HEAD = /^(constraints?|rules?|notes?|follow[- ]?up|topics?)\s*:?\s*$/i;
 const NOTE_START =
-  /^(use the language of the editor|these prompts were written|these items are original|a correct result for the stated rules|state the approach)/i;
+  /^(use the language of the editor|use any supported programming language|these prompts were written|these items are original|a correct result for the stated rules|state the approach)/i;
 
 export function splitInline(text: string): InlinePiece[] {
   const pieces: InlinePiece[] = [];

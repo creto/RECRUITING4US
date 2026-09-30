@@ -29,7 +29,7 @@ ${task}
 Example
 ${example}
 
-Use the language of the editor. A correct result for the stated rules is what a reviewer grades. State the approach in a short comment if the code is not obvious. These prompts were written for this bank. They are not items from another site.`,
+Use any supported programming language in the editor. A correct result for the stated rules is what a reviewer grades. State the approach in a short comment if the code is not obvious. These prompts were written for this bank. They are not items from another site.`,
   };
 }
 

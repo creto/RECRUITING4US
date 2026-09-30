@@ -75,3 +75,20 @@ describe("choice options", () => {
     assert.equal(answerComplete("text", { text: "A boundary check." }), true);
   });
 });
+
+describe("coding language on answers", () => {
+  it("persists the chosen coding language with the source", () => {
+    const item = candidateItem({
+      id: "c1",
+      position: 0,
+      points: 2,
+      prompt: "Write `cratePair()`.",
+      type: "code",
+      section: "Medium",
+      answer: { text: "def cratePair(*args):\n    return None\n", language: "python" },
+      revision: 1,
+    });
+    assert.equal(item.answer?.language, "python");
+    assert.equal(answerComplete("code", item.answer), true);
+  });
+});

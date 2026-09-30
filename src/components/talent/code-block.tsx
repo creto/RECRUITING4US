@@ -87,7 +87,7 @@ function BlockView({ block }: { block: PromptBlock }) {
     return (
       <div className="space-y-2">
         <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-[#4c6b16]">Function signature</p>
-        <CodeBlock code={block.text} language="typescript" />
+        <CodeBlock code={block.text} language="signature" />
       </div>
     );
   }

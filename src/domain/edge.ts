@@ -60,6 +60,6 @@ export function runnerAvailability(): { available: true; mode: "network-namespac
     available: true,
     mode: "network-namespace",
     reason:
-      "JavaScript runs in a separate process inside a network namespace, with Node's permission model denying files, child processes, and workers. Memory and CPU are capped. This is not a hypervisor and not a remote judge. A timeout or infrastructure failure is not a score.",
+      "Write code in any supported language. Sample runs execute JavaScript/TypeScript in a separate Node process inside a network namespace (files, child processes, and workers denied; memory and CPU capped). Other languages are saved as text for human grading and are not executed. This is not a hypervisor and not a remote judge. A timeout or infrastructure failure is not a score.",
   };
 }

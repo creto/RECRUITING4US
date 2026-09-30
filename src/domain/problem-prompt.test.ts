@@ -22,7 +22,7 @@ Return the indexes of two different crates whose weights add up to capacity.
 Example
 cratePair([4, 7, 1, 8, 3], 11) returns [1, 4] because 7 + 3 = 11.
 
-Use the language of the editor. A correct result for the stated rules is what a reviewer grades. These prompts were written for this bank. They are not items from another site.`;
+Use any supported programming language in the editor. A correct result for the stated rules is what a reviewer grades. These prompts were written for this bank. They are not items from another site.`;
     const blocks = parseProblemPrompt(prompt);
     assert.equal(blocks[0]?.kind, "title");
     assert.equal(blocks[0] && blocks[0].kind === "title" ? blocks[0].text : "", "Crate pair");
@@ -65,7 +65,7 @@ ${"Long task. ".repeat(40)}
 Example
 fn() returns 1.
 
-Use the language of the editor. These prompts were written for this bank.`;
+Use any supported programming language in the editor. These prompts were written for this bank.`;
     const blocks = parseProblemPrompt(prompt, { compact: true });
     assert.equal(blocks.some((b) => b.kind === "note"), false);
     assert.ok(blocks.some((b) => b.kind === "signature"));

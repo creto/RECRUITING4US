@@ -3,6 +3,8 @@ export type SavedAnswer = {
   optionIds?: string[];
   value?: string;
   text?: string;
+  /** Write-code language chosen by the candidate. */
+  language?: string;
 };
 
 export type CandidateItem = {
@@ -58,6 +60,7 @@ function savedAnswer(value: unknown): SavedAnswer | null {
   }
   if (typeof record.value === "string") answer.value = record.value;
   if (typeof record.text === "string") answer.text = record.text;
+  if (typeof record.language === "string" && record.language.trim()) answer.language = record.language.trim();
   return Object.keys(answer).length ? answer : null;
 }
 

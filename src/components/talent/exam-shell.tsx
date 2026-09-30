@@ -1,6 +1,14 @@
 import { memo, useState, type ReactNode } from "react";
 import { answerComplete, type SavedAnswer } from "@/domain/candidate-view";
 import { ProblemPrompt } from "@/components/talent/code-block";
+import {
+  CODING_LANGUAGES,
+  codingLanguage,
+  entryNameFromPrompt,
+  isStarterOrEmpty,
+  starterForLanguage,
+  type CodingLanguageId,
+} from "@/domain/coding-languages";
 
 export type ExamCard = {
   id: string;
@@ -252,11 +260,11 @@ function AnswerSurface({
       </label>
     );
   }
-  if (item.type === "code" || item.type === "sql") {
+  if (item.type === "sql") {
     return (
       <label className="block overflow-hidden rounded-2xl border border-[#2a3530] bg-[#15201b]">
         <span className="flex items-center justify-between border-b border-[#2f3d36] bg-[#1b2822] px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[#8fb59a]">
-          {item.type === "sql" ? "query.sql" : "solution.js"}
+          query.sql
           <span className="normal-case tracking-normal text-[#6f8f7c]">Your answer</span>
         </span>
         <textarea
@@ -268,6 +276,9 @@ function AnswerSurface({
         />
       </label>
     );
+  }
+  if (item.type === "code") {
+    return <CodeAnswerSurface item={item} answer={answer} closed={closed} onAnswer={onAnswer} />;
   }
   return (
     <label className="block">
@@ -345,6 +356,87 @@ export function PersonalityCard({
         </ul>
         <p className="text-xs text-[#44574e]">{personality.note}</p>
       </div>
+    </div>
+  );
+}
+
+function CodeAnswerSurface({
+  item,
+  answer,
+  closed,
+  onAnswer,
+}: {
+  item: ExamCard;
+  answer: SavedAnswer | undefined;
+  closed: boolean;
+  onAnswer: (answer: SavedAnswer) => void;
+}) {
+  const entry = entryNameFromPrompt(item.prompt);
+  const languageId = codingLanguage(answer?.language).id;
+  const meta = codingLanguage(languageId);
+
+  function pickLanguage(nextId: CodingLanguageId) {
+    if (nextId === languageId) return;
+    const currentText = answer?.text ?? "";
+    const dirty = !isStarterOrEmpty(currentText, languageId, entry);
+    if (dirty) {
+      const ok = window.confirm(
+        `Replace your ${meta.label} answer with the ${codingLanguage(nextId).label} starter? Your current code will be lost.`,
+      );
+      if (!ok) return;
+    }
+    onAnswer({ text: starterForLanguage(nextId, entry), language: nextId });
+  }
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-[#2a3530] bg-[#15201b]">
+      <div className="flex flex-wrap items-center gap-2 border-b border-[#2f3d36] bg-[#1b2822] px-3 py-1.5">
+        <label className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#8fb59a]">
+          <span className="sr-only">Language</span>
+          <select
+            disabled={closed}
+            aria-label="Programming language"
+            className="rounded-md border border-[#2f3d36] bg-[#15201b] px-2 py-1 font-mono text-[11px] normal-case tracking-normal text-[#e8f0ea] outline-none disabled:opacity-50"
+            value={languageId}
+            onChange={(event) => pickLanguage(event.target.value as CodingLanguageId)}
+          >
+            {CODING_LANGUAGES.map((row) => (
+              <option key={row.id} value={row.id}>
+                {row.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#8fb59a]">{meta.filename}</span>
+        <span className="ml-auto font-mono text-[10px] normal-case tracking-normal text-[#6f8f7c]">
+          {meta.runnable ? "Sample run: Node sandbox" : "Submit as text · not executed"}
+        </span>
+        {!closed ? (
+          <button
+            type="button"
+            className="rounded-md px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-[#8fb59a] hover:bg-[#24332c] hover:text-[#e8f0ea]"
+            onClick={() => {
+              const currentText = answer?.text ?? "";
+              const dirty = !isStarterOrEmpty(currentText, languageId, entry);
+              if (dirty) {
+                const ok = window.confirm("Replace your answer with the starter for this language?");
+                if (!ok) return;
+              }
+              onAnswer({ text: starterForLanguage(languageId, entry), language: languageId });
+            }}
+          >
+            Load starter
+          </button>
+        ) : null}
+      </div>
+      <textarea
+        disabled={closed}
+        spellCheck={false}
+        aria-label={`${meta.label} solution`}
+        className="min-h-64 w-full resize-y bg-transparent px-4 py-4 font-mono text-[13px] leading-6 text-[#e8f0ea] outline-none"
+        value={answer?.text ?? ""}
+        onChange={(event) => onAnswer({ text: event.target.value, language: languageId })}
+      />
     </div>
   );
 }

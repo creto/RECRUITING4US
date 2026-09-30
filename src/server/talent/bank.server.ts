@@ -1,3 +1,4 @@
+import { CODING_LANGUAGE_IDS } from "@/domain/coding-languages";
 import { orderedOptions } from "@/domain/candidate-view";
 import { DEFAULT_TEXT_RUBRIC } from "@/domain/rules";
 import { assertSameSiteRequest } from "@/lib/auth/isolation.server";
@@ -70,7 +71,7 @@ async function ensureCodingBankOnce(companyId: string) {
           id, company_id, question_id, version_number, prompt, payload, key_payload, rubric, points
         ) values (
           ${bankId(companyId, `v:${item.key}`)}, ${companyId}, ${questionId}, 1, ${item.prompt},
-          ${json({ mode: "code", languages: ["typescript"], difficulty: item.difficulty, title: item.title, judged: false })}::jsonb,
+          ${json({ mode: "code", languages: [...CODING_LANGUAGE_IDS], difficulty: item.difficulty, title: item.title, judged: false })}::jsonb,
           '{}'::jsonb,
           ${json(DEFAULT_TEXT_RUBRIC)}::jsonb,
           ${points}
@@ -88,6 +89,19 @@ async function ensureCodingBankOnce(companyId: string) {
         and coalesce(v.payload->>'judged', '') <> 'false'
     `;
   }
+  await sql`
+    update question_versions v
+    set payload = jsonb_set(v.payload, '{languages}', ${json([...CODING_LANGUAGE_IDS])}::jsonb)
+    from questions q
+    where q.id = v.question_id and q.company_id = v.company_id
+      and q.company_id = ${companyId}
+      and q.type = 'code'
+      and (
+        coalesce(jsonb_array_length(v.payload->'languages'), 0) <= 1
+        or v.payload->'languages' = '["typescript"]'::jsonb
+        or v.payload->'languages' = '["javascript"]'::jsonb
+      )
+  `;
   await ensureCodingExam(companyId);
 }
 
@@ -95,7 +109,7 @@ const CODING_EXAM_NAME = "Assessment · Coding problems";
 const CODING_EXAM_DESCRIPTION =
   "Five hundred original write-code problems. A timed paper draws two easy, two medium, and one hard problem. Answers are stored for a person to grade. These prompts were written for this bank.";
 const CODING_EXAM_INSTRUCTIONS =
-  "Ninety minutes. Two easy problems, two medium problems, and one hard problem are drawn from the bank and stay fixed for this attempt. They are not auto-judged. A person scores them.";
+  "Ninety minutes. Two easy problems, two medium problems, and one hard problem are drawn from the bank and stay fixed for this attempt. Pick any supported programming language in the editor. They are not auto-judged. A person scores them. Sample runs execute JavaScript/TypeScript only.";
 
 async function ensureCodingExam(companyId: string) {
   const sql = await db();

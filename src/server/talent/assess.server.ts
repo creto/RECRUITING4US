@@ -42,6 +42,7 @@ function flag(value: unknown): boolean {
 
 import { ensureReadCodeBank } from "./read-code.server";
 import { candidateItem, answerComplete, coerceAnswer, orderedOptions } from "@/domain/candidate-view";
+import { isCodingLanguageId, languageRunnable, sampleRunBlockedReason } from "@/domain/coding-languages";
 import { readPersonality, scorePersonality, type PersonalityResult } from "@/domain/personality";
 import { ensureReview, rememberEvent } from "./workflows.server";
 import { endAttemptLive, ensureAttemptLive, mirrorAttemptLive, touchAttemptLive } from "./attempt-live.server";
@@ -1408,6 +1409,11 @@ function validateAnswer(type: string, payload: unknown, answer: unknown): string
   } else if (type === "text" || type === "code") {
     if (typeof record.text !== "string") return "Enter a response.";
     if (record.text.length > 20000) return "That response is too long.";
+    if (type === "code" && "language" in record && record.language != null) {
+      if (typeof record.language !== "string" || !isCodingLanguageId(record.language)) {
+        return "Choose a supported programming language.";
+      }
+    }
   } else return "This question type cannot be saved here.";
   return null;
 }
@@ -1926,7 +1932,7 @@ export async function sampleRun(userId: string | null, attemptId: string, access
     : await loadAttemptByAccess(attemptId, accessToken ?? "");
   enterTenant({ companyId: attempt.company_id, userId: userId ?? undefined, publicSlug: "" });
   const sql = await db();
-  const rows = await sql<{ answer: { text?: string } | null }>`
+  const rows = await sql<{ answer: { text?: string; language?: string } | null }>`
     select r.answer
     from attempt_items i
     join question_versions v on v.id = i.question_version_id
@@ -1936,15 +1942,30 @@ export async function sampleRun(userId: string | null, attemptId: string, access
     order by i.position
     limit 1
   `;
+  const answer = rows[0]?.answer ?? null;
+  const language = typeof answer?.language === "string" ? answer.language : "typescript";
+  const blocked = sampleRunBlockedReason(language);
+  if (blocked) {
+    return {
+      status: "refused" as const,
+      timedOut: false,
+      truncated: false,
+      outputExcerpt: "",
+      reason: blocked,
+    };
+  }
   const { runIsolated } = await import("./runner.server");
   const { sandboxForAttempt } = await import("./ops.server");
   const sandbox = await sandboxForAttempt(attempt.company_id, attemptId);
-  const result = await runIsolated(rows[0]?.answer?.text ?? "", sandbox
+  const result = await runIsolated(answer?.text ?? "", sandbox
     ? { timeoutMs: Number(sandbox.timeout_ms), maxOutputChars: Number(sandbox.max_output_chars) }
     : undefined);
   const sandboxNote = sandbox
     ? ` Sandbox "${sandbox.name}": ${sandbox.timeout_ms} ms, ${sandbox.max_output_chars} characters, network denied, filesystem denied.`
     : " Default sandbox: 1500 ms, 4000 characters, network denied, filesystem denied.";
+  const langNote = languageRunnable(language)
+    ? ` Language: ${language} (Node sample run).`
+    : "";
   await sql`
     insert into code_runs (id, company_id, attempt_id, status, truncated, timed_out, output_excerpt)
     values (
@@ -1952,7 +1973,7 @@ export async function sampleRun(userId: string | null, attemptId: string, access
       ${result.truncated}, ${result.timedOut}, ${result.outputExcerpt.slice(0, 8000)}
     )
   `;
-  return { ...result, reason: `${result.reason}${sandboxNote}` };
+  return { ...result, reason: `${result.reason}${sandboxNote}${langNote}` };
 }
 
 const DEMO_CODE = [
