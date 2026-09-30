@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore, type ReactNode } from "react";
-import { Navigate } from "@tanstack/react-router";
+import { Navigate, useRouterState } from "@tanstack/react-router";
 import { GROK_PROVIDERS, authEnabled, signIn, signOut } from "./client";
 import { hasGateSessionMarker } from "./gate-session-marker";
 import { resolveSignInGateState } from "./sign-in-gate";
@@ -46,7 +46,24 @@ export function SignedOut({ children }: { children: ReactNode }) {
  * render this.
  */
 export function RedirectToSignIn({ to = SIGN_IN_PATH }: { to?: string }) {
-  return <Navigate to={to} />;
+  const returnPath = useRouterState({
+    select: (state) => `${state.location.pathname}${state.location.searchStr}`,
+  });
+  // Never put ?next= inside `to` — TanStack treats that as an unknown route (Not Found).
+  let next: string | undefined;
+  if (to.includes("?") && to.startsWith("/login")) {
+    try {
+      next = new URL(to, "http://local.invalid").searchParams.get("next") ?? undefined;
+    } catch {
+      next = undefined;
+    }
+  } else if (returnPath && !returnPath.startsWith("/login")) {
+    next = returnPath;
+  }
+  if (next) {
+    return <Navigate to="/login" search={{ next }} />;
+  }
+  return <Navigate to="/login" />;
 }
 
 export function SignInGate({

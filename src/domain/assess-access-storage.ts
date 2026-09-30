@@ -15,3 +15,17 @@ export function readAssessAccess(attemptId: string): string | null {
     return null;
   }
 }
+
+/** Pull access from ?access= (invite unlock backup) and persist for this tab. */
+export function takeAssessAccessFromSearch(attemptId: string, search: string): string | null {
+  const raw = search.startsWith("?") ? search.slice(1) : search;
+  const access = new URLSearchParams(raw).get("access");
+  if (!access || access.length < 20) return null;
+  storeAssessAccess(attemptId, access);
+  return access;
+}
+
+/** Attempt URL that carries the short-lived access proof (survives login round-trips). */
+export function attemptHrefWithAccess(attemptId: string, accessToken: string): string {
+  return `/candidate/attempts/${attemptId}?access=${encodeURIComponent(accessToken)}`;
+}

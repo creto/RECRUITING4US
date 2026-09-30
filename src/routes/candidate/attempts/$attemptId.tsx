@@ -1,14 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouterState } from "@tanstack/react-router";
 import { getAttempt, getAttemptByAccess, requestSampleRun, requestSampleRunByAccess, saveResponse, saveResponseByAccess, submitAttempt, submitAttemptByAccess } from "@/server/talent.functions";
 import { questionIndex, saveStatusLabel } from "@/domain/rules";
 import { ExamProctor } from "@/components/talent/proctor";
 import { ExamDesk, PersonalityCard, examPaper } from "@/components/talent/exam-shell";
 import { answerComplete, type SavedAnswer } from "@/domain/candidate-view";
-import { Alert, Gate, Loading, PageTitle, useAuthed, when } from "@/components/talent/kit";
-import { readAssessAccess } from "@/domain/assess-access-storage";
+import { Alert, Loading, PageTitle, useAuthed, when } from "@/components/talent/kit";
+import { readAssessAccess, takeAssessAccessFromSearch } from "@/domain/assess-access-storage";
+import { RedirectToSignIn } from "@/lib/auth/gates";
 
-export const Route = createFileRoute("/candidate/attempts/$attemptId")({ component: AttemptPage });
+export const Route = createFileRoute("/candidate/attempts/$attemptId")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    access: typeof search.access === "string" ? search.access : undefined,
+  }),
+  component: AttemptPage,
+});
 
 type Option = { id: string; label: string };
 type Answer = SavedAnswer;
@@ -48,7 +54,13 @@ type AttemptView = {
 
 function AttemptPage() {
   const { attemptId } = Route.useParams();
-  const accessToken = typeof window !== "undefined" ? readAssessAccess(attemptId) : null;
+  const accessFromSearch = Route.useSearch({ select: (s) => s.access });
+  const searchStr = useRouterState({ select: (state) => state.location.searchStr });
+  const accessToken = (() => {
+    if (typeof window === "undefined") return accessFromSearch ?? null;
+    const fromUrl = accessFromSearch ?? takeAssessAccessFromSearch(attemptId, searchStr);
+    return fromUrl ?? readAssessAccess(attemptId);
+  })();
   if (accessToken) return <GuestAttempt attemptId={attemptId} accessToken={accessToken} />;
   return <AuthedAttempt attemptId={attemptId} />;
 }
@@ -56,15 +68,21 @@ function AttemptPage() {
 function AuthedAttempt({ attemptId }: { attemptId: string }) {
   const state = useAuthed(() => getAttempt({ data: { attemptId } }) as Promise<AttemptView>, [attemptId]);
   if (state.isPending || state.loading) return <Loading />;
+  if (state.signedOut) {
+    // RedirectToSignIn stamps ?next= from the current attempt URL.
+    return <RedirectToSignIn />;
+  }
+  const error =
+    state.error === "Not found." || state.error === "Not found"
+      ? "This assessment was not found for your signed-in email. Open your invite link (/assess/…) and unlock with the invited email and application id."
+      : state.error;
   return (
-    <Gate pending={state.isPending} signedOut={state.signedOut}>
-      <main className={`${examPaper} min-h-screen bg-[#f4f7f5]`}>
-        <div className="mx-auto max-w-6xl px-4 py-6">
-        {state.error ? <Alert>{state.error}</Alert> : null}
+    <main className={`${examPaper} min-h-screen bg-[#f4f7f5]`}>
+      <div className="mx-auto max-w-6xl px-4 py-6">
+        {error ? <Alert>{error}</Alert> : null}
         {state.data ? <Delivery key={state.data.receipt?.id ?? state.data.attempt.status} view={state.data} /> : null}
-        </div>
-      </main>
-    </Gate>
+      </div>
+    </main>
   );
 }
 
@@ -83,7 +101,12 @@ function GuestAttempt({ attemptId, accessToken }: { attemptId: string; accessTok
       })
       .catch((err: unknown) => {
         if (!live) return;
-        setError(err instanceof Error ? err.message : "Could not open this assessment.");
+        const message = err instanceof Error ? err.message : "Could not open this assessment.";
+        setError(
+          message === "Not found." || message === "Not found"
+            ? "This assessment session could not be loaded. Open your invite link again and unlock with email and application id."
+            : message,
+        );
       })
       .finally(() => {
         if (live) setLoading(false);

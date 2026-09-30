@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { assessmentInviteGateLede } from "@/domain/assessment-invite";
-import { storeAssessAccess } from "@/domain/assess-access-storage";
+import { attemptHrefWithAccess, storeAssessAccess } from "@/domain/assess-access-storage";
 import { openAssessmentInvite, peekAssessmentInvite } from "@/server/talent.functions";
 import { Alert, Button, Field, inputClass, Loading, PageTitle, Wordmark, when } from "@/components/talent/kit";
 
@@ -58,7 +58,8 @@ function AssessInvite() {
         },
       });
       storeAssessAccess(result.attemptId, result.accessToken);
-      void navigate({ href: `/candidate/attempts/${result.attemptId}` });
+      // Carry access in the URL so a login round-trip or new tab still opens the attempt.
+      void navigate({ href: attemptHrefWithAccess(result.attemptId, result.accessToken) });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Could not open this assessment.");
       setBusy(false);
