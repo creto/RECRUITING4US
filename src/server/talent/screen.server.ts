@@ -138,9 +138,11 @@ export async function runCvScreen(input: { companyId: string; applicationId: str
     required: unknown;
     preferred: unknown;
     assessment_id: string | null;
+    strictness: number | null;
   }>`
     select a.id, a.lifecycle, a.job_id, a.current_stage_id as stage_id, c.email,
-      j.screen_required as required, j.screen_preferred as preferred, j.screen_assessment_id as assessment_id
+      j.screen_required as required, j.screen_preferred as preferred, j.screen_assessment_id as assessment_id,
+      j.screen_strictness as strictness
     from applications a
     join jobs j on j.id = a.job_id and j.company_id = a.company_id
     join candidates c on c.id = a.candidate_id and c.company_id = a.company_id
@@ -184,6 +186,7 @@ export async function runCvScreen(input: { companyId: string; applicationId: str
     required: termsFromJson(app.required),
     preferred: termsFromJson(app.preferred),
     hasAssessment: Boolean(published[0]),
+    strictness: app.strictness == null ? 50 : Number(app.strictness),
   });
   if (extracted.note && scanState === "CLEAN") decision.reasons.unshift(extracted.note);
 

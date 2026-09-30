@@ -165,6 +165,8 @@ export const updateJob = createServerFn({ method: "POST" })
     screenPreferred: z.string().max(400).optional(),
     screenAssessmentId: z.string().max(80).optional(),
     scorecardAttributes: z.string().max(4000).optional(),
+    closesOn: z.string().max(10).optional(),
+    screenStrictness: z.number().int().min(0).max(100).optional(),
   }))
   .handler(async ({ context, data }) => {
     const userId = context.userId;

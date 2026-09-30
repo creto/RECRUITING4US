@@ -1,4 +1,4 @@
-import { termPresent } from "./screen.ts";
+import { skillHit } from "./screen.ts";
 
 export type ExpertiseScore = {
   score: number;
@@ -27,6 +27,7 @@ export function scoreExpertise(input: {
   readable: boolean;
   required: string[];
   preferred: string[];
+  strictness?: number;
 }): ExpertiseScore {
   if (!input.readable || !input.text?.trim()) {
     return {
@@ -39,15 +40,19 @@ export function scoreExpertise(input: {
   const lines: string[] = [];
   let score = 0;
   for (const term of input.required) {
-    if (!termPresent(text, term)) {
+    const how = skillHit(text, term, input.strictness);
+    if (how === "miss") {
       lines.push(`Must-have “${term}” was not found. 0 points.`);
       continue;
     }
     score += 25;
-    lines.push(`Must-have “${term}” found. 25 points.`);
+    if (how === "related") lines.push(`Must-have “${term}” counted from a related word. 25 points.`);
+    else if (how === "alias") lines.push(`Must-have “${term}” counted from a close form. 25 points.`);
+    else lines.push(`Must-have “${term}” found. 25 points.`);
   }
   for (const term of input.preferred) {
-    if (!termPresent(text, term)) continue;
+    const how = skillHit(text, term, input.strictness);
+    if (how === "miss") continue;
     score += 10;
     lines.push(`Preferred “${term}” found. 10 points.`);
   }

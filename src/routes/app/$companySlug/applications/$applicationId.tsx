@@ -484,7 +484,7 @@ function MailTab({ slug, applicationId, defaultTo, canEmail, onError }: { slug: 
     setNotice("");
     setPendingId(template.id);
     queuePlatformMail({ data: { slug, applicationId, to, kind: "FOLLOW_UP", subject: template.subject, body: template.body, idempotencyKey: crypto.randomUUID() } })
-      .then(() => setNotice(`Queued "${template.name}". The applicant receives this card. Open Delivery to watch it.`))
+      .then(() => setNotice(`Queued "${template.name}". The applicant receives this card. Open Mail to watch it.`))
       .catch((err: Error) => onError(err.message))
       .finally(() => setPendingId(null));
   }
@@ -492,7 +492,7 @@ function MailTab({ slug, applicationId, defaultTo, canEmail, onError }: { slug: 
     <form className="grid gap-3" onSubmit={(event) => {
       event.preventDefault();
       queuePlatformMail({ data: { slug, applicationId, to, kind: "FOLLOW_UP", subject, body, idempotencyKey: crypto.randomUUID() } })
-        .then(() => onError("Queued. The applicant receives this card. Open Delivery to see stored, accepted, delivered, bounced, or failed."))
+        .then(() => onError("Queued. The applicant receives this card. Open Mail to see stored, accepted, delivered, bounced, or failed."))
         .catch((err: Error) => onError(err.message));
     }}>
       <Field label="To"><input className={inputClass} type="text" inputMode="email" value={to} onChange={(event) => setTo(event.target.value)} placeholder="oscar@gmail.com or any outside inbox" /></Field>
@@ -517,9 +517,12 @@ function Workbench({ slug, applicationId, onError }: { slug: string; application
   const results = useAuthed(() => listCodeResults({ data: { slug, applicationId } }), [slug, applicationId]);
   const questions = useAuthed(() => listCodingQuestions({ data: { slug } }), [slug]);
   const [room, setRoom] = useState<string | null>(null);
+  const published = (questions.data?.questions ?? []).filter((question: { status?: string }) => question.status === "PUBLISHED");
   return (
     <div className="space-y-3 text-sm">
       <p>Hidden answers stay on the server. Rejudge keeps the older result. A judge failure is not a zero.</p>
+      {results.error ? <Alert>{results.error}</Alert> : null}
+      {questions.error ? <Alert>{questions.error}</Alert> : null}
       <div className="flex flex-wrap gap-2">
         <Button type="button" onClick={() => openLive({ data: { slug, applicationId, title: "Technical interview", prompt: "Write solve() and talk through it." } }).then((row) => setRoom(row.token)).catch((err: Error) => onError(err.message))}>Open live room</Button>
         <Button type="button" variant="secondary" onClick={() => openHire({ data: { slug, applicationId, note: "Opened from the application", location: "", roleTitle: "" } }).then(() => onError("Onboarding opened, or it was already there.")).catch((err: Error) => onError(err.message))}>Open onboarding</Button>
@@ -528,13 +531,15 @@ function Workbench({ slug, applicationId, onError }: { slug: string; application
       <form className="flex flex-wrap gap-2" onSubmit={(event) => {
         event.preventDefault();
         const questionId = String(new FormData(event.currentTarget).get("questionId") ?? "");
+        if (questionId.length < 8) return;
         inviteToCode({ data: { slug, applicationId, questionId } }).then(() => onError("Coding invite queued. Delivery is separate from the in-product copy.")).catch((err: Error) => onError(err.message));
       }}>
-        <select name="questionId" className={inputClass}>
-          {(questions.data?.questions ?? []).map((question: { id: string; title: string }) => <option key={question.id} value={question.id}>{question.title}</option>)}
+        <select name="questionId" className={inputClass} disabled={published.length === 0}>
+          {published.map((question: { id: string; title: string }) => <option key={question.id} value={question.id}>{question.title}</option>)}
         </select>
-        <Button type="submit" variant="secondary">Send coding exercise</Button>
+        <Button type="submit" variant="secondary" disabled={published.length === 0 || questions.loading}>Send coding exercise</Button>
       </form>
+      {published.length === 0 && !questions.loading && !questions.error ? <p className="text-sm text-danger">No published coding question to send.</p> : null}
       <label className="block">DOCX resume
         <input className="mt-1 block" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => {
           const file = event.target.files?.[0];

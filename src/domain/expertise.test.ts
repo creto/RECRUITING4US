@@ -18,4 +18,13 @@ describe("expertise score", () => {
     assert.equal(unread.ranked, false);
     assert.equal(unread.score, 0);
   });
+
+  it("counts a related word only when strictness is broad", () => {
+    const text = "I have years of programming experience and I shipped production software.";
+    const broad = scoreExpertise({ text, readable: true, required: ["Python"], preferred: [], strictness: 0 });
+    assert.equal(broad.lines.some((line) => line.includes("related word")), true);
+    const exact = scoreExpertise({ text, readable: true, required: ["Python"], preferred: [], strictness: 100 });
+    assert.equal(exact.lines.some((line) => line.includes("not found")), true);
+    assert.equal(exact.score < broad.score, true);
+  });
 });

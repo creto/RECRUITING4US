@@ -520,6 +520,32 @@ export async function listJobs(userId: string, slug: string) {
   }));
 }
 
+function dateText(value: unknown): string {
+  if (value == null || value === "") return "";
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(String(value));
+  return match?.[1] ?? "";
+}
+
+function strictnessNumber(value: unknown): number {
+  if (value == null || value === "") return 50;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 50;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+function parseClosesOn(value: unknown): string | null {
+  if (value == null || value === "") return null;
+  const text = String(value).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) throw new Error("Open until must be a date, or blank.");
+  const [year, month, day] = text.split("-").map(Number);
+  const date = new Date(Date.UTC(year!, month! - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month! - 1 || date.getUTCDate() !== day) {
+    throw new Error("Open until must be a date, or blank.");
+  }
+  return text;
+}
+
 export async function getJob(userId: string, slug: string, jobId: string) {
   const actor = await requireActor(userId, slug);
   allow(actor, "application.read");
@@ -527,7 +553,8 @@ export async function getJob(userId: string, slug: string, jobId: string) {
   const rows = await sql`
     select id, title, slug as job_slug, department, locations, work_arrangement, employment_type,
       description, skills, salary_min, salary_max, salary_currency, salary_visible, openings, status,
-      form_schema, screen_required, screen_preferred, screen_assessment_id, scorecard_attributes
+      form_schema, screen_required, screen_preferred, screen_assessment_id, scorecard_attributes,
+      closes_on, screen_strictness
     from jobs where id = ${jobId} and company_id = ${actor.companyId}
   `;
   const job = rows[0] as Record<string, unknown> | undefined;
@@ -536,6 +563,8 @@ export async function getJob(userId: string, slug: string, jobId: string) {
   job.screen_preferred = termsFromJson(job.screen_preferred).join(", ");
   job.scorecard_attributes = attributesFromJson(job.scorecard_attributes).map((item) => item.label).join(", ");
   job.screen_assessment_id = job.screen_assessment_id ?? "";
+  job.closes_on = dateText(job.closes_on);
+  job.screen_strictness = strictnessNumber(job.screen_strictness);
   if (!canSeeCompensation(actor.role)) {
     job.salary_min = null;
     job.salary_max = null;
@@ -621,6 +650,8 @@ export async function updateJob(userId: string, input: Record<string, unknown>) 
   }
   const requiredTerms = termsFromJson(String(input.screenRequired ?? ""));
   const preferredTerms = termsFromJson(String(input.screenPreferred ?? ""));
+  const closesOn = input.closesOn === undefined ? null : parseClosesOn(input.closesOn);
+  const strictness = input.screenStrictness === undefined ? 50 : strictnessNumber(input.screenStrictness);
   await sql`
     update jobs set
       title = ${String(input.title).trim()},
@@ -640,6 +671,8 @@ export async function updateJob(userId: string, input: Record<string, unknown>) 
       screen_preferred = case when ${input.screenPreferred === undefined} then screen_preferred else ${json(preferredTerms)}::jsonb end,
       screen_assessment_id = case when ${input.screenAssessmentId === undefined} then screen_assessment_id else ${assessmentId} end,
       scorecard_attributes = case when ${input.scorecardAttributes === undefined} then scorecard_attributes else ${json(parseAttributes(String(input.scorecardAttributes ?? "")))}::jsonb end,
+      closes_on = case when ${input.closesOn === undefined} then closes_on else ${closesOn}::date end,
+      screen_strictness = case when ${input.screenStrictness === undefined} then screen_strictness else ${strictness} end,
       updated_at = now()
     where id = ${jobId} and company_id = ${actor.companyId}
   `;
@@ -1877,11 +1910,13 @@ export async function listPublicJobs(input: { companySlug: string; q?: string; d
     salary_min: number | null;
     salary_max: number | null;
     salary_currency: string;
+    closes_on: string | null;
   }>`
     select id, title, slug, department, locations, work_arrangement, employment_type,
-      salary_visible, salary_min, salary_max, salary_currency
+      salary_visible, salary_min, salary_max, salary_currency, closes_on
     from jobs
     where company_id = ${company.id} and status = 'PUBLISHED'
+      and (closes_on is null or closes_on >= current_date)
       and (${input.q ?? ""} = '' or lower(title) like ${q} or lower(department) like ${q})
       and (${input.department ?? ""} = '' or department = ${input.department ?? ""})
       and (${input.workArrangement ?? ""} = '' or work_arrangement = ${input.workArrangement ?? ""})
@@ -1902,6 +1937,7 @@ export async function listPublicJobs(input: { companySlug: string; q?: string; d
     },
     jobs: jobs.map((job) => ({
       ...job,
+      closes_on: dateText(job.closes_on) || null,
       salary_min: job.salary_visible ? job.salary_min : null,
       salary_max: job.salary_visible ? job.salary_max : null,
     })),
@@ -1940,6 +1976,7 @@ export async function getPublicJob(companySlug: string, jobSlug: string) {
     join companies c on c.id = j.company_id
     join job_revisions r on r.id = j.published_revision_id and r.company_id = j.company_id
     where c.slug = ${companySlug} and j.slug = ${jobSlug}
+      and (j.closes_on is null or j.closes_on >= current_date)
   `;
   const job = rows[0];
   if (!job || job.status !== "PUBLISHED") return null;
@@ -2110,6 +2147,7 @@ export async function submitApplication(input: ApplyInput) {
     join companies c on c.id = j.company_id
     join job_revisions r on r.id = j.published_revision_id
     where c.slug = ${input.companySlug} and j.slug = ${input.jobSlug}
+      and (j.closes_on is null or j.closes_on >= current_date)
   `;
   const job = jobs[0];
   if (!job || job.status !== "PUBLISHED" || !job.stage_id) {

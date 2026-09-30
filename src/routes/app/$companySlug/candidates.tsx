@@ -120,17 +120,15 @@ function Candidates() {
           {people.map((person) => {
             const lines = person.applicationsList ?? [];
             return (
-            <li key={person.id} className="rounded-[24px] border border-line bg-white p-4 shadow-[0_8px_24px_rgba(20,34,27,0.04)]">
+            <li key={person.id} className={`relative rounded-[24px] border border-line bg-white p-4 shadow-[0_8px_24px_rgba(20,34,27,0.04)] ${lines[0] ? "hover:border-[#14221b]" : ""}`}>
+              {lines[0] ? <AppLink href={`/app/${companySlug}/applications/${lines[0].id}`} className="absolute inset-0 z-0 rounded-[24px]" aria-label={`Open ${person.name}`} /> : null}
+              <div className={lines[0] ? "pointer-events-none relative z-10" : ""}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  {lines[0] ? (
-                    <AppLink href={`/app/${companySlug}/applications/${lines[0].id}`} className="text-lg font-medium">{person.name}</AppLink>
-                  ) : (
-                    <h3 className="text-lg">{person.name}</h3>
-                  )}
+                  <h3 className="text-lg font-medium">{person.name}</h3>
                   <p className="text-sm text-muted">{person.email}</p>
                   {websiteHref(String(person.website ?? "")) ? (
-                    <a className="text-sm text-link underline" href={websiteHref(String(person.website ?? "")) ?? undefined} target="_blank" rel="noopener noreferrer">{String(person.website)}</a>
+                    <a className="pointer-events-auto relative z-10 text-sm text-link underline" href={websiteHref(String(person.website ?? "")) ?? undefined} target="_blank" rel="noopener noreferrer">{String(person.website)}</a>
                   ) : null}
                 </div>
                 <div className="flex flex-wrap gap-2 text-xs">
@@ -145,10 +143,10 @@ function Candidates() {
                 <ul className="mt-3 space-y-2">
                   {lines.map((line) => (
                     <li key={line.id} className="flex flex-wrap items-center gap-2 text-sm">
-                      <AppLink href={`/app/${companySlug}/applications/${line.id}`} className="font-medium text-link">{line.title || "Application"}</AppLink>
+                      <AppLink href={`/app/${companySlug}/applications/${line.id}`} className="pointer-events-auto relative z-10 font-medium text-link">{line.title || "Application"}</AppLink>
                       <span className="font-mono text-xs text-muted">{line.id}</span>
                       {line.lifecycle && line.lifecycle !== "ACTIVE" ? <span className="text-muted">{line.lifecycle}</span> : null}
-                      <Button type="button" variant="ghost" className="min-h-9 px-3" onClick={() => copyId(line.id)}>Copy id</Button>
+                      <Button type="button" variant="ghost" className="pointer-events-auto relative z-10 min-h-9 px-3" onClick={() => copyId(line.id)}>Copy id</Button>
                     </li>
                   ))}
                 </ul>
@@ -166,6 +164,7 @@ function Candidates() {
                 </dl>
               ) : <p className="mt-3 text-sm text-muted">No indexed CV yet. A search for words in a resume will not list this person.</p>}
               {person.knockout ? <p className="mt-3 text-sm text-muted">{person.knockout}</p> : null}
+              </div>
             </li>
             );
           })}

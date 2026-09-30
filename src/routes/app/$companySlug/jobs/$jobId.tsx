@@ -30,6 +30,8 @@ function JobEditor() {
       screenPreferred: String(job.screen_preferred ?? ""),
       screenAssessmentId: String(job.screen_assessment_id ?? ""),
       scorecardAttributes: String(job.scorecard_attributes ?? ""),
+      closesOn: String(job.closes_on ?? ""),
+      screenStrictness: Number(job.screen_strictness ?? 50),
       knockoutYears: knockoutYears(job.form_schema),
       requireAuthorization: knockoutAuth(job.form_schema),
       salaryMin: job.salary_min == null ? "" : String(job.salary_min),
@@ -45,7 +47,7 @@ function JobEditor() {
   if (!job) return null;
   if (path.endsWith("/pipeline")) return <Outlet />;
 
-  function set(key: string, value: string | boolean) {
+  function set(key: string, value: string | boolean | number) {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
@@ -81,6 +83,8 @@ function JobEditor() {
           screenPreferred: String(form.screenPreferred ?? ""),
           screenAssessmentId: String(form.screenAssessmentId ?? ""),
           scorecardAttributes: String(form.scorecardAttributes ?? ""),
+          closesOn: String(form.closesOn ?? ""),
+          screenStrictness: Math.max(0, Math.min(100, Math.round(Number(form.screenStrictness ?? 50)))),
         },
       });
       setSaved("Draft saved. Publish to update the public page.");
@@ -128,9 +132,14 @@ function JobEditor() {
               <option value="CONTRACT">Contract</option>
             </select>
           </Field>
+          <Field label="Open until">
+            <input className={inputClass} type="date" value={String(form.closesOn ?? "")} onChange={(event) => set("closesOn", event.target.value)} />
+          </Field>
           <Field label="Annual minimum (USD)"><input className={inputClass} inputMode="numeric" value={String(form.salaryMin ?? "")} onChange={(event) => set("salaryMin", event.target.value)} /></Field>
           <Field label="Annual maximum (USD)"><input className={inputClass} inputMode="numeric" value={String(form.salaryMax ?? "")} onChange={(event) => set("salaryMax", event.target.value)} /></Field>
         </div>
+        <p className="text-sm text-muted">Leave blank to keep the job open. After this date the public page stops taking applications.</p>
+        {pastDate(String(form.closesOn ?? "")) ? <p className="text-sm text-danger" role="alert">This date is in the past, so the public page stays closed.</p> : null}
         <label className="flex min-h-11 items-center gap-2 text-sm">
           <input type="checkbox" checked={Boolean(form.salaryVisible)} onChange={(event) => set("salaryVisible", event.target.checked)} />
           Show compensation on the public careers page
@@ -142,7 +151,27 @@ function JobEditor() {
         <Field label="Must-have skills for the CV screen">
           <input className={inputClass} value={String(form.screenRequired ?? "")} onChange={(event) => set("screenRequired", event.target.value)} placeholder="TypeScript, SQL, PostgreSQL" />
         </Field>
-        <p className="text-sm text-muted">Comma-separated, up to 12. These words add points to the expertise rank. They do not by themselves send an assessment. Saving applies to the next screen. This is a word check, not a model score.</p>
+        <p className="text-sm text-muted">Comma-separated, up to 12. These words add points to the expertise rank. They do not by themselves send an assessment. Saving applies to the next screen. This is a word check, not a model score. The slider below decides how exact each word must be.</p>
+        <Field label="How exact a skill must be">
+          <input
+            className="w-full accent-[#14221b]"
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={Number(form.screenStrictness ?? 50)}
+            onChange={(event) => set("screenStrictness", Number(event.target.value))}
+          />
+        </Field>
+        <div className="flex justify-between text-xs text-muted">
+          <span>Broad</span>
+          <span>{Number(form.screenStrictness ?? 50)}</span>
+          <span>Exact</span>
+        </div>
+        <p className="text-sm text-muted">{strictnessNote(Number(form.screenStrictness ?? 50))}</p>
+        {Number(form.screenStrictness ?? 50) >= 80 ? (
+          <p className="text-sm text-danger" role="alert">Very specific skills can hurt the screen. Someone who can do the work but does not write that exact word will be marked not a fit.</p>
+        ) : null}
         <Field label="Preferred skills (recorded only)">
           <input className={inputClass} value={String(form.screenPreferred ?? "")} onChange={(event) => set("screenPreferred", event.target.value)} placeholder="React" />
         </Field>
@@ -247,6 +276,19 @@ function yearsValue(value: string | boolean | number | null | undefined): number
   const years = Number(value);
   if (!Number.isInteger(years) || years < 0 || years > 40) return null;
   return years;
+}
+
+function pastDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const today = new Date();
+  const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  return value < iso;
+}
+
+function strictnessNote(level: number): string {
+  if (level < 40) return "Broad. A related word counts. Python matches programming, programar, or coding.";
+  if (level < 75) return "Balanced. A close form counts, such as Postgres for PostgreSQL. A broader word such as programming does not.";
+  return "Exact. The CV must contain that word. A close or related word does not count.";
 }
 
 function knockoutYears(schema: unknown): string {

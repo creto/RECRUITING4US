@@ -320,7 +320,7 @@ export async function queueMail(userId: string, slug: string, input: {
     where company_id = ${actor.companyId} and email = ${normalizeEmail(toEmail)}
   `;
   if (blocked[0]) {
-    throw new Error("That address is on the suppression list. Use Unsuppress on Delivery, then queue again.");
+    throw new Error("That address is on the suppression list. Use Unsuppress on Mail, then queue again.");
   }
   const tokens = {
     candidate_name: app.name,
@@ -445,7 +445,7 @@ export async function queueProspectMail(userId: string, slug: string, input: {
     where company_id = ${actor.companyId} and email = ${normalizeEmail(to)}
   `;
   if (blocked[0]) {
-    throw new Error("That address is on the suppression list. Use Unsuppress on Delivery, then queue again.");
+    throw new Error("That address is on the suppression list. Use Unsuppress on Mail, then queue again.");
   }
   const tokens = { candidate_name: input.name, company_name: actor.companyName, recruiter_name: actor.name, job_title: "" };
   const subject = renderTokens(input.subject, tokens).slice(0, 200);
@@ -596,7 +596,7 @@ export async function receiveMailEvent(input: { body: string; timestamp: string;
     `;
   }
   // Provider bounce/complaint updates message status only. Address suppression
-  // stays an explicit recruiter action (Suppress / Unsuppress on Delivery).
+  // stays an explicit recruiter action (Suppress / Unsuppress on Mail).
   if (next === "BOUNCED" || next === "COMPLAINED") {
     /* intentional: no mail_suppressions write */
   }

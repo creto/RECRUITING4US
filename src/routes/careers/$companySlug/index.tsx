@@ -58,9 +58,10 @@ function Careers() {
       <ul className="mt-4 space-y-3">
         {(data?.jobs ?? []).map((job) => (
           <li key={job.id}>
-            <AppLink className="block rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4" href={`/careers/${companySlug}/${job.slug}`}>
+            <AppLink className="block rounded-[24px] border border-line bg-white p-4 shadow-[0_8px_24px_rgba(20,34,27,0.04)]" href={`/careers/${companySlug}/${job.slug}`}>
               <span className="text-xl">{job.title}</span>
               <span className="mt-1 block text-sm text-muted">{job.department} · {job.locations || job.work_arrangement}</span>
+              {job.closes_on ? <span className="mt-1 block text-sm text-muted"><span>Open until</span> {prettyDate(job.closes_on)}</span> : null}
             </AppLink>
           </li>
         ))}
@@ -68,4 +69,11 @@ function Careers() {
       </div>
     </main>
   );
+}
+
+function prettyDate(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (!match) return value;
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" }).format(date);
 }

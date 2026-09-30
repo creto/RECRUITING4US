@@ -143,12 +143,14 @@ function Scoreboard({ slug }: { slug: string }) {
       {rows.length === 0 ? <p className="mt-3 text-sm">No interviews yet.</p> : null}
       <ol className="mt-3 space-y-2">
         {rows.map((row) => (
-          <li key={row.applicationId} className="rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4 text-sm">
+          <li key={row.applicationId} className="relative rounded-[24px] border border-line bg-white p-4 text-sm shadow-[0_8px_24px_rgba(20,34,27,0.04)] hover:border-[#14221b]">
+            <AppLink href={`/app/${slug}/applications/${row.applicationId}`} className="absolute inset-0 z-0 rounded-[24px]" aria-label={`Open ${row.name}`} />
+            <div className="pointer-events-none relative z-10">
             <p className="font-medium">
               {row.rank == null ? "Unranked" : `Rank ${row.rank}`}
               {row.tied ? " · tied" : ""}
               {" · "}
-              <AppLink href={`/app/${slug}/applications/${row.applicationId}`}>{row.name}</AppLink>
+              {row.name}
             </p>
             <p className="text-muted">
               {row.jobTitle}
@@ -162,6 +164,7 @@ function Scoreboard({ slug }: { slug: string }) {
                 {card.notes ? <p className="text-muted">{card.notes}</p> : null}
               </div>
             ))}
+            </div>
           </li>
         ))}
       </ol>

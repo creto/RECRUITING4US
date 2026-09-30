@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { deleteTemplate, listInbox, listMailbox, listTemplates, queuePlatformMail, saveTemplate } from "@/server/talent.functions";
+import { deleteTemplate, listInbox, listMailbox, listTemplates, queuePlatformMail, saveTemplate, suppressAddress, unsuppressAddress } from "@/server/talent.functions";
 import { Alert, AppLink, Button, Empty, Field, inputClass, Loading, MailCard, PageTitle, refreshPage, useAuthed, useCompanyWorkspace, when } from "@/components/talent/kit";
 import { RichMailEditor, SafeMailBody, type MailTemplatePick } from "@/components/talent/mail-compose";
 import { plainToEditorHtml } from "@/domain/mail-html";
@@ -22,6 +22,7 @@ function Mail() {
   const [kind, setKind] = useState("");
   const [sendName, setSendName] = useState("");
   const [sendId, setSendId] = useState("");
+  const [sendTo, setSendTo] = useState("");
   const [sendSubject, setSendSubject] = useState("");
   const [sendBody, setSendBody] = useState("");
   const [sendKey, setSendKey] = useState(0);
@@ -41,34 +42,38 @@ function Mail() {
     setError(null);
     const who = sendName.trim();
     const id = sendId.trim();
-    if (who.length < 2 && id.length < 8) {
-      setNotice(`Loaded "${template.name}". Add a name or an application id, then press Use again.`);
+    const recipient = sendTo.trim();
+    if (who.length < 2 && id.length < 8 && !recipient.includes("@")) {
+      setNotice(`Loaded "${template.name}". Add a To address, a name, or an application id, then press Use again.`);
       return;
     }
     setPending(true);
-    queuePlatformMail({ data: { slug: companySlug, applicationId: id, candidateName: who, kind: "FOLLOW_UP", subject: template.subject, body: template.body, idempotencyKey: crypto.randomUUID() } })
-      .then(() => { setNotice(`Queued "${template.name}". Open Delivery to see stored, accepted, delivered, bounced, or failed.`); refreshPage(); })
+    queuePlatformMail({ data: { slug: companySlug, applicationId: id, candidateName: who, to: recipient, kind: "FOLLOW_UP", subject: template.subject, body: template.body, idempotencyKey: crypto.randomUUID() } })
+      .then(() => { setNotice(`Queued "${template.name}". Stored, accepted, delivered, bounced, or failed shows in the delivery queue on this page.`); refreshPage(); })
       .catch((err) => setError(err instanceof Error ? err.message : "Could not queue."))
       .finally(() => setPending(false));
   }
   return (
     <div>
-      <PageTitle title="Mail" lede="Templates and the mailbox for this company. A queued message is sent as the same card as the apply form: company name, the message in a field, and the footer from Settings. Delivery events live on the Delivery tab." />
+      <PageTitle title="Mail" lede="Templates, the mailbox, and delivery for this company. A queued message is sent as the same card as the apply form: company name, the message in a field, and the footer from Settings." />
       {templates.error ? <Alert>{templates.error}</Alert> : null}
       {error ? <div className="mb-3"><Alert>{error}</Alert></div> : null}
       <p className="mb-4 text-sm text-muted">{templates.data?.note}</p>
       <div className="grid gap-6 lg:grid-cols-2">
         <section>
           <h2 className="text-2xl">Templates</h2>
-          <p className="mt-2 text-sm text-muted">Press Use to send that template. With a name or an application id filled in, it queues immediately. Tokens: {"{{candidate_name}} {{job_title}} {{company_name}} {{recruiter_name}}"}</p>
+          <p className="mt-2 text-sm text-muted">Press Use to send that template. With a To address, a name, or an application id filled in, it queues immediately. Tokens: {"{{candidate_name}} {{job_title}} {{company_name}} {{recruiter_name}}"}</p>
           <div className="mt-3 space-y-2">
+            <Field label="To">
+              <input className={inputClass} type="text" inputMode="email" value={sendTo} onChange={(event) => setSendTo(event.target.value)} placeholder="oscar@gmail.com or any outside inbox" />
+            </Field>
             <Field label="Candidate name">
               <input className={inputClass} value={sendName} onChange={(event) => setSendName(event.target.value)} placeholder="Exact name" />
             </Field>
             <Field label="Application id">
               <input className={inputClass} value={sendId} onChange={(event) => setSendId(event.target.value)} placeholder="Or paste an application id" />
             </Field>
-            <p className="text-sm text-muted">A name sends only when one application matches. An application id is used as written and ignores the name.</p>
+            <p className="text-sm text-muted">To can be any address, including one that is not on your account. A name sends only when one application matches. If several match, the error lists their ids. An application id is used as written and ignores the name. With only a To address, the message is queued to that inbox.</p>
           </div>
           <ul className="mt-3 space-y-2">
             {(templates.data?.templates ?? []).map((template) => (
@@ -88,14 +93,15 @@ function Mail() {
             event.preventDefault();
             const who = sendName.trim();
             const id = sendId.trim();
-            if (who.length < 2 && id.length < 8) {
-              setError("Give a candidate name or an application id.");
+            const recipient = sendTo.trim();
+            if (who.length < 2 && id.length < 8 && !recipient.includes("@")) {
+              setError("Give a To address, a candidate name, or an application id.");
               return;
             }
             setError(null);
             setPending(true);
-            queuePlatformMail({ data: { slug: companySlug, applicationId: id, candidateName: who, kind: "FOLLOW_UP", subject: sendSubject, body: sendBody, idempotencyKey: crypto.randomUUID() } })
-              .then(() => { setNotice("Queued. Open Delivery to see stored, accepted, delivered, bounced, or failed."); refreshPage(); })
+            queuePlatformMail({ data: { slug: companySlug, applicationId: id, candidateName: who, to: recipient, kind: "FOLLOW_UP", subject: sendSubject, body: sendBody, idempotencyKey: crypto.randomUUID() } })
+              .then(() => { setNotice("Queued. Stored, accepted, delivered, bounced, or failed shows in the delivery queue on this page."); refreshPage(); })
               .catch((err) => setError(err instanceof Error ? err.message : "Could not queue."))
               .finally(() => setPending(false));
           }}>
@@ -160,16 +166,43 @@ function Mail() {
       </div>
       <section className="mt-8">
         <h2 className="text-2xl">Delivery queue</h2>
+        <p className="mt-2 text-sm text-muted">{delivery.data?.note}</p>
         <p className="mt-2 text-sm text-muted">{delivery.data?.setup}</p>
+        <p className="text-sm">Provider: {delivery.data?.provider ?? "…"}. Inbound secret: {delivery.data?.secretConfigured ? "set" : "not set, so outside replies are refused"}.</p>
         {delivery.data?.sender ? <p className="text-sm">From {delivery.data.sender}. {delivery.data.externalBlocked ? "External delivery is blocked." : "SMTP is configured. Watch the state, not the send button."}</p> : <p className="text-sm">No verified sender is configured. External delivery is blocked.</p>}
-        <ul className="mt-3 space-y-2">
-          {(delivery.data?.intents ?? []).length === 0 ? <li className="text-sm text-muted">Nothing is queued.</li> : null}
+        <form className="mt-4 flex flex-wrap gap-2" onSubmit={(event) => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          suppressAddress({ data: { slug: companySlug, email: String(data.get("email") ?? ""), reason: "Recruiter suppression" } }).then(() => refreshPage()).catch((err: Error) => setError(err.message));
+        }}>
+          <input name="email" className={inputClass} placeholder="Suppress an address" />
+          <Button type="submit" variant="secondary">Suppress</Button>
+        </form>
+        <h3 className="mt-4 text-xl">Suppressed addresses</h3>
+        {(delivery.data?.suppressions ?? []).length === 0 ? <p className="mt-2 text-sm text-muted">No addresses are suppressed.</p> : null}
+        <ul className="mt-2 space-y-2">
+          {(delivery.data?.suppressions ?? []).map((row: { email?: string; reason?: string }) => (
+            <li key={String(row.email)} className="flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-line bg-white p-3 text-sm shadow-[0_8px_24px_rgba(20,34,27,0.04)]">
+              <div>
+                <p className="font-medium">{String(row.email)}</p>
+                <p className="text-muted">{String(row.reason || "")}</p>
+              </div>
+              <Button type="button" variant="secondary" onClick={() => {
+                setError(null);
+                unsuppressAddress({ data: { slug: companySlug, email: String(row.email ?? "") } }).then(() => refreshPage()).catch((err: Error) => setError(err.message));
+              }}>Unsuppress</Button>
+            </li>
+          ))}
+        </ul>
+        <ul className="mt-4 space-y-2">
+          {(delivery.data?.intents ?? []).length === 0 ? <li className="text-sm text-muted">Nothing is queued. Queue a message above. Addresses at bounce.example bounce. defer.example retries once. fail.example fails.</li> : null}
           {intents.length === 0 && (delivery.data?.intents ?? []).length > 0 ? <li className="text-sm text-muted">Nothing in the queue matches that filter.</li> : null}
           {intents.map((row: any) => (
             <li key={String(row.id)} className="rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-3 text-sm">
               <p className="font-medium">{String(row.subject)}</p>
               <p>{String(row.status)} · {String(row.state_label)}</p>
               <p className="text-muted">To {String(row.to_email)}{row.candidate_name ? ` · ${String(row.candidate_name)}` : ""}{row.job_title ? ` · ${String(row.job_title)}` : ""} · {String(row.kind)} · attempts {String(row.attempt_count)} · {String(row.provider)}</p>
+              {row.application_id ? <p className="font-mono text-xs text-muted">{String(row.application_id)}</p> : null}
               {row.last_error ? <p className="text-muted">{String(row.last_error)}</p> : null}
             </li>
           ))}

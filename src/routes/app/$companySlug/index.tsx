@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Alert, AppLink, Loading, PageTitle, useCompanyWorkspace, when } from "@/components/talent/kit";
+import { CompanyReports } from "./reports";
 
 export const Route = createFileRoute("/app/$companySlug/")({ component: Dashboard });
 
@@ -52,6 +53,7 @@ function Dashboard() {
           </ul>
         </section>
       </div>
+      <CompanyReports companySlug={companySlug} />
     </div>
   );
 }

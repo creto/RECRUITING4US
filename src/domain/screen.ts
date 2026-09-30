@@ -62,6 +62,59 @@ export function termPresent(haystack: string, term: string): boolean {
   return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, "i").test(flat);
 }
 
+const CLOSE: Record<string, string[]> = {
+  python: ["py"],
+  py: ["python"],
+  javascript: ["js"],
+  js: ["javascript"],
+  typescript: ["ts"],
+  ts: ["typescript"],
+  postgresql: ["postgres"],
+  postgres: ["postgresql"],
+  nodejs: ["node"],
+  node: ["nodejs"],
+  reactjs: ["react"],
+};
+
+const BROAD: string[][] = [
+  ["python", "py", "programming", "programar", "programacion", "coding", "software", "developer", "desarrollo", "programmer"],
+  ["javascript", "js", "typescript", "ts", "node", "nodejs", "react", "frontend", "programming", "programar", "coding", "software", "developer"],
+  ["java", "jvm", "spring"],
+  ["sql", "database", "databases", "postgresql", "postgres", "mysql"],
+  ["excel", "spreadsheet", "spreadsheets"],
+  ["communication", "comunicacion"],
+  ["leadership", "liderazgo", "management"],
+];
+
+export function clampStrictness(value: number | undefined): number {
+  if (value == null || !Number.isFinite(value)) return 100;
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function fold(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+function foldedPresent(haystack: string, term: string): boolean {
+  return termPresent(fold(haystack), fold(term));
+}
+
+/** exact = the word itself. alias = a close form. related = a broader family, only when the job is set broad. */
+export function skillHit(haystack: string, term: string, strictness?: number): "exact" | "alias" | "related" | "miss" {
+  if (termPresent(haystack, term) || foldedPresent(haystack, term)) return "exact";
+  const level = clampStrictness(strictness);
+  const key = fold(term);
+  if (level < 75) {
+    const aliases = CLOSE[key] ?? [];
+    if (aliases.some((alt) => foldedPresent(haystack, alt))) return "alias";
+  }
+  if (level < 40) {
+    const group = BROAD.find((row) => row.some((item) => fold(item) === key));
+    if (group?.some((alt) => fold(alt) !== key && foldedPresent(haystack, alt))) return "related";
+  }
+  return "miss";
+}
+
 export function screenResume(input: {
   text: string | null;
   readable: boolean;
@@ -69,6 +122,7 @@ export function screenResume(input: {
   required: string[];
   preferred: string[];
   hasAssessment: boolean;
+  strictness?: number;
 }): CvScreen {
   const required = input.required.map((term) => term.trim()).filter((term) => term.length >= 2);
   const preferred = input.preferred.map((term) => term.trim()).filter((term) => term.length >= 2);
@@ -85,13 +139,19 @@ export function screenResume(input: {
     return blank("NEEDS_A_PERSON", ["This job has no must-have skills, so the screen will not send an assessment."]);
   }
   const text = input.text;
-  const matchedRequired = required.filter((term) => termPresent(text, term));
-  const missingRequired = required.filter((term) => !termPresent(text, term));
-  const matchedPreferred = preferred.filter((term) => termPresent(text, term));
-  const missedPreferred = preferred.filter((term) => !termPresent(text, term));
+  const requiredHits = required.map((term) => ({ term, how: skillHit(text, term, input.strictness) }));
+  const preferredHits = preferred.map((term) => ({ term, how: skillHit(text, term, input.strictness) }));
+  const matchedRequired = requiredHits.filter((hit) => hit.how !== "miss").map((hit) => hit.term);
+  const missingRequired = requiredHits.filter((hit) => hit.how === "miss").map((hit) => hit.term);
+  const matchedPreferred = preferredHits.filter((hit) => hit.how !== "miss").map((hit) => hit.term);
+  const missedPreferred = preferredHits.filter((hit) => hit.how === "miss").map((hit) => hit.term);
   const reasons = [
     "The screen looks for the job’s must-have words. It does not score schools, photos, age, or names.",
   ];
+  for (const hit of requiredHits) {
+    if (hit.how === "related") reasons.push(`“${hit.term}” was not written. A related word counted because this job is set broad.`);
+    if (hit.how === "alias") reasons.push(`“${hit.term}” was counted from a close form of the word.`);
+  }
   if (missedPreferred.length) reasons.push(`Preferred skills not found: ${missedPreferred.join(", ")}. They do not decide.`);
   if (missingRequired.length) {
     reasons.push(`Missing must-have skills: ${missingRequired.join(", ")}. No assessment was sent.`);

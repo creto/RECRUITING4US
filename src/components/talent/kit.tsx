@@ -340,7 +340,6 @@ const NAV = [
     label: "Reach",
     items: [
       ["/mail", "Mail"],
-      ["/inbox", "Delivery"],
       ["/crm", "Sourcing"],
       ["/calendar", "Scheduling"],
     ],
@@ -348,7 +347,6 @@ const NAV = [
   {
     label: "Operate",
     items: [
-      ["/reports", "Reports"],
       ["/automations", "Automations"],
       ["/integrity", "Integrity"],
       ["/connectors", "Connectors"],

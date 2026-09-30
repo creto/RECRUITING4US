@@ -233,13 +233,14 @@ export async function advanceJob(companyId: string, jobId: string) {
 
 async function rankExpertise(companyId: string, jobId: string) {
   const sql = await db();
-  const job = await sql<{ required: unknown; preferred: unknown }>`
-    select screen_required as required, screen_preferred as preferred
+  const job = await sql<{ required: unknown; preferred: unknown; strictness: number | null }>`
+    select screen_required as required, screen_preferred as preferred, screen_strictness as strictness
     from jobs where id = ${jobId} and company_id = ${companyId}
   `;
   if (!job[0]) return;
   const required = termsFromJson(job[0].required);
   const preferred = termsFromJson(job[0].preferred);
+  const strictness = job[0].strictness == null ? 50 : Number(job[0].strictness);
   const apps = await sql<{ id: string; stage_name: string; email: string; indexed_text: string | null }>`
     select a.id, s.name as stage_name, c.email, p.indexed_text
     from applications a
@@ -272,6 +273,7 @@ async function rankExpertise(companyId: string, jobId: string) {
       readable,
       required,
       preferred,
+      strictness,
     });
     if (!expertise.ranked) unread.push({ id: app.id, lines: expertise.lines });
     else scored.push({ id: app.id, score: expertise.score, lines: expertise.lines, email: app.email, stageName: app.stage_name });

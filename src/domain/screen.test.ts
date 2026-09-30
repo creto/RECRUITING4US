@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { deflateSync } from "node:zlib";
 import { describe, it } from "node:test";
-import { extractResumeText, parseTerms, screenResume, termPresent } from "./screen.ts";
+import { extractResumeText, parseTerms, screenResume, skillHit, termPresent } from "./screen.ts";
 
 const REQUIRED = ["TypeScript", "SQL", "PostgreSQL"];
 const GOOD = "I have shipped production services in TypeScript for six years. I write SQL and operate PostgreSQL.";
@@ -117,5 +117,83 @@ describe("CV screen", () => {
   it("keeps at most twelve distinct skills", () => {
     const terms = parseTerms("a, TypeScript, typescript, SQL, , PostgreSQL");
     assert.deepEqual(terms, ["TypeScript", "SQL", "PostgreSQL"]);
+  });
+
+  it("counts a related word only when the job is broad", () => {
+    const text = "I like to programar and I have years of programación and programming experience in production systems.";
+    const broad = screenResume({
+      text,
+      readable: true,
+      scanState: "CLEAN",
+      required: ["Python"],
+      preferred: [],
+      hasAssessment: true,
+      strictness: 0,
+    });
+    assert.equal(broad.fit, "GOOD");
+    assert.equal(broad.action, "SEND");
+    assert.equal(skillHit(text, "Python", 0), "related");
+
+    const exact = screenResume({
+      text,
+      readable: true,
+      scanState: "CLEAN",
+      required: ["Python"],
+      preferred: [],
+      hasAssessment: true,
+      strictness: 100,
+    });
+    assert.equal(exact.fit, "NOT_A_FIT");
+    assert.deepEqual(exact.missingRequired, ["Python"]);
+    assert.equal(skillHit(text, "Python", 100), "miss");
+
+    const written = screenResume({
+      text: `${text} Python is listed on the resume.`,
+      readable: true,
+      scanState: "CLEAN",
+      required: ["Python"],
+      preferred: [],
+      hasAssessment: true,
+      strictness: 100,
+    });
+    assert.equal(written.fit, "GOOD");
+  });
+
+  it("counts a close form unless the slider is exact, and does not treat JavaScript as Java", () => {
+    const text = "I operate PostgreSQL in production systems every week for the warehouse team.";
+    const balanced = screenResume({
+      text,
+      readable: true,
+      scanState: "CLEAN",
+      required: ["Postgres"],
+      preferred: [],
+      hasAssessment: true,
+      strictness: 50,
+    });
+    assert.equal(balanced.fit, "GOOD");
+    assert.equal(skillHit(text, "Postgres", 50), "alias");
+
+    const exact = screenResume({
+      text,
+      readable: true,
+      scanState: "CLEAN",
+      required: ["Postgres"],
+      preferred: [],
+      hasAssessment: true,
+      strictness: 100,
+    });
+    assert.equal(exact.fit, "NOT_A_FIT");
+
+    const java = screenResume({
+      text: "I use JavaScript and ship production systems every day for this team.",
+      readable: true,
+      scanState: "CLEAN",
+      required: ["Java"],
+      preferred: [],
+      hasAssessment: true,
+      strictness: 0,
+    });
+    assert.equal(java.fit, "NOT_A_FIT");
+    assert.deepEqual(java.missingRequired, ["Java"]);
   });
 });
