@@ -34,6 +34,7 @@ function Interviews() {
   }, [companySlug]);
   if (state.loading || state.isPending) return <Loading />;
   if (state.error) return <Alert>{state.error}</Alert>;
+  const groups = splitInterviews(state.data ?? []);
   return (
     <div>
       <PageTitle title="Scheduling" lede="Scheduled conversations, scorecards, and the calendar connection. Self-schedule links and sync retries stay on this page." />
@@ -44,23 +45,24 @@ function Interviews() {
       </p>
       <div className="grid items-start gap-8 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div>
-          <h2 className="text-xl">Scheduled</h2>
+          <h2 className="text-xl">Next 4 days</h2>
+          <p className="mt-1 text-sm text-muted">Only interviews that start within four days. Later ones stay under Later. Once the end time has passed, the interview is marked complete and moves to Completed.</p>
           <div className="mt-3">
-      {(state.data ?? []).length === 0 ? <Empty title="No interviews" body="Schedule one from an application." /> : null}
-      <ul className="space-y-3">
-        {(state.data ?? []).map((item: any) => (
-          <li key={String(item.id)} className="rounded-[24px] border border-line bg-white p-4 text-sm shadow-[0_8px_24px_rgba(20,34,27,0.04)]">
-            <h3 className="text-xl">{String(item.title)}</h3>
-            <p>{String(item.candidate_name)} · {String(item.job_title)}</p>
-            <p>{when(String(item.starts_at), String(item.timezone))} · {String(item.status)}</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <Button type="button" variant="secondary" onClick={() => interviewIcs({ data: { slug: companySlug, interviewId: String(item.id) } }).then((file) => download(file.ics, file.filename))}>Calendar file</Button>
-              {String(item.status) === "SCHEDULED" ? <Button type="button" variant="danger" onClick={() => cancelInterview({ data: { slug: companySlug, interviewId: String(item.id) } }).then(() => refreshPage()).catch((err) => setError(err.message))}>Cancel</Button> : null}
-            </div>
-            <Feedback slug={companySlug} interviewId={String(item.id)} />
-          </li>
-        ))}
-      </ul>
+      {groups.upcoming.length === 0 ? <Empty title="Nothing in the next 4 days" body="A later interview is under Later. Schedule one below if this window should have one." /> : null}
+      <InterviewList slug={companySlug} rows={groups.upcoming} onError={setError} />
+      {groups.later.length > 0 ? (
+        <details className="mt-6 rounded-[24px] border border-line bg-white p-4">
+          <summary className="cursor-pointer text-sm font-medium"><span>Later</span> · {groups.later.length}</summary>
+          <div className="mt-3">
+            <InterviewList slug={companySlug} rows={groups.later} onError={setError} />
+          </div>
+        </details>
+      ) : null}
+      <details className="mt-3 rounded-[24px] border border-line bg-white p-4">
+        <summary className="cursor-pointer text-sm font-medium"><span>Completed</span> · {groups.done.length}</summary>
+        <p className="mt-2 text-sm text-muted">Past interviews stay here. A cancelled one stays cancelled.</p>
+        {groups.done.length === 0 ? <p className="mt-3 text-sm text-muted">None yet.</p> : <div className="mt-3"><InterviewList slug={companySlug} rows={groups.done} onError={setError} /></div>}
+      </details>
       <form className="mt-8 grid gap-2 rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4 md:grid-cols-2" onSubmit={(event) => {
         event.preventDefault();
         const data = new FormData(event.currentTarget);
@@ -120,6 +122,65 @@ function Interviews() {
       <SchedulingDesk companySlug={companySlug} />
       {error ? <div className="mt-3"><Alert>{error}</Alert></div> : null}
     </div>
+  );
+}
+
+type InterviewRow = {
+  id: string;
+  title: string;
+  status: string;
+  timezone: string;
+  candidate_name: string;
+  job_title: string;
+  starts_at: string;
+  ends_at: string;
+};
+
+function splitInterviews(rows: InterviewRow[], now = Date.now()) {
+  const horizon = now + 4 * 24 * 60 * 60 * 1000;
+  const upcoming: InterviewRow[] = [];
+  const later: InterviewRow[] = [];
+  const done: InterviewRow[] = [];
+  for (const row of rows) {
+    const start = new Date(row.starts_at).getTime();
+    const end = new Date(row.ends_at || row.starts_at).getTime();
+    if (row.status === "CANCELLED" || end < now) done.push(row);
+    else if (start > horizon) later.push(row);
+    else upcoming.push(row);
+  }
+  const byStart = (a: InterviewRow, b: InterviewRow) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime();
+  upcoming.sort(byStart);
+  later.sort(byStart);
+  done.sort((a, b) => new Date(b.starts_at).getTime() - new Date(a.starts_at).getTime());
+  return { upcoming, later, done };
+}
+
+function shownStatus(row: InterviewRow, now = Date.now()) {
+  if (row.status === "CANCELLED") return "Cancelled";
+  const end = new Date(row.ends_at || row.starts_at).getTime();
+  if (end < now) return "Complete";
+  return row.status;
+}
+
+function InterviewList({ slug, rows, onError }: { slug: string; rows: InterviewRow[]; onError: (message: string) => void }) {
+  return (
+    <ul className="space-y-3">
+      {rows.map((item) => {
+        const status = shownStatus(item);
+        return (
+          <li key={item.id} className="rounded-[24px] border border-line bg-white p-4 text-sm shadow-[0_8px_24px_rgba(20,34,27,0.04)]">
+            <h3 className="text-xl">{item.title}</h3>
+            <p>{item.candidate_name} · {item.job_title}</p>
+            <p>{when(item.starts_at, item.timezone)} · {status}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" onClick={() => interviewIcs({ data: { slug, interviewId: item.id } }).then((file) => download(file.ics, file.filename))}>Calendar file</Button>
+              {item.status === "SCHEDULED" && status !== "Complete" ? <Button type="button" variant="danger" onClick={() => cancelInterview({ data: { slug, interviewId: item.id } }).then(() => refreshPage()).catch((err) => onError(err.message))}>Cancel</Button> : null}
+            </div>
+            <Feedback slug={slug} interviewId={item.id} />
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
