@@ -49,12 +49,11 @@ describe("coding languages", () => {
     assert.equal(isStarterOrEmpty("def solve():\n  return 1\n", "python", "solve"), false);
   });
 
-  it("only marks JS/TS as runnable for the Node sample sandbox", () => {
-    assert.equal(languageRunnable("typescript"), true);
-    assert.equal(languageRunnable("javascript"), true);
-    assert.equal(languageRunnable("python"), false);
-    assert.match(sampleRunBlockedReason("python") ?? "", /JavaScript\/TypeScript/);
-    assert.equal(sampleRunBlockedReason("javascript"), null);
+  it("marks every catalog language as sample-runnable", () => {
+    for (const id of CODING_LANGUAGE_IDS) {
+      assert.equal(languageRunnable(id), true, id);
+      assert.equal(sampleRunBlockedReason(id), null, id);
+    }
   });
 
   it("falls back to the full catalog when payload languages are empty", () => {

@@ -17,7 +17,7 @@ function Sandboxes() {
     <div>
       <PageTitle
         title="Sandboxes"
-        lede="A sandbox sets the time and output cap for a Node sample run. Network and filesystem stay denied. This is a separate process, not a virtual machine, and the output is not a score."
+        lede="A sandbox sets the time and output cap for a sample run. JavaScript/TypeScript prefer a local Node jail when available; every language can also run through Judge0 CE. The output is not a score."
       />
       {error ? <div className="mb-3"><Alert>{error}</Alert></div> : null}
       <ul className="space-y-3">

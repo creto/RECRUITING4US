@@ -43,7 +43,7 @@ function flag(value: unknown): boolean {
 
 import { ensureReadCodeBank } from "./read-code.server";
 import { candidateItem, answerComplete, coerceAnswer, orderedOptions } from "@/domain/candidate-view";
-import { isCodingLanguageId, languageRunnable, sampleRunBlockedReason } from "@/domain/coding-languages";
+import { isCodingLanguageId, sampleRunBlockedReason } from "@/domain/coding-languages";
 import { readPersonality, scorePersonality, type PersonalityResult } from "@/domain/personality";
 import { ensureReview, rememberEvent } from "./workflows.server";
 import { endAttemptLive, ensureAttemptLive, mirrorAttemptLive, touchAttemptLive } from "./attempt-live.server";
@@ -1960,20 +1960,21 @@ export async function sampleRun(userId: string | null, attemptId: string, access
       truncated: false,
       outputExcerpt: "",
       reason: blocked,
+      engine: "none" as const,
+      language,
+      ok: false,
     };
   }
-  const { runIsolated } = await import("./runner.server");
+  const { runSample } = await import("./runner.server");
   const { sandboxForAttempt } = await import("./ops.server");
   const sandbox = await sandboxForAttempt(attempt.company_id, attemptId);
-  const result = await runIsolated(answer?.text ?? "", sandbox
+  const result = await runSample(answer?.text ?? "", language, sandbox
     ? { timeoutMs: Number(sandbox.timeout_ms), maxOutputChars: Number(sandbox.max_output_chars) }
     : undefined);
   const sandboxNote = sandbox
-    ? ` Sandbox "${sandbox.name}": ${sandbox.timeout_ms} ms, ${sandbox.max_output_chars} characters, network denied, filesystem denied.`
-    : " Default sandbox: 1500 ms, 4000 characters, network denied, filesystem denied.";
-  const langNote = languageRunnable(language)
-    ? ` Language: ${language} (Node sample run).`
-    : "";
+    ? ` Limits "${sandbox.name}": ${sandbox.timeout_ms} ms CPU budget, ${sandbox.max_output_chars} characters.`
+    : " Default limits: 1500 ms CPU budget, 4000 characters.";
+  const langNote = ` Language: ${result.language} · engine: ${result.engine}.`;
   await sql`
     insert into code_runs (id, company_id, attempt_id, status, truncated, timed_out, output_excerpt)
     values (
@@ -1981,7 +1982,11 @@ export async function sampleRun(userId: string | null, attemptId: string, access
       ${result.truncated}, ${result.timedOut}, ${result.outputExcerpt.slice(0, 8000)}
     )
   `;
-  return { ...result, reason: `${result.reason}${sandboxNote}${langNote}` };
+  return {
+    ...result,
+    ok: result.status === "SUCCEEDED",
+    reason: `${result.reason}${sandboxNote}${langNote}`,
+  };
 }
 
 const DEMO_CODE = [

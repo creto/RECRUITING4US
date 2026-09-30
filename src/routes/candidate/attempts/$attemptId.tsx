@@ -164,6 +164,7 @@ function Taker({ view, accessToken }: { view: AttemptView; accessToken?: string 
   const [receipt, setReceipt] = useState<AttemptView["receipt"]>(null);
   const [personality, setPersonality] = useState<AttemptView["personality"]>(null);
   const [runnerNote, setRunnerNote] = useState<string | null>(null);
+  const [runnerOk, setRunnerOk] = useState<boolean | null>(null);
   const timers = useRef<Record<string, number>>({});
   const answersRef = useRef(answers);
   const revisionsRef = useRef(revisions);
@@ -327,6 +328,7 @@ function Taker({ view, accessToken }: { view: AttemptView; accessToken?: string 
           error={error}
           item={item}
           runnerNote={runnerNote}
+          runnerOk={runnerOk}
           onSelect={(next) => {
             setIndex(next);
             void flushCurrent();
@@ -334,12 +336,21 @@ function Taker({ view, accessToken }: { view: AttemptView; accessToken?: string 
           onAnswer={edit}
           onSubmit={() => void submit()}
           onSample={() => {
+            setRunnerOk(null);
+            setRunnerNote("Running sample…");
             const run = accessToken
               ? requestSampleRunByAccess({ data: { attemptId: view.attempt.id, accessToken } })
               : requestSampleRun({ data: { attemptId: view.attempt.id } });
             run
-              .then((result) => setRunnerNote(result.outputExcerpt ? `${result.reason}\n${result.outputExcerpt}` : result.reason))
-              .catch((err: Error) => setRunnerNote(err.message));
+              .then((result) => {
+                const ok = Boolean((result as { ok?: boolean }).ok) || result.status === "SUCCEEDED";
+                setRunnerOk(ok);
+                setRunnerNote(result.outputExcerpt ? `${result.reason}\n${result.outputExcerpt}` : result.reason);
+              })
+              .catch((err: Error) => {
+                setRunnerOk(false);
+                setRunnerNote(err.message);
+              });
           }}
         />
       )}
@@ -348,7 +359,7 @@ function Taker({ view, accessToken }: { view: AttemptView; accessToken?: string 
 }
 
 function ExamClock({
-  view, index, answers, saveState, unanswered, error, item, runnerNote, onSelect, onAnswer, onSubmit, onSample,
+  view, index, answers, saveState, unanswered, error, item, runnerNote, runnerOk, onSelect, onAnswer, onSubmit, onSample,
 }: {
   view: AttemptView;
   index: number;
@@ -358,6 +369,7 @@ function ExamClock({
   error: string | null;
   item: Item;
   runnerNote: string | null;
+  runnerOk: boolean | null;
   onSelect: (next: number) => void;
   onAnswer: (answer: Answer) => void;
   onSubmit: () => void;
@@ -385,7 +397,14 @@ function ExamClock({
             <button type="button" className="min-h-10 w-full rounded-full border border-line px-3 text-xs" onClick={onSample}>
               Request a sample run
             </button>
-            <p className="whitespace-pre-wrap text-xs text-muted">{runnerNote ?? view.runner.reason}</p>
+            {runnerOk != null ? (
+              <p className={`text-xs font-medium ${runnerOk ? "text-emerald-700" : "text-red-700"}`}>
+                {runnerOk ? "Sample run succeeded" : "Sample run failed"}
+              </p>
+            ) : null}
+            <p className={`whitespace-pre-wrap text-xs ${runnerOk === false ? "text-red-800" : runnerOk === true ? "text-emerald-900" : "text-muted"}`}>
+              {runnerNote ?? view.runner.reason}
+            </p>
           </div>
         ) : null}
       />

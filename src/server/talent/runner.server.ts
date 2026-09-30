@@ -1,6 +1,8 @@
 import { spawn, spawnSync } from "node:child_process";
 import { limitRunOutput } from "../../domain/edge.ts";
 import { clampRunLimits } from "../../domain/ops.ts";
+import { codingLanguage, type CodingLanguageId } from "../../domain/coding-languages.ts";
+import { runViaJudge0 } from "./judge0.server.ts";
 
 const MAX_SOURCE = 20_000;
 const TIMEOUT_MS = 1500;
@@ -312,4 +314,45 @@ export function judgeIsolated(
       return { status: "INFRA", results: [], error: "The judge result could not be read. This is not a score of zero." };
     }
   });
+}
+
+export type SampleRunResult = IsolatedRun & {
+  engine: "node-jail" | "judge0";
+  language: CodingLanguageId;
+};
+
+/**
+ * Candidate sample run for any supported language.
+ * JS/TS: prefer the local Node jail when unshare works; otherwise Judge0.
+ * All other languages: Judge0 CE (or JUDGE0_URL).
+ */
+export async function runSample(
+  source: string,
+  languageRaw: string,
+  requested?: { timeoutMs?: number; maxOutputChars?: number },
+): Promise<SampleRunResult> {
+  const meta = codingLanguage(languageRaw);
+  const language = meta.id;
+  const preferLocal =
+    (language === "javascript" || language === "typescript") &&
+    process.env.SAMPLE_RUN_LOCAL === "1" &&
+    isolateAvailable();
+
+  if (preferLocal) {
+    const local = await runIsolated(source, requested);
+    const label = meta.label;
+    const reason =
+      local.status === "SUCCEEDED"
+        ? `Sample run succeeded (${label} via Node sandbox). This output is not a score.`
+        : local.status === "TIMED_OUT"
+          ? `Sample run timed out (${label} via Node sandbox). No score was given.`
+          : local.status === "FAILED"
+            ? `Sample run failed (${label} via Node sandbox). This is not a score.`
+            : local.reason;
+    if (local.available || /no source to run/i.test(local.reason)) {
+      return { ...local, reason, engine: "node-jail", language };
+    }
+  }
+
+  return runViaJudge0(source, language, requested);
 }

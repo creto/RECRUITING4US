@@ -409,7 +409,7 @@ function CodeAnswerSurface({
         </label>
         <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#8fb59a]">{meta.filename}</span>
         <span className="ml-auto font-mono text-[10px] normal-case tracking-normal text-[#6f8f7c]">
-          {meta.runnable ? "Sample run: Node sandbox" : "Submit as text · not executed"}
+          {meta.runnable ? "Sample run available" : "Submit as text · not executed"}
         </span>
         {!closed ? (
           <button

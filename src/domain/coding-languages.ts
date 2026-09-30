@@ -21,23 +21,23 @@ export type CodingLanguage = {
   filename: string;
   /** Monaco / fence language tag */
   monaco: string;
-  /** Sandbox can execute a sample run today (Node eval only). */
+  /** Sample run can execute this language (Node jail and/or Judge0). */
   runnable: boolean;
 };
 
 export const CODING_LANGUAGES: readonly CodingLanguage[] = [
   { id: "typescript", label: "TypeScript", filename: "solution.ts", monaco: "typescript", runnable: true },
   { id: "javascript", label: "JavaScript", filename: "solution.js", monaco: "javascript", runnable: true },
-  { id: "python", label: "Python", filename: "solution.py", monaco: "python", runnable: false },
-  { id: "java", label: "Java", filename: "Solution.java", monaco: "java", runnable: false },
-  { id: "cpp", label: "C++", filename: "solution.cpp", monaco: "cpp", runnable: false },
-  { id: "go", label: "Go", filename: "solution.go", monaco: "go", runnable: false },
-  { id: "rust", label: "Rust", filename: "solution.rs", monaco: "rust", runnable: false },
-  { id: "csharp", label: "C#", filename: "Solution.cs", monaco: "csharp", runnable: false },
-  { id: "ruby", label: "Ruby", filename: "solution.rb", monaco: "ruby", runnable: false },
-  { id: "php", label: "PHP", filename: "solution.php", monaco: "php", runnable: false },
-  { id: "kotlin", label: "Kotlin", filename: "Solution.kt", monaco: "kotlin", runnable: false },
-  { id: "swift", label: "Swift", filename: "solution.swift", monaco: "swift", runnable: false },
+  { id: "python", label: "Python", filename: "solution.py", monaco: "python", runnable: true },
+  { id: "java", label: "Java", filename: "Solution.java", monaco: "java", runnable: true },
+  { id: "cpp", label: "C++", filename: "solution.cpp", monaco: "cpp", runnable: true },
+  { id: "go", label: "Go", filename: "solution.go", monaco: "go", runnable: true },
+  { id: "rust", label: "Rust", filename: "solution.rs", monaco: "rust", runnable: true },
+  { id: "csharp", label: "C#", filename: "Solution.cs", monaco: "csharp", runnable: true },
+  { id: "ruby", label: "Ruby", filename: "solution.rb", monaco: "ruby", runnable: true },
+  { id: "php", label: "PHP", filename: "solution.php", monaco: "php", runnable: true },
+  { id: "kotlin", label: "Kotlin", filename: "Solution.kt", monaco: "kotlin", runnable: true },
+  { id: "swift", label: "Swift", filename: "solution.swift", monaco: "swift", runnable: true },
 ] as const;
 
 export const CODING_LANGUAGE_IDS: readonly CodingLanguageId[] = CODING_LANGUAGES.map((row) => row.id);
@@ -84,7 +84,7 @@ export function starterForLanguage(languageId: string, entry = "solve"): string 
     case "java":
       return `class Solution {\n  public Object ${name}(/* args */) {\n    // Write your solution\n    return null;\n  }\n}\n`;
     case "cpp":
-      return `#include <bits/stdc++.h>\nusing namespace std;\n\nauto ${name}(/* args */) {\n  // Write your solution\n  return {};\n}\n`;
+      return `#include <bits/stdc++.h>\nusing namespace std;\n\nauto ${name}(/* args */) {\n  // Write your solution\n  return 0;\n}\n`;
     case "go":
       return `package main\n\nfunc ${name}(/* args */) interface{} {\n\t// Write your solution\n\treturn nil\n}\n`;
     case "rust":
@@ -114,7 +114,8 @@ export function languageRunnable(languageId: string | null | undefined): boolean
 }
 
 export function sampleRunBlockedReason(languageId: string | null | undefined): string | null {
+  // All catalog languages execute via Node jail (JS/TS) or Judge0 CE.
   if (languageRunnable(languageId)) return null;
   const lang = codingLanguage(languageId);
-  return `Sample runs execute JavaScript/TypeScript in the Node sandbox only. ${lang.label} answers are saved as text for a person to grade; they are not executed here.`;
+  return `${lang.label} is not in the sample-run catalog.`;
 }

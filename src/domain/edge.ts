@@ -55,11 +55,11 @@ export function calendarRefreshState(input: {
   return { status: "CONNECTED", secret: null, error: "" };
 }
 
-export function runnerAvailability(): { available: true; mode: "network-namespace"; reason: string } {
+export function runnerAvailability(): { available: true; mode: "multilang-sample"; reason: string } {
   return {
     available: true,
-    mode: "network-namespace",
+    mode: "multilang-sample",
     reason:
-      "Write code in any supported language. Sample runs execute JavaScript/TypeScript in a separate Node process inside a network namespace (files, child processes, and workers denied; memory and CPU capped). Other languages are saved as text for human grading and are not executed. This is not a hypervisor and not a remote judge. A timeout or infrastructure failure is not a score.",
+      "Write code in any supported language. Sample runs execute all twelve languages through Judge0 CE (or JUDGE0_URL). Set SAMPLE_RUN_LOCAL=1 to prefer the Node jail for JavaScript/TypeScript when unshare works. A sample run is not a score. A timeout or infrastructure failure is not a score.",
   };
 }

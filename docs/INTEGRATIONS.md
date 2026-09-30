@@ -44,6 +44,8 @@ Without a bucket, résumé bytes stay in `file_objects`. A configured bucket rec
 
 Pushes use one idempotency key per application. Without the token, the handoff is a download. Offer acceptance does not mark someone hired.
 
-## Code judge
+## Code judge and sample runs
 
-JavaScript runs as `unshare --user --map-root-user --net --mount --pid --fork --mount-proc`, then Node `--permission` with a 64 MB heap. Before the program starts, tmpfs covers `/workspace`, `/home`, `/root`, `/etc`, and `/tmp`. The parent passes only `PATH`. A missing `unshare`, or a host that refuses a user namespace, does not run the source. The attempt is `REFUSED`, not a score of zero. GitHub-hosted runners are in that second group, so the product suite skips the jail cases there and still checks the refusal. This is not a hypervisor. Supported language: JavaScript. Python is not executed. Infrastructure failure is not a score of zero.
+**Formal code judge** (live room / ranked submissions): JavaScript runs as `unshare --user --map-root-user --net --mount --pid --fork --mount-proc`, then Node `--permission` with a 64 MB heap. Before the program starts, tmpfs covers `/workspace`, `/home`, `/root`, `/etc`, and `/tmp`. The parent passes only `PATH`. A missing `unshare` refuses execution (not a score of zero). This path stays JavaScript-only.
+
+**Assessment sample runs** (all 12 editor languages): `runSample` in `src/server/talent/runner.server.ts` calls Judge0 CE at `JUDGE0_URL` (default `https://ce.judge0.com`) with optional `JUDGE0_AUTH_TOKEN`. Set `SAMPLE_RUN_LOCAL=1` to prefer the Node jail for JS/TS when `unshare` works. A sample run is never a score. Infrastructure failure is not a score of zero.

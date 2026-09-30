@@ -111,7 +111,7 @@ const CODING_EXAM_NAME = "Assessment · Coding problems";
 const CODING_EXAM_DESCRIPTION =
   "Five hundred original write-code problems. A timed paper draws two easy, two medium, and one hard problem. Answers are stored for a person to grade. These prompts were written for this bank.";
 const CODING_EXAM_INSTRUCTIONS =
-  "Ninety minutes. Two easy problems, two medium problems, and one hard problem are drawn from the bank and stay fixed for this attempt. Pick any supported programming language in the editor. They are not auto-judged. A person scores them. Sample runs execute JavaScript/TypeScript only.";
+  "Ninety minutes. Two easy problems, two medium problems, and one hard problem are drawn from the bank and stay fixed for this attempt. Pick any supported programming language in the editor. They are not auto-judged. A person scores them. Sample runs execute every language in the editor through Judge0 CE (or the local Node jail for JavaScript/TypeScript when SAMPLE_RUN_LOCAL=1).";
 
 async function ensureCodingExam(companyId: string) {
   const sql = await db();
