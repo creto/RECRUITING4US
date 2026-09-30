@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { listInbox, queuePlatformMail, suppressAddress, unsuppressAddress } from "@/server/talent.functions";
+import { listInbox, listTemplates, queuePlatformMail, suppressAddress, unsuppressAddress } from "@/server/talent.functions";
 import { Alert, Button, Empty, Field, inputClass, Loading, MailCard, PageTitle, refreshPage, useAuthed, useCompanyWorkspace } from "@/components/talent/kit";
-import { RichMailEditor, SafeMailBody } from "@/components/talent/mail-compose";
+import { RichMailEditor, SafeMailBody, TemplateChoices, type MailTemplatePick } from "@/components/talent/mail-compose";
 import { plainToEditorHtml } from "@/domain/mail-html";
 
 export const Route = createFileRoute("/app/$companySlug/inbox")({ component: Inbox });
@@ -10,11 +10,15 @@ export const Route = createFileRoute("/app/$companySlug/inbox")({ component: Inb
 function Inbox() {
   const { companySlug } = Route.useParams();
   const state = useAuthed(() => listInbox({ data: { slug: companySlug } }), [companySlug]);
+  const templates = useAuthed(() => listTemplates({ data: { slug: companySlug } }), [companySlug]);
   const [applicationId, setApplicationId] = useState("");
   const [candidateName, setCandidateName] = useState("");
   const [to, setTo] = useState("");
   const [subject, setSubject] = useState("Hello {{candidate_name}}");
   const [body, setBody] = useState(() => plainToEditorHtml("Hello {{candidate_name}},\n\nThis is about {{job_title}} at {{company_name}}.\n\n{{recruiter_name}}"));
+  const [editorKey, setEditorKey] = useState(0);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [person, setPerson] = useState("");
   const [status, setStatus] = useState("");
@@ -26,11 +30,31 @@ function Inbox() {
   const replies = (box?.inbound ?? []).filter((row: Record<string, unknown>) => mailVisible(row, person, "", ""));
   const statuses = listed(box?.intents, "status");
   const kinds = listed(box?.intents, "kind");
+  function useTemplate(template: MailTemplatePick) {
+    setSubject(template.subject);
+    setBody(plainToEditorHtml(template.body));
+    setEditorKey((n) => n + 1);
+    setError(null);
+    const name = candidateName.trim();
+    const id = applicationId.trim();
+    const recipient = to.trim();
+    if (name.length < 2 && id.length < 8 && !recipient.includes("@")) {
+      setNotice(`Loaded "${template.name}". Add a To address, a name, or an application id, then press it again.`);
+      return;
+    }
+    setPendingId(template.id);
+    queuePlatformMail({ data: { slug: companySlug, applicationId: id, candidateName: name, to: recipient, kind: "FOLLOW_UP", subject: template.subject, body: template.body, idempotencyKey: crypto.randomUUID() } })
+      .then(() => { setNotice(`Queued "${template.name}".`); refreshPage(); })
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setPendingId(null));
+  }
   return (
     <div>
       <PageTitle title="Delivery" lede={box?.note} />
       {state.error ? <Alert>{state.error}</Alert> : null}
       {error ? <Alert>{error}</Alert> : null}
+      {templates.error ? <Alert>{templates.error}</Alert> : null}
+      {notice ? <p className="mb-3 text-sm">{notice}</p> : null}
       <p className="mb-4 text-sm text-muted">Provider: {box?.provider}. Inbound secret: {box?.secretConfigured ? "set" : "not set, so outside replies are refused"}.</p>
       <form className="mb-6 grid gap-3 rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4" onSubmit={(event) => {
         event.preventDefault();
@@ -50,11 +74,17 @@ function Inbox() {
         <Field label="Candidate name"><input className={inputClass} value={candidateName} onChange={(event) => setCandidateName(event.target.value)} placeholder="Exact name, optional if To is set" /></Field>
         <Field label="Application id"><input className={inputClass} value={applicationId} onChange={(event) => setApplicationId(event.target.value)} placeholder="Or paste an application id" /></Field>
         <p className="text-sm text-muted">To can be any address, including one that is not on your account. A name sends only when one application matches. If several match, the error lists their ids. An application id is used as written and ignores the name. With only a To address, the message is queued to that inbox.</p>
+        <TemplateChoices
+          templates={templates.data?.templates ?? []}
+          pendingId={pendingId}
+          hint="Press a template to send it when a To address, a name, or an application id is filled. Otherwise it loads into the message."
+          onChoose={useTemplate}
+        />
         <Field label="Subject"><input className={inputClass} value={subject} onChange={(event) => setSubject(event.target.value)} /></Field>
-        <Field label="Message"><RichMailEditor value={body} onChange={setBody} /></Field>
+        <Field label="Message"><RichMailEditor key={editorKey} value={body} onChange={setBody} /></Field>
         <MailCard name={workspace.data?.company.name ?? "Company"} body={body} />
         <p className="text-sm text-muted">The applicant gets this card. Settings supplies the logo and footer when the message leaves the queue.</p>
-        <Button type="submit">Queue message</Button>
+        <Button type="submit" disabled={pendingId !== null}>Queue message</Button>
       </form>
       <form className="mb-6 flex flex-wrap gap-2" onSubmit={(event) => {
         event.preventDefault();

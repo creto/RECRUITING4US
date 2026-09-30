@@ -280,3 +280,40 @@ export function SafeMailBody({ body, className = "mt-2 text-sm" }: { body: strin
   }
   return <p className={`${className} whitespace-pre-wrap`}>{raw}</p>;
 }
+
+export type MailTemplatePick = { id: string; name: string; subject: string; body: string };
+
+/** One press loads or sends a saved template. The editor must remount to show the new body. */
+export function TemplateChoices({
+  templates,
+  pendingId,
+  hint,
+  onChoose,
+}: {
+  templates: MailTemplatePick[];
+  pendingId?: string | null;
+  hint: string;
+  onChoose: (template: MailTemplatePick) => void;
+}) {
+  if (templates.length === 0) return null;
+  return (
+    <div>
+      <p className="text-sm font-medium">Templates</p>
+      <p className="mt-1 text-sm text-muted">{hint}</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {templates.map((template) => (
+          <Button
+            key={template.id}
+            type="button"
+            variant="secondary"
+            title={template.subject}
+            disabled={Boolean(pendingId)}
+            onClick={() => onChoose(template)}
+          >
+            {template.name}
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
+}

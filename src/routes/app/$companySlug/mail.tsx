@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { deleteTemplate, listInbox, listMailbox, listTemplates, saveTemplate } from "@/server/talent.functions";
+import { deleteTemplate, listInbox, listMailbox, listTemplates, queuePlatformMail, saveTemplate } from "@/server/talent.functions";
 import { Alert, AppLink, Button, Empty, Field, inputClass, Loading, MailCard, PageTitle, refreshPage, useAuthed, useCompanyWorkspace, when } from "@/components/talent/kit";
-import { RichMailEditor, SafeMailBody } from "@/components/talent/mail-compose";
+import { RichMailEditor, SafeMailBody, type MailTemplatePick } from "@/components/talent/mail-compose";
+import { plainToEditorHtml } from "@/domain/mail-html";
 
 export const Route = createFileRoute("/app/$companySlug/mail")({ component: Mail });
 
@@ -19,6 +20,13 @@ function Mail() {
   const [person, setPerson] = useState("");
   const [status, setStatus] = useState("");
   const [kind, setKind] = useState("");
+  const [sendName, setSendName] = useState("");
+  const [sendId, setSendId] = useState("");
+  const [sendSubject, setSendSubject] = useState("");
+  const [sendBody, setSendBody] = useState("");
+  const [sendKey, setSendKey] = useState(0);
+  const [notice, setNotice] = useState("");
+  const [pending, setPending] = useState(false);
   const workspace = useCompanyWorkspace();
   if ((templates.loading && !templates.data) || templates.isPending) return <Loading />;
   const messages = filterMail(box.data?.messages ?? [], person, status, "");
@@ -26,6 +34,23 @@ function Mail() {
   const replies = filterMail(delivery.data?.inbound ?? [], person, "", "");
   const statuses = uniqueValues([...(box.data?.messages ?? []), ...(delivery.data?.intents ?? [])], "status");
   const kinds = uniqueValues(delivery.data?.intents ?? [], "kind");
+  function loadTemplate(template: MailTemplatePick) {
+    setSendSubject(template.subject);
+    setSendBody(plainToEditorHtml(template.body));
+    setSendKey((n) => n + 1);
+    setError(null);
+    const who = sendName.trim();
+    const id = sendId.trim();
+    if (who.length < 2 && id.length < 8) {
+      setNotice(`Loaded "${template.name}". Add a name or an application id, then press Use again.`);
+      return;
+    }
+    setPending(true);
+    queuePlatformMail({ data: { slug: companySlug, applicationId: id, candidateName: who, kind: "FOLLOW_UP", subject: template.subject, body: template.body, idempotencyKey: crypto.randomUUID() } })
+      .then(() => { setNotice(`Queued "${template.name}". Open Delivery to see stored, accepted, delivered, bounced, or failed.`); refreshPage(); })
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not queue."))
+      .finally(() => setPending(false));
+  }
   return (
     <div>
       <PageTitle title="Mail" lede="Templates and the mailbox for this company. A queued message is sent as the same card as the apply form: company name, the message in a field, and the footer from Settings. Delivery events live on the Delivery tab." />
@@ -35,19 +60,55 @@ function Mail() {
       <div className="grid gap-6 lg:grid-cols-2">
         <section>
           <h2 className="text-2xl">Templates</h2>
-          <p className="mt-2 text-sm text-muted">Tokens: {"{{candidate_name}} {{job_title}} {{company_name}} {{recruiter_name}}"}</p>
+          <p className="mt-2 text-sm text-muted">Press Use to send that template. With a name or an application id filled in, it queues immediately. Tokens: {"{{candidate_name}} {{job_title}} {{company_name}} {{recruiter_name}}"}</p>
+          <div className="mt-3 space-y-2">
+            <Field label="Candidate name">
+              <input className={inputClass} value={sendName} onChange={(event) => setSendName(event.target.value)} placeholder="Exact name" />
+            </Field>
+            <Field label="Application id">
+              <input className={inputClass} value={sendId} onChange={(event) => setSendId(event.target.value)} placeholder="Or paste an application id" />
+            </Field>
+            <p className="text-sm text-muted">A name sends only when one application matches. An application id is used as written and ignores the name.</p>
+          </div>
           <ul className="mt-3 space-y-2">
             {(templates.data?.templates ?? []).map((template) => (
               <li key={template.id} className="rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-3 text-sm">
                 <p className="font-medium">{template.name}</p>
                 <p className="text-muted">{template.subject}</p>
                 <div className="mt-2 flex gap-2">
+                  <Button type="button" disabled={pending} onClick={() => loadTemplate(template)}>Use</Button>
                   <Button type="button" variant="secondary" onClick={() => { setEditing(template.id); setName(template.name); setSubject(template.subject); setBody(template.body); }}>Edit</Button>
                   <Button type="button" variant="danger" onClick={() => deleteTemplate({ data: { slug: companySlug, id: template.id } }).then(() => refreshPage()).catch((err) => setError(err.message))}>Delete</Button>
                 </div>
               </li>
             ))}
           </ul>
+          {notice ? <p className="mt-3 text-sm">{notice}</p> : null}
+          <form className="mt-4 space-y-2" onSubmit={(event) => {
+            event.preventDefault();
+            const who = sendName.trim();
+            const id = sendId.trim();
+            if (who.length < 2 && id.length < 8) {
+              setError("Give a candidate name or an application id.");
+              return;
+            }
+            setError(null);
+            setPending(true);
+            queuePlatformMail({ data: { slug: companySlug, applicationId: id, candidateName: who, kind: "FOLLOW_UP", subject: sendSubject, body: sendBody, idempotencyKey: crypto.randomUUID() } })
+              .then(() => { setNotice("Queued. Open Delivery to see stored, accepted, delivered, bounced, or failed."); refreshPage(); })
+              .catch((err) => setError(err instanceof Error ? err.message : "Could not queue."))
+              .finally(() => setPending(false));
+          }}>
+            <h3 className="text-xl">Send this message</h3>
+            <Field label="Subject">
+              <input className={inputClass} value={sendSubject} onChange={(event) => setSendSubject(event.target.value)} required />
+            </Field>
+            <Field label="Message">
+              <RichMailEditor key={sendKey} value={sendBody} onChange={setSendBody} required />
+            </Field>
+            {sendBody.trim() ? <MailCard name={workspace.data?.company.name ?? "Company"} body={sendBody} /> : null}
+            <Button type="submit" disabled={pending}>Queue message</Button>
+          </form>
           <form className="mt-4 space-y-2" onSubmit={(event) => {
             event.preventDefault();
             saveTemplate({ data: { slug: companySlug, id: editing, name, subject, body } })

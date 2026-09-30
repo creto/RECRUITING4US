@@ -24,10 +24,11 @@ import {
   queuePlatformMail,
   readFile,
   rejudgeSubmission,
+  listTemplates,
 } from "@/server/talent.functions";
 import { Alert, Button, Field, inputClass, Loading, MailCard, PageTitle, money, refreshPage, useAuthed, useCompanyWorkspace, when } from "@/components/talent/kit";
 import { DateTimeLocalField } from "@/components/talent/datetime-local";
-import { RichMailEditor } from "@/components/talent/mail-compose";
+import { RichMailEditor, TemplateChoices, type MailTemplatePick } from "@/components/talent/mail-compose";
 import { plainToEditorHtml } from "@/domain/mail-html";
 import { storedAnswerText } from "@/domain/sheet";
 import { websiteHref } from "@/domain/web-url";
@@ -467,11 +468,26 @@ function scoreLine(item: {
 
 function MailTab({ slug, applicationId, defaultTo, canEmail, onError }: { slug: string; applicationId: string; defaultTo: string; canEmail: boolean; onError: (value: string) => void }) {
   const workspace = useCompanyWorkspace();
+  const templates = useAuthed(() => listTemplates({ data: { slug } }), [slug], canEmail);
   const [to, setTo] = useState(defaultTo);
   const [subject, setSubject] = useState("Update on {{job_title}}");
   const [body, setBody] = useState(() => plainToEditorHtml("Hello {{candidate_name}},\n\nThis note is queued for delivery. Stored in this workspace is not the same as delivered.\n\n{{recruiter_name}}"));
+  const [editorKey, setEditorKey] = useState(0);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
   if (!canEmail) return <p className="text-sm">Your role cannot send mail.</p>;
   const companyName = workspace.data?.company.name ?? "Company";
+  function useTemplate(template: MailTemplatePick) {
+    setSubject(template.subject);
+    setBody(plainToEditorHtml(template.body));
+    setEditorKey((n) => n + 1);
+    setNotice("");
+    setPendingId(template.id);
+    queuePlatformMail({ data: { slug, applicationId, to, kind: "FOLLOW_UP", subject: template.subject, body: template.body, idempotencyKey: crypto.randomUUID() } })
+      .then(() => setNotice(`Queued "${template.name}". The applicant receives this card. Open Delivery to watch it.`))
+      .catch((err: Error) => onError(err.message))
+      .finally(() => setPendingId(null));
+  }
   return (
     <form className="grid gap-3" onSubmit={(event) => {
       event.preventDefault();
@@ -480,11 +496,19 @@ function MailTab({ slug, applicationId, defaultTo, canEmail, onError }: { slug: 
         .catch((err: Error) => onError(err.message));
     }}>
       <Field label="To"><input className={inputClass} type="text" inputMode="email" value={to} onChange={(event) => setTo(event.target.value)} placeholder="oscar@gmail.com or any outside inbox" /></Field>
+      {templates.error ? <Alert>{templates.error}</Alert> : null}
+      <TemplateChoices
+        templates={templates.data?.templates ?? []}
+        pendingId={pendingId}
+        hint="Press a template to queue it for this applicant now. Tokens are filled when it sends."
+        onChoose={useTemplate}
+      />
+      {notice ? <p className="text-sm">{notice}</p> : null}
       <Field label="Subject"><input className={inputClass} value={subject} onChange={(event) => setSubject(event.target.value)} /></Field>
-      <Field label="Message"><RichMailEditor value={body} onChange={setBody} /></Field>
+      <Field label="Message"><RichMailEditor key={editorKey} value={body} onChange={setBody} /></Field>
       <MailCard name={companyName} body={body} />
       <p className="text-sm text-muted">This is the card that goes out. The name, logo, and footer from Settings are added when it sends. Tokens such as {"{{candidate_name}}"} are filled in first.</p>
-      <Button type="submit">Queue outside message</Button>
+      <Button type="submit" disabled={pendingId !== null}>Queue outside message</Button>
     </form>
   );
 }
