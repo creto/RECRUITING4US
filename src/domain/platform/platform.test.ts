@@ -9,7 +9,7 @@ import { brandHtml, brandPlain, chooseMailApplication, classifySandboxAddress, d
 import { crc32, extractOffice, sniffResume } from "./docx.ts";
 import { disposeCase, signalChangesScore, similarityOpensCase, similarityPercent } from "./integrity.ts";
 import { explainCutoff, invitesAfterRerank, normalizeStages, personalityCannotGate, rankCutoff, STANDARD_PLAN } from "./plans.ts";
-import { buildRfc822, classifySmtpCode, pullSmtpReplies } from "./smtp.ts";
+import { buildRfc822, classifySmtpCode, normalizeMailFiles, pullSmtpReplies } from "./smtp.ts";
 import { gradeCases } from "./score.ts";
 
 describe("delivery", () => {
@@ -87,6 +87,20 @@ describe("delivery", () => {
     });
     assert.match(rich, /From: "Northstar" <jobs@example.com>/);
     assert.match(rich, /multipart\/alternative/);
+    const attached = buildRfc822({
+      from: "jobs@example.com",
+      to: "ada@example.com",
+      cc: "",
+      subject: "Hello",
+      body: "Hi",
+      messageId: "m2@recruit4us",
+      html: "<p>Hi</p>",
+      files: [{ filename: "brief.pdf", mime: "application/pdf", base64: "QQ==" }],
+    });
+    assert.match(attached, /multipart\/mixed/);
+    assert.match(attached, /Content-Disposition: attachment; filename="brief.pdf"/);
+    assert.equal(normalizeMailFiles([{ filename: "../notes.txt", mime: "", base64: "SGk=" }])[0]?.filename, "notes.txt");
+    assert.throws(() => normalizeMailFiles([{ filename: "run.exe", mime: "application/octet-stream", base64: "SGk=" }]), /PDF, PNG/);
   });
 });
 

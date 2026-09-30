@@ -1,6 +1,6 @@
 import net from "node:net";
 import tls from "node:tls";
-import { buildRfc822, classifySmtpCode, pullSmtpReplies, redactSecrets, type SmtpReply } from "../../domain/platform/smtp.ts";
+import { buildRfc822, classifySmtpCode, pullSmtpReplies, redactSecrets, type MailFile, type SmtpReply } from "../../domain/platform/smtp.ts";
 
 export type SmtpConfig = {
   host: string;
@@ -130,6 +130,7 @@ async function afterHello(
     fromName?: string;
     html?: string;
     logo?: { mime: string; base64: string } | null;
+    files?: MailFile[];
   },
   secrets: string[],
 ) {
@@ -166,6 +167,7 @@ async function afterHello(
     fromName: message.fromName || displayNameFromMailFrom(config.from),
     html: message.html,
     logo: message.logo,
+    files: message.files,
   });
   io.raw(`${raw}.\r\n`);
   const accepted = await io.read();
@@ -198,6 +200,7 @@ export async function sendSmtp(
     fromName?: string;
     html?: string;
     logo?: { mime: string; base64: string } | null;
+    files?: MailFile[];
   },
 ): Promise<{ result: "accepted" | "deferred" | "bounced" | "failed"; detail: string }> {
   const secrets = [config.password, config.user].filter((value) => value.length >= 4);

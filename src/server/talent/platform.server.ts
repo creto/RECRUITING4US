@@ -5,6 +5,7 @@ import { estimateComplexity } from "@/domain/judge";
 import { describeLiveSignal, liveSignalKind } from "@/domain/live-watch";
 import { applyDocument, applyOpChain, canSeeNote, type Edit } from "@/domain/platform/collab";
 import { classifySandboxAddress, chooseMailApplication, deliveryLabel, isTerminal, nextState, renderTokens, retryDelayMinutes, stripQuotedReply, webhookFresh, brandHtml, brandPlain, type DeliveryState, type MailBrand } from "@/domain/platform/delivery";
+import { normalizeMailFiles, type MailFile } from "@/domain/platform/smtp";
 import { htmlToPlain, looksLikeHtml, prepareMailBody } from "@/domain/mail-html";
 import { extractOffice } from "@/domain/platform/docx";
 import { disposeCase, similarityOpensCase, similarityPercent, signalChangesScore } from "@/domain/platform/integrity";
@@ -143,6 +144,12 @@ export async function drainMail(companyId: string) {
     let providerResult: "accepted" | "delivered" | "stored" | "deferred" | "bounced" | "failed" = "stored";
     let detail = "";
     let providerId = "";
+    const files = await sql<{ filename: string; mime: string; bytes: string }>`
+      select filename, mime, bytes from mail_attachments
+      where company_id = ${companyId} and intent_id = ${row.id}
+      order by filename
+    `;
+    const attached = files.map((file) => ({ filename: file.filename, mime: file.mime, base64: file.bytes }));
     if (suppressed[0]) {
       providerResult = "failed";
     } else if (mode.provider === "sandbox") {
@@ -152,7 +159,7 @@ export async function drainMail(companyId: string) {
       else if (kind === "defer" && row.attempt_count === 0) providerResult = "deferred";
       else providerResult = "stored";
     } else {
-      const sent = await smtpSend(row, brand);
+      const sent = await smtpSend(row, brand, attached);
       providerResult = sent.result;
       detail = sent.detail;
       providerId = sent.providerId;
@@ -184,7 +191,7 @@ export async function drainMail(companyId: string) {
       const copy = mailCopy(row.body);
       await sql`
         insert into sandbox_mailbox (id, company_id, intent_id, to_email, subject, body)
-        values (${nid()}, ${companyId}, ${row.id}, ${row.to_email}, ${row.subject}, ${brandPlain(copy.text, brand)})
+        values (${nid()}, ${companyId}, ${row.id}, ${row.to_email}, ${row.subject}, ${brandPlain(copy.text, brand) + fileNote(attached)})
       `;
     }
     if (step.state === "BOUNCED") {
@@ -209,6 +216,7 @@ async function drain(actor: Actor) {
 async function smtpSend(
   row: { id: string; to_email: string; cc: string; bcc: string; subject: string; body: string },
   brand: MailBrand & { logoMime: string; logoBytes: string },
+  files: MailFile[] = [],
 ): Promise<{ result: "accepted" | "deferred" | "bounced" | "failed"; detail: string; providerId: string }> {
   const config = smtpConfigFromEnv();
   if (!config) return { result: "failed", detail: "SMTP is not configured.", providerId: "" };
@@ -228,8 +236,25 @@ async function smtpSend(
     fromName: brand.fromName || brand.companyName,
     html: brandHtml(copy.htmlBody, brand, Boolean(logo), copy.rich),
     logo,
+    files,
   });
   return { result: sent.result === "accepted" ? "accepted" : sent.result, detail: sent.detail, providerId: sent.result === "accepted" ? row.id : "" };
+}
+
+function fileNote(files: MailFile[]): string {
+  if (files.length === 0) return "";
+  return `\n\nAttached: ${files.map((file) => file.filename).join(", ")}`;
+}
+
+async function storeMailFiles(companyId: string, intentId: string, files: MailFile[]) {
+  if (files.length === 0) return;
+  const sql = await db();
+  for (const file of files) {
+    await sql`
+      insert into mail_attachments (id, company_id, intent_id, filename, mime, bytes)
+      values (${nid()}, ${companyId}, ${intentId}, ${file.filename}, ${file.mime}, ${file.base64})
+    `;
+  }
 }
 
 function mailCopy(body: string): { text: string; htmlBody: string; rich: boolean } {
@@ -247,6 +272,7 @@ export async function listInbox(userId: string, slug: string) {
   const intents = await sql.query<Record<string, unknown>>(
     `select i.id, i.kind, i.to_email, i.cc, i.bcc, i.subject, i.status, i.provider, i.attempt_count, i.last_error, i.thread_token, i.application_id,
             c.name as candidate_name, j.title as job_title,
+            (select string_agg(f.filename, ', ' order by f.filename) from mail_attachments f where f.company_id = i.company_id and f.intent_id = i.id) as attached,
             ${AT.replaceAll("created_at", "i.created_at")} as created_at
      from message_intents i
      left join applications a on a.id = i.application_id and a.company_id = i.company_id
@@ -290,6 +316,7 @@ export async function queueMail(userId: string, slug: string, input: {
   bcc: string;
   to?: string;
   idempotencyKey: string;
+  attachments?: MailFile[];
 }) {
   assertSameSiteRequest();
   const actor = await requireActor(userId, slug);
@@ -333,6 +360,7 @@ export async function queueMail(userId: string, slug: string, input: {
   const body = prepareMailBody(renderTokens(input.body, tokens));
   const bodyPlain = looksLikeHtml(body) ? htmlToPlain(body) : body;
   if (subject.trim().length < 2 || bodyPlain.trim().length < 2) throw new Error("Write a subject and a message.");
+  const files = normalizeMailFiles(input.attachments);
   const id = nid();
   const thread = nid().replace(/-/g, "");
   try {
@@ -348,6 +376,7 @@ export async function queueMail(userId: string, slug: string, input: {
       on conflict (company_id, idempotency_key) do nothing
       returning id
     `;
+    if (inserted[0]) await storeMailFiles(actor.companyId, inserted[0].id, files);
     await audit(actor, "mail.queue", "message_intent", inserted[0]?.id ?? id, `Queued ${input.kind} to ${toEmail}`);
     await drain(actor);
     return { id: inserted[0]?.id ?? id, duplicate: !inserted[0], note: mailMode().note };
@@ -397,6 +426,7 @@ export async function queueNamedMail(userId: string, slug: string, input: {
   bcc: string;
   to?: string;
   idempotencyKey: string;
+  attachments?: MailFile[];
 }) {
   assertSameSiteRequest();
   const actor = await requireActor(userId, slug);
@@ -414,6 +444,7 @@ export async function queueNamedMail(userId: string, slug: string, input: {
       subject: input.subject,
       body: input.body,
       idempotencyKey: input.idempotencyKey,
+      attachments: input.attachments,
     });
   }
   const applicationId = await resolveApplicationId(actor.companyId, input);
@@ -428,6 +459,7 @@ export async function queueProspectMail(userId: string, slug: string, input: {
   body: string;
   idempotencyKey: string;
   applicationId?: string | null;
+  attachments?: MailFile[];
 }) {
   assertSameSiteRequest();
   const actor = await requireActor(userId, slug);
@@ -453,6 +485,7 @@ export async function queueProspectMail(userId: string, slug: string, input: {
   const body = prepareMailBody(renderTokens(input.body, tokens));
   const bodyPlain = looksLikeHtml(body) ? htmlToPlain(body) : body;
   if (subject.trim().length < 2 || bodyPlain.trim().length < 2) throw new Error("Write a subject and a message.");
+  const files = normalizeMailFiles(input.attachments);
   const id = nid();
   const thread = nid().replace(/-/g, "");
   const inserted = await sql<{ id: string }>`
@@ -467,6 +500,7 @@ export async function queueProspectMail(userId: string, slug: string, input: {
     on conflict (company_id, idempotency_key) do nothing
     returning id
   `;
+  if (inserted[0]) await storeMailFiles(actor.companyId, inserted[0].id, files);
   await audit(actor, "mail.queue", "message_intent", inserted[0]?.id ?? id, `Queued ${input.kind} to ${to}`);
   await drain(actor);
   return { id: inserted[0]?.id ?? id, duplicate: !inserted[0], note: mailMode().note };

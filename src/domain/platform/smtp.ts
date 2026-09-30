@@ -38,6 +38,59 @@ function encodeBody(raw: string): string {
   return raw.replace(/\r?\n/g, "\r\n").replace(/^\./gm, "..");
 }
 
+export type MailFile = { filename: string; mime: string; base64: string };
+
+const MAIL_FILE_MIMES = new Set([
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "text/plain",
+  "text/csv",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]);
+
+const MAIL_FILE_EXT: Record<string, string> = {
+  pdf: "application/pdf",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  txt: "text/plain",
+  csv: "text/csv",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+};
+
+/** At most three readable office or image files, 700 KB each, 1.5 MB together. */
+export function normalizeMailFiles(files: { filename: string; mime: string; base64: string }[] | undefined): MailFile[] {
+  const list = files ?? [];
+  if (list.length > 3) throw new Error("Attach at most 3 files.");
+  let total = 0;
+  return list.map((file) => {
+    const filename = safeMailFilename(file.filename);
+    const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+    const hinted = MAIL_FILE_EXT[ext] ?? "";
+    const mime = MAIL_FILE_MIMES.has(file.mime) ? file.mime : hinted;
+    if (!MAIL_FILE_MIMES.has(mime)) throw new Error(`${filename} must be a PDF, PNG, JPEG, text, CSV, or Word file.`);
+    const base64 = file.base64.replace(/\s+/g, "");
+    if (!base64 || !/^[A-Za-z0-9+/]+={0,2}$/.test(base64)) throw new Error(`${filename} could not be read.`);
+    const bytes = Math.floor((base64.length * 3) / 4) - (base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0);
+    if (bytes < 1) throw new Error(`${filename} is empty.`);
+    if (bytes > 700_000) throw new Error(`${filename} is over 700 KB.`);
+    total += bytes;
+    if (total > 1_500_000) throw new Error("Attachments together are over 1.5 MB.");
+    return { filename, mime, base64 };
+  });
+}
+
+function safeMailFilename(name: string): string {
+  const base = name.replace(/\\/g, "/").split("/").pop() ?? "";
+  const clean = base.replace(/[^\w.\- ]+/g, "").replace(/\s+/g, " ").trim().slice(0, 80);
+  return clean || "file";
+}
+
+function wrapBase64(value: string): string {
+  return value.replace(/\s+/g, "").replace(/(.{76})/g, "$1\r\n");
+}
+
 /** RFC822 message. A caller-supplied HTML document (the company card) wins. Otherwise an HTML body is sanitized and sent as multipart/alternative. */
 export function buildRfc822(input: {
   from: string;
@@ -49,6 +102,7 @@ export function buildRfc822(input: {
   fromName?: string;
   html?: string;
   logo?: { mime: string; base64: string } | null;
+  files?: MailFile[];
 }): string {
   const display = (input.fromName ?? "").replace(/[\r\n"]/g, "").trim().slice(0, 80);
   const from = display ? `"${display}" <${input.from}>` : input.from;
@@ -63,26 +117,45 @@ export function buildRfc822(input: {
   ].filter(Boolean);
   const token = input.messageId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24) || "mail";
   const explicit = (input.html ?? "").trim();
-  if (explicit) {
-    return finishRfc822(headers, token, encodeBody(input.body), encodeBody(explicit), input.logo);
+  const part = explicit
+    ? rfcPart(token, encodeBody(input.body), encodeBody(explicit), input.logo)
+    : looksLikeHtml(prepareMailBody(input.body))
+      ? (() => {
+          const prepared = prepareMailBody(input.body);
+          const plain = htmlToPlain(prepared) || " ";
+          const htmlDoc = `<!DOCTYPE html><html><body style="font-family:system-ui,Segoe UI,sans-serif;font-size:14px;line-height:1.5;color:#14221b">${prepared}</body></html>`;
+          return rfcPart(token, encodeBody(plain), encodeBody(htmlDoc), input.logo);
+        })()
+      : { typeHeader: "Content-Type: text/plain; charset=utf-8", body: `${encodeBody(prepareMailBody(input.body))}\r\n` };
+  const files = input.files ?? [];
+  if (files.length === 0) {
+    headers.push(part.typeHeader);
+    return `${headers.join("\r\n")}\r\n\r\n${part.body}`;
   }
-  const prepared = prepareMailBody(input.body);
-  if (looksLikeHtml(prepared)) {
-    const plain = htmlToPlain(prepared) || " ";
-    const htmlDoc = `<!DOCTYPE html><html><body style="font-family:system-ui,Segoe UI,sans-serif;font-size:14px;line-height:1.5;color:#14221b">${prepared}</body></html>`;
-    return finishRfc822(headers, token, encodeBody(plain), encodeBody(htmlDoc), input.logo);
+  const mix = `mix_${token}`;
+  headers.push(`Content-Type: multipart/mixed; boundary="${mix}"`);
+  const blocks = [`--${mix}`, part.typeHeader, "", part.body.replace(/\s+$/, "")];
+  for (const file of files) {
+    const name = file.filename.replace(/[\r\n"]/g, "");
+    blocks.push(
+      `--${mix}`,
+      `Content-Type: ${file.mime}; name="${name}"`,
+      "Content-Transfer-Encoding: base64",
+      `Content-Disposition: attachment; filename="${name}"`,
+      "",
+      wrapBase64(file.base64),
+    );
   }
-  headers.push("Content-Type: text/plain; charset=utf-8");
-  return `${headers.join("\r\n")}\r\n\r\n${encodeBody(prepared)}\r\n`;
+  blocks.push(`--${mix}--`, "");
+  return `${headers.join("\r\n")}\r\n\r\n${blocks.join("\r\n")}`;
 }
 
-function finishRfc822(
-  headers: string[],
+function rfcPart(
   token: string,
   plain: string,
   html: string,
   logo?: { mime: string; base64: string } | null,
-): string {
+): { typeHeader: string; body: string } {
   const alt = `alt_${token}`;
   const alternative = [
     `--${alt}`,
@@ -99,12 +172,9 @@ function finishRfc822(
     "",
   ].join("\r\n");
   if (!logo?.base64) {
-    headers.push(`Content-Type: multipart/alternative; boundary="${alt}"`);
-    return `${headers.join("\r\n")}\r\n\r\n${alternative}`;
+    return { typeHeader: `Content-Type: multipart/alternative; boundary="${alt}"`, body: alternative };
   }
   const rel = `rel_${token}`;
-  const wrapped = logo.base64.replace(/\s+/g, "").replace(/(.{76})/g, "$1\r\n");
-  headers.push(`Content-Type: multipart/related; boundary="${rel}"; type="multipart/alternative"`);
   const related = [
     `--${rel}`,
     `Content-Type: multipart/alternative; boundary="${alt}"`,
@@ -116,11 +186,11 @@ function finishRfc822(
     "Content-ID: <logo@recruit4us>",
     "Content-Disposition: inline; filename=\"logo\"",
     "",
-    wrapped,
+    wrapBase64(logo.base64),
     `--${rel}--`,
     "",
   ].join("\r\n");
-  return `${headers.join("\r\n")}\r\n\r\n${related}`;
+  return { typeHeader: `Content-Type: multipart/related; boundary="${rel}"; type="multipart/alternative"`, body: related };
 }
 
 export function redactSecrets(text: string, secrets: string[]): string {

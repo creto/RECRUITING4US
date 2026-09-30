@@ -23,6 +23,8 @@ function Mail() {
   const [sendName, setSendName] = useState("");
   const [sendId, setSendId] = useState("");
   const [sendTo, setSendTo] = useState("");
+  const [sendFiles, setSendFiles] = useState<{ filename: string; mime: string; base64: string }[]>([]);
+  const [fileKey, setFileKey] = useState(0);
   const [notice, setNotice] = useState("");
   const [pending, setPending] = useState(false);
   const workspace = useCompanyWorkspace();
@@ -42,8 +44,9 @@ function Mail() {
       return;
     }
     setPending(true);
-    queuePlatformMail({ data: { slug: companySlug, applicationId: id, candidateName: who, to: recipient, kind: "FOLLOW_UP", subject: template.subject, body: template.body, idempotencyKey: crypto.randomUUID() } })
-      .then(() => { setNotice(`Queued "${template.name}" in the company card. Stored, accepted, delivered, bounced, or failed shows in the delivery queue.`); refreshPage(); })
+    const attached = sendFiles.length;
+    queuePlatformMail({ data: { slug: companySlug, applicationId: id, candidateName: who, to: recipient, kind: "FOLLOW_UP", subject: template.subject, body: template.body, idempotencyKey: crypto.randomUUID(), attachments: sendFiles.length ? sendFiles : undefined } })
+      .then(() => { setNotice(`Queued "${template.name}" in the company card${attached ? ` with ${attached} file${attached === 1 ? "" : "s"}` : ""}. Stored, accepted, delivered, bounced, or failed shows in the delivery queue.`); refreshPage(); })
       .catch((err) => setError(err instanceof Error ? err.message : "Could not queue."))
       .finally(() => setPending(false));
   }
@@ -75,6 +78,25 @@ function Mail() {
               <input className={inputClass} value={sendId} onChange={(event) => setSendId(event.target.value)} placeholder="Or paste an application id" />
             </Field>
             <p className="text-sm text-muted">To can be any address. A name sends only when one application matches. An application id is used as written.</p>
+            <Field label="Files">
+              <input
+                key={fileKey}
+                className={inputClass}
+                type="file"
+                multiple
+                accept=".pdf,.png,.jpg,.jpeg,.txt,.csv,.docx,application/pdf,image/png,image/jpeg,text/plain,text/csv"
+                onChange={(event) => {
+                  void readMailFiles(event.target.files).then(setSendFiles).catch((err: Error) => setError(err.message));
+                }}
+              />
+            </Field>
+            {sendFiles.length ? (
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span>{sendFiles.map((file) => file.filename).join(", ")}</span>
+                <Button type="button" variant="ghost" onClick={() => { setSendFiles([]); setFileKey((value) => value + 1); }}>Remove files</Button>
+              </div>
+            ) : null}
+            <p className="text-sm text-muted">Up to 3 files, 700 KB each. PDF, PNG, JPEG, text, CSV, or Word. They go with the next template you send.</p>
             <TemplateChoices
               templates={templates.data?.templates ?? []}
               pendingId={pending ? "sending" : null}
@@ -199,7 +221,7 @@ function Mail() {
             <li key={String(row.id)} className="rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-3 text-sm">
               <p className="font-medium">{String(row.subject)}</p>
               <p>{String(row.status)} · {String(row.state_label)}</p>
-              <p className="text-muted">To {String(row.to_email)}{row.candidate_name ? ` · ${String(row.candidate_name)}` : ""}{row.job_title ? ` · ${String(row.job_title)}` : ""} · {String(row.kind)} · attempts {String(row.attempt_count)} · {String(row.provider)}</p>
+              <p className="text-muted">To {String(row.to_email)}{row.candidate_name ? ` · ${String(row.candidate_name)}` : ""}{row.job_title ? ` · ${String(row.job_title)}` : ""} · {String(row.kind)} · attempts {String(row.attempt_count)} · {String(row.provider)}{row.attached ? ` · files ${String(row.attached)}` : ""}</p>
               {row.application_id ? <p className="font-mono text-xs text-muted">{String(row.application_id)}</p> : null}
               {row.last_error ? <p className="text-muted">{String(row.last_error)}</p> : null}
             </li>
@@ -237,6 +259,23 @@ function filterMail<T extends Record<string, unknown>>(rows: T[], person: string
 
 function uniqueValues(rows: Record<string, unknown>[], key: string): string[] {
   return [...new Set(rows.map((row) => String(row[key] ?? "")).filter(Boolean))].sort();
+}
+
+async function readMailFiles(list: FileList | null): Promise<{ filename: string; mime: string; base64: string }[]> {
+  const picked = Array.from(list ?? []);
+  if (picked.length > 3) throw new Error("Attach at most 3 files.");
+  const files = [];
+  for (const file of picked) {
+    if (file.size > 700_000) throw new Error(`${file.name} is over 700 KB.`);
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = "";
+    const step = 0x8000;
+    for (let index = 0; index < bytes.length; index += step) {
+      binary += String.fromCharCode(...bytes.subarray(index, index + step));
+    }
+    files.push({ filename: file.name, mime: file.type || "application/octet-stream", base64: btoa(binary) });
+  }
+  return files;
 }
 
 function MailNarrow({
