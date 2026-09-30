@@ -3,6 +3,20 @@
 @import "@fontsource-variable/oswald";
 @import "react-day-picker/style.css";
 
+/* Brand greens: library defaults (blue / lavender) load after Tailwind and
+   would otherwise win over utility [--rdp-*] tokens on .rdp-root. */
+.rdp-root {
+  --rdp-accent-color: #036145;
+  --rdp-accent-background-color: #cefa90;
+  --rdp-today-color: #036145;
+}
+
+/* Selected day: solid forest green (library default is border-only). */
+.rdp-selected .rdp-day_button {
+  background-color: var(--rdp-accent-color);
+  color: #ffffff;
+}
+
 @theme {
   --font-sans: "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Oswald Variable", ui-sans-serif, system-ui, sans-serif;

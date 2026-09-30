@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from "react";
+import { useId, useMemo, useState, type CSSProperties } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import { DayPicker } from "react-day-picker";
 import { CalendarDays, Clock } from "lucide-react";
@@ -107,7 +107,14 @@ export function DateTimeLocalField({ label, name, defaultValue = "", required }:
               }}
               defaultMonth={date}
               disabled={{ before: new Date(new Date().setHours(0, 0, 0, 0)) }}
-              className="rdp-root mx-auto [--rdp-accent-color:#036145] [--rdp-accent-background-color:#cefa90] [--rdp-today-color:#036145]"
+              className="mx-auto"
+              style={
+                {
+                  "--rdp-accent-color": "#036145",
+                  "--rdp-accent-background-color": "#cefa90",
+                  "--rdp-today-color": "#036145",
+                } as CSSProperties
+              }
             />
             <div className="mt-3 flex items-center gap-2 border-t border-line pt-3">
               <Clock className="size-4 shrink-0 text-muted" aria-hidden />
