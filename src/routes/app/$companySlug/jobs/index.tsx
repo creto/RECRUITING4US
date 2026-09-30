@@ -40,6 +40,10 @@ function Jobs() {
   return (
     <div>
       <PageTitle title="Jobs" lede="Drafts stay private. Public applications open only after you publish." />
+      <p className="mb-1 text-sm">
+        <AppLink className="text-link" href="/portal">Applicant portal</AppLink>
+      </p>
+      <p className="mb-4 text-sm text-muted">A person opens this after they apply. It is not part of this workspace.</p>
       <form className="mb-8 flex flex-col gap-3 rounded-[24px] border border-line bg-white p-4 shadow-[0_8px_24px_rgba(20,34,27,0.04)] sm:flex-row sm:items-end" onSubmit={onCreate}>
         <div className="flex-1">
           <Field label="New job title">

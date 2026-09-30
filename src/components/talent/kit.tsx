@@ -426,16 +426,8 @@ export function Shell({
             </div>
           ))}
         </nav>
-        <div className="hidden space-y-2 px-4 py-4 text-sm md:block">
-          <AppLink className="block text-sidebar-muted" href={`/careers/${slug}`}>Public careers</AppLink>
-          <AppLink className="block text-sidebar-muted" href="/candidate">Candidate portal</AppLink>
-        </div>
       </aside>
       <div className="min-w-0">
-        <div className="flex gap-4 overflow-x-auto border-b border-line px-4 py-2 text-sm md:hidden">
-          <AppLink href={`/careers/${slug}`}>Careers</AppLink>
-          <AppLink href="/candidate">Portal</AppLink>
-        </div>
         <main id="workspace-main" className="mx-auto max-w-6xl px-4 py-8">{children}</main>
       </div>
     </div>

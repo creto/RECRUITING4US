@@ -8,6 +8,8 @@ export const ES: Record<string, string> = {
   Operate: "Operación",
   Dashboard: "Panel",
   Jobs: "Puestos",
+  "Applicant portal": "Portal del postulante",
+  "A person opens this after they apply. It is not part of this workspace.": "Una persona abre esto después de postular. No forma parte de este espacio.",
   Candidates: "Candidatos",
   Assessments: "Evaluaciones",
   "Code bank": "Banco de código",
