@@ -12,6 +12,16 @@ export type SmtpConfig = {
 };
 
 /** Bare address for SMTP MAIL FROM. Strips display-name / angle brackets so we never send <<addr>>. */
+
+/** Display name from MAIL_FROM when written as `Name <addr@host>`. */
+export function displayNameFromMailFrom(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  const angled = trimmed.match(/^(.*?)<\s*[^<>@\s]+@[^<>@\s]+\s*>$/);
+  if (!angled) return "";
+  return angled[1].replace(/^["']|["']$/g, "").trim().slice(0, 80);
+}
+
 export function normalizeMailFrom(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) return "";
@@ -139,20 +149,21 @@ async function afterHello(
     if (kind !== "accepted") {
       io.write("QUIT");
       io.close();
-      return { result: kind, detail: redactSecrets(`Recipient refused with ${rcpt.code}.`, secrets) };
+      return { result: kind, detail: redactSecrets(`Recipient refused with ${rcpt.code}${rcpt.text ? `: ${rcpt.text}` : "."}`.slice(0, 300), secrets) };
     }
   }
   io.write("DATA");
   const data = await io.read();
   if (data.code !== 354) throw new Error(`DATA was refused with ${data.code}.`);
+  const envelopeFrom = normalizeMailFrom(config.from);
   const raw = buildRfc822({
-    from: config.from,
+    from: envelopeFrom,
     to: message.to.join(", "),
     cc: message.cc,
     subject: message.subject,
     body: message.body,
     messageId: message.messageId,
-    fromName: message.fromName,
+    fromName: message.fromName || displayNameFromMailFrom(config.from),
     html: message.html,
     logo: message.logo,
   });
@@ -164,7 +175,9 @@ async function afterHello(
   return {
     result: kind === "accepted" ? "accepted" as const : kind,
     detail: redactSecrets(
-      kind === "accepted" ? `Provider accepted the message (${accepted.code}). This is not delivery.` : `DATA ended with ${accepted.code}.`,
+      kind === "accepted"
+        ? `Provider accepted the message (${accepted.code}). This is not delivery.`
+        : `DATA ended with ${accepted.code}${accepted.text ? `: ${accepted.text}` : "."}`.slice(0, 300),
       secrets,
     ),
   };
