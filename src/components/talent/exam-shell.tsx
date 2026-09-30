@@ -1,5 +1,6 @@
 import { memo, useState, type ReactNode } from "react";
 import { answerComplete, type SavedAnswer } from "@/domain/candidate-view";
+import { ProblemPrompt } from "@/components/talent/code-block";
 
 export type ExamCard = {
   id: string;
@@ -132,11 +133,15 @@ export function ExamDesk({
           <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-[#44574e]">
             <span className="rounded-full border border-[#d7e1da] bg-[#f7fbe9] px-2.5 py-1 text-[#4c6b16]">{item.section}</span>
             <span className="rounded-full border border-[#d7e1da] px-2.5 py-1">{kindLabel(item.type)}</span>
-            {item.difficulty ? <span className="rounded-full border border-[#d7e1da] px-2.5 py-1">{item.difficulty}</span> : null}
             <span className="rounded-full border border-[#d7e1da] px-2.5 py-1">{item.type === "likert" ? "No correct answer" : `${item.points} pt`}</span>
             <span className="ml-auto normal-case tracking-normal">{index + 1} / {items.length}</span>
           </div>
-          <p className="mt-5 whitespace-pre-wrap text-lg leading-relaxed text-[#17211c] sm:text-xl">{item.prompt}</p>
+          <div className="mt-5">
+            <ProblemPrompt
+              prompt={item.prompt}
+              difficulty={item.difficulty}
+            />
+          </div>
           <div className="mt-6">
             <AnswerSurface item={item} answer={answer} closed={closed} onAnswer={onAnswer} />
           </div>
@@ -247,13 +252,30 @@ function AnswerSurface({
       </label>
     );
   }
+  if (item.type === "code" || item.type === "sql") {
+    return (
+      <label className="block overflow-hidden rounded-2xl border border-[#2a3530] bg-[#15201b]">
+        <span className="flex items-center justify-between border-b border-[#2f3d36] bg-[#1b2822] px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[#8fb59a]">
+          {item.type === "sql" ? "query.sql" : "solution.js"}
+          <span className="normal-case tracking-normal text-[#6f8f7c]">Your answer</span>
+        </span>
+        <textarea
+          disabled={closed}
+          spellCheck={false}
+          className="min-h-64 w-full resize-y bg-transparent px-4 py-4 font-mono text-[13px] leading-6 text-[#e8f0ea] outline-none"
+          value={answer?.text ?? ""}
+          onChange={(event) => onAnswer({ text: event.target.value })}
+        />
+      </label>
+    );
+  }
   return (
     <label className="block">
-      <span className="text-xs uppercase tracking-[0.16em] text-[#44574e]">{item.type === "code" ? "Source" : "Response"}</span>
+      <span className="text-xs uppercase tracking-[0.16em] text-[#44574e]">Response</span>
       <textarea
         disabled={closed}
-        spellCheck={item.type !== "code"}
-        className={`mt-2 min-h-64 w-full rounded-2xl border border-[#d7e1da] bg-[#f7faf8] px-4 py-4 text-sm text-[#17211c] outline-none focus:border-[#4c6b16] ${item.type === "code" ? "font-mono leading-6" : ""}`}
+        spellCheck
+        className="mt-2 min-h-64 w-full rounded-2xl border border-[#d7e1da] bg-[#f7faf8] px-4 py-4 text-sm text-[#17211c] outline-none focus:border-[#4c6b16]"
         value={answer?.text ?? ""}
         onChange={(event) => onAnswer({ text: event.target.value })}
       />

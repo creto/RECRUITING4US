@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { gradingGuide, manualBasisPoints } from "@/domain/rules";
 import { getReview, judgeCodeBoard, listCodeBoard, listReviews, submitReview } from "@/server/talent.functions";
 import { Alert, Button, Empty, Field, inputClass, Loading, PageTitle, refreshPage, useAuthed } from "@/components/talent/kit";
+import { CodeBlock, ProblemPrompt } from "@/components/talent/code-block";
 
 export const Route = createFileRoute("/app/$companySlug/reviews")({ component: Reviews });
 
@@ -122,8 +123,14 @@ function ReviewForm({ slug, reviewId }: { slug: string; reviewId: string }) {
         return (
           <article key={item.id} className="rounded-md border border-line p-3 text-sm">
             <p className="text-xs uppercase text-muted">{item.type} · {item.points} pt · {guide.title}</p>
-            <p className="mt-1 whitespace-pre-wrap">{item.prompt}</p>
-            <p className="mt-2 whitespace-pre-wrap text-muted">{item.answer || "No answer saved."}</p>
+            <div className="mt-2"><ProblemPrompt prompt={item.prompt} compact /></div>
+            <div className="mt-3">
+              {item.type === "code" || item.type === "sql" ? (
+                <CodeBlock code={item.answer || "// No answer saved."} language={item.type === "sql" ? "sql" : "javascript"} />
+              ) : (
+                <p className="whitespace-pre-wrap text-muted">{item.answer || "No answer saved."}</p>
+              )}
+            </div>
             <p className="mt-2 text-muted">{guide.steps[0]}</p>
           </article>
         );

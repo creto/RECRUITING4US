@@ -161,7 +161,7 @@ export async function listQuestions(
     key_payload: unknown;
   }>`
     select q.id, q.type, q.tags, q.archived,
-      left(v.prompt, 320) as prompt,
+      left(v.prompt, 900) as prompt,
       v.payload->>'title' as title,
       v.version_number, v.id as version_id, v.points,
       v.payload->>'difficulty' as difficulty,

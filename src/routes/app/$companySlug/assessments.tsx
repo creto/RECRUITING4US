@@ -4,6 +4,7 @@ import { DEFAULT_TEXT_RUBRIC, explainAuthorQuestion, gradingGuide } from "@/doma
 import { archiveAssessment, assignAssessment, createAssessment, createQuestion, listAssessments, listQuestions, previewAssessment, publishAssessment, sendAssessmentToFits, updateAssessmentDelivery } from "@/server/talent.functions";
 import { ExamPreview, type AssessmentPreview } from "@/components/talent/exam-preview";
 import { examPaper } from "@/components/talent/exam-shell";
+import { DifficultyBadge, ProblemPrompt } from "@/components/talent/code-block";
 import { Alert, Button, Empty, Field, inputClass, Loading, PageTitle, refreshPage, useAuthed } from "@/components/talent/kit";
 
 export const Route = createFileRoute("/app/$companySlug/assessments")({ component: Assessments });
@@ -310,14 +311,24 @@ function Assessments() {
                   }}
                 />
                 <span className="min-w-0 flex-1">
-                  <span className="text-[11px] uppercase tracking-[0.16em] text-[#4c6b16]">{String(question.type)} · v{String(question.version_number)} · {String(question.points)} pt{question.difficulty ? ` · ${String(question.difficulty)}` : ""}{question.title ? ` · ${String(question.title)}` : ""}</span>
-                  <p className="mt-2 whitespace-pre-wrap text-base leading-relaxed text-[#17211c]">{String(question.prompt).slice(0, 320)}</p>
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-[#4c6b16]">
+                    <span>{String(question.type)} · v{String(question.version_number)} · {String(question.points)} pt</span>
+                    <DifficultyBadge difficulty={question.difficulty ? String(question.difficulty) : null} />
+                  </div>
+                  <div className="mt-3">
+                    <ProblemPrompt
+                      prompt={String(question.prompt ?? "")}
+                      title={question.title ? String(question.title) : null}
+                      difficulty={null}
+                      compact
+                    />
+                  </div>
                   {Array.isArray(question.options) && question.options.length > 0 ? (
                     <ul className="mt-3 grid gap-2">
                       {question.options.map((option: { id: string; label: string }, position: number) => (
                         <li key={option.id} className="flex items-start gap-3 rounded-2xl border border-[#d7e1da] bg-[#f7faf8] px-3 py-2 text-[#17211c]">
                           <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-white font-brand text-xs text-[#4c6b16]">{String.fromCharCode(65 + position)}</span>
-                          <span>{option.label}</span>
+                          <span className="leading-snug">{option.label}</span>
                         </li>
                       ))}
                     </ul>

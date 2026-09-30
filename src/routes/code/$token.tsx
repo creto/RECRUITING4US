@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { getCodeExercise, runCode } from "@/server/talent.functions";
 import { Alert, Button, Gate, Loading, useAuthed } from "@/components/talent/kit";
 import { examPaper } from "@/components/talent/exam-shell";
+import { CodeBlock, DifficultyBadge, ProblemPrompt } from "@/components/talent/code-block";
 
 export const Route = createFileRoute("/code/$token")({ component: CodeExercise });
 
@@ -23,7 +24,10 @@ function CodeExercise() {
       <main className={`${examPaper} min-h-screen bg-[#f4f7f5]`}>
         <div className="mx-auto max-w-4xl px-4 py-8">
         <p className="text-[11px] uppercase tracking-[0.2em] text-[#4c6b16]">Coding exercise</p>
-        <h1 className="mt-1 text-4xl text-[#17211c]">{state.data?.title ?? "Coding exercise"}</h1>
+        <div className="mt-1 flex flex-wrap items-center gap-3">
+          <h1 className="text-4xl text-[#17211c]">{state.data?.title ?? "Coding exercise"}</h1>
+          <DifficultyBadge difficulty={state.data?.difficulty ? String(state.data.difficulty) : null} />
+        </div>
         <p className="mt-2 max-w-2xl text-sm text-[#44574e]">{state.data?.note}</p>
         {state.loading ? <Loading /> : null}
         {state.error ? <Alert>{state.error}</Alert> : null}
@@ -34,20 +38,30 @@ function CodeExercise() {
             <span>One file · network denied</span>
           </div>
           <div className="space-y-4 px-5 py-5">
-            <p className="whitespace-pre-wrap text-base leading-relaxed text-[#17211c]">{state.data?.prompt}</p>
-            <ul className="grid gap-2">
-              {(state.data?.samples ?? []).map((sample: any) => (
-                <li key={sample.name} className="rounded-2xl border border-[#d7e1da] bg-[#f7faf8] px-4 py-3 font-mono text-xs text-[#17211c]">
-                  {sample.name}: {JSON.stringify(sample.args)}
-                </li>
-              ))}
-            </ul>
+            <ProblemPrompt prompt={String(state.data?.prompt ?? "")} />
+            {(state.data?.samples ?? []).length ? (
+              <div className="space-y-2">
+                <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-[#4c6b16]">Sample cases</p>
+                <ul className="grid gap-2">
+                  {(state.data?.samples ?? []).map((sample: any) => (
+                    <li key={sample.name}>
+                      <CodeBlock code={`${sample.name}(${JSON.stringify(sample.args).slice(1, -1)})`} language="javascript" />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             {state.data?.consentText ? <p className="text-sm">{state.data.consentText}</p> : null}
             {state.data?.accommodationText ? <p className="text-sm">{state.data.accommodationText}</p> : null}
             {state.data?.webcamRequested ? <p className="text-sm">A camera was requested by policy. This page does not capture snapshots. A camera flag would not prove cheating and would not reject you.</p> : null}
             {state.data?.consentText ? <label className="flex items-start gap-3 rounded-2xl border border-line px-4 py-3 text-sm"><input type="checkbox" className="mt-1" checked={consented} onChange={(event) => setConsented(event.target.checked)} /> I have read the notice. I can refuse and ask for an accommodation. Refusal is not a rejection.</label> : null}
-            <label className="block text-[11px] uppercase tracking-[0.16em] text-[#44574e]" htmlFor="source">Your function</label>
-            <textarea id="source" className="min-h-80 w-full rounded-2xl border border-[#d7e1da] bg-[#f7faf8] px-4 py-4 font-mono text-sm leading-6 text-[#17211c] outline-none focus:border-[#4c6b16]" value={source} onChange={(event) => setSource(event.target.value)} spellCheck={false} />
+            <div className="overflow-hidden rounded-2xl border border-[#2a3530] bg-[#15201b]">
+              <label className="flex items-center justify-between border-b border-[#2f3d36] bg-[#1b2822] px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[#8fb59a]" htmlFor="source">
+                solution.js
+                <span className="normal-case tracking-normal text-[#6f8f7c]">Your function</span>
+              </label>
+              <textarea id="source" className="min-h-80 w-full resize-y bg-transparent px-4 py-4 font-mono text-[13px] leading-6 text-[#e8f0ea] outline-none" value={source} onChange={(event) => setSource(event.target.value)} spellCheck={false} />
+            </div>
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="secondary" className="rounded-full border-[#d7e1da] bg-white text-[#17211c]" onClick={() => runCode({ data: { token, source, final: false, consented } }).then((row) => setResult(row.detail)).catch((err: Error) => setError(err.message))}>Run samples</Button>
               <Button type="button" className="rounded-full bg-[#cefa90] text-[#14221b]" onClick={() => runCode({ data: { token, source, final: true, consented } }).then((row) => setResult(`${row.detail} ${row.complexity.label} ${row.complexity.timeClass}`)).catch((err: Error) => setError(err.message))}>Submit</Button>

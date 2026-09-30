@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { admitLive, endLive, livePackage, readLive, runLiveSample, syncLive } from "@/server/talent.functions";
 import { diffEdit } from "@/domain/platform/collab";
 import { useCandidateSignals } from "@/components/talent/live-signals";
+import { ProblemPrompt } from "@/components/talent/code-block";
 import { Alert, Button, Gate, Loading, PageTitle, useAuthed, when } from "@/components/talent/kit";
 
 export const Route = createFileRoute("/live/$token")({ component: LiveRoom });
@@ -128,7 +129,7 @@ function LiveRoom() {
         {room?.role === "INTERVIEWER" ? <p className="mb-3 text-sm">You are watching the shared pad. The candidate’s typing shows up here. Screen, tab, and clipboard notes stay with you. They do not change a score.</p> : null}
         <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
           <div>
-            <p className="mb-2 whitespace-pre-wrap text-sm">{room?.prompt}</p>
+            <div className="mb-3"><ProblemPrompt prompt={String(room?.prompt ?? "")} compact /></div>
             <p className="mb-2 text-xs text-muted">Active file {room?.activeFile || "solve.js"}. The run uses solve.js in the secure judge. A timeout is not a score. A meeting link is an outside call.</p>
             <div className="mb-2 flex flex-wrap gap-2">
               {(room?.files ?? []).map((file: { name: string }) => (

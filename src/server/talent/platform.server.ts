@@ -686,11 +686,12 @@ async function openInvite(userId: string, token: string) {
     id: string;
     company_id: string;
     application_id: string | null;
+    question_id: string;
     version_id: string;
     candidate_email: string;
     expires_at: string;
   }>`
-    select id, company_id, application_id, version_id, candidate_email,
+    select id, company_id, application_id, question_id, version_id, candidate_email,
            to_char(expires_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as expires_at
     from code_invites where token = ${token}
   `;
@@ -705,11 +706,17 @@ export async function getCodeExercise(userId: string, token: string) {
   const { invite } = await openInvite(userId, token);
   const loaded = await loadCases(invite.company_id, invite.version_id);
   const sql = await db();
+  const meta = await sql<{ title: string; difficulty: string }>`
+    select title, difficulty from coding_questions
+    where company_id = ${invite.company_id} and id = ${invite.question_id}
+  `;
   const policy = await sql<{ consent_text: string; accommodation_text: string; webcam_requested: boolean }>`
     select consent_text, accommodation_text, webcam_requested from integrity_policies
     where company_id = ${invite.company_id} and assessment_key = 'coding'
   `;
   return {
+    title: meta[0]?.title ?? "Coding exercise",
+    difficulty: meta[0]?.difficulty ?? null,
     prompt: loaded.prompt,
     starter: loaded.starter,
     entry: loaded.entry,
