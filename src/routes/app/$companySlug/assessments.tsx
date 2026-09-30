@@ -48,6 +48,7 @@ function Assessments() {
   const [bankPage, setBankPage] = useState(0);
   const [bankQuery, setBankQuery] = useState("");
   const [bankSearch, setBankSearch] = useState("");
+  const [skillTag, setSkillTag] = useState("");
   const pageSize = 40;
   const questions = useAuthed(
     () => listQuestions({
@@ -57,9 +58,10 @@ function Assessments() {
         limit: pageSize,
         offset: bankPage * pageSize,
         q: bankSearch || undefined,
+        skillTag: skillTag || undefined,
       },
     }),
-    [companySlug, bankFilter, bankPage, bankSearch],
+    [companySlug, bankFilter, bankPage, bankSearch, skillTag],
   );
   const [sendApplicationId, setSendApplicationId] = useState("");
   const [sendAssessmentId, setSendAssessmentId] = useState("");
@@ -183,7 +185,7 @@ function Assessments() {
 
   return (
     <div>
-      <PageTitle title="Assessments" lede="Open Preview to take the paper with its time limit. Automatic send assigns a published exam when a CV is a fit. The coding bank is 500 original write-code problems across easy, medium, and hard. They are not items copied from another site. Code is stored for a person to grade." />
+      <PageTitle title="Assessments" lede="Open Preview to take the paper with its time limit. Automatic send assigns a published exam when a CV is a fit. The coding bank is 2,500 original write-code problems across easy, medium, and hard, each tagged with skills such as arrays, stacks, trees, graphs, and DP. Filter the exam code pool by those tags. They are not items copied from another site. Code is stored for a person to grade." />
       {tests.error ? <Alert>{tests.error}</Alert> : null}
       {error ? <div className="mb-3"><Alert>{error}</Alert></div> : null}
       {note ? <p className="mb-3 text-sm text-ok">{note}</p> : null}
@@ -308,7 +310,7 @@ function Assessments() {
           })}
         </div>
         <h2 className="mt-8 text-2xl">Question bank</h2>
-        <p className="mt-1 text-sm text-muted">The coding bank is 500 original write-code problems, easy, medium, and hard. The read-code bank is 500 original multiple-choice snippets. Lists load a page at a time so this tab stays fast.</p>
+        <p className="mt-1 text-sm text-muted">The coding bank is 2,500 original write-code problems with filterable skill tags. The read-code bank is 500 original multiple-choice snippets. Lists load a page at a time so this tab stays fast.</p>
         <div className="mt-3 flex flex-wrap gap-2">
           {(["other", "bank", "read", "all"] as const).map((value) => (
             <Button key={value} type="button" variant={bankFilter === value ? "secondary" : "ghost"} onClick={() => { setBankFilter(value); setBankPage(0); }}>
@@ -316,6 +318,20 @@ function Assessments() {
             </Button>
           ))}
         </div>
+        {(bankFilter === "bank" || bankFilter === "all") ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button type="button" variant={skillTag === "" ? "secondary" : "ghost"} onClick={() => { setSkillTag(""); setBankPage(0); }}>All skills</Button>
+            {(((questions.data as any)?.skillTags ?? [
+              "arrays", "lists", "strings", "hashing", "two-pointers", "sliding-window", "stacks", "queues",
+              "trees", "graphs", "dp", "recursion", "binary-search", "sorting", "greedy", "heaps", "math",
+              "bits", "backtracking", "intervals", "prefix-sums", "bfs", "dfs", "union-find", "matrices", "linked-lists",
+            ]) as string[]).map((tag) => (
+              <Button key={tag} type="button" variant={skillTag === tag ? "secondary" : "ghost"} onClick={() => { setSkillTag(tag); setBankPage(0); }}>
+                {tag}
+              </Button>
+            ))}
+          </div>
+        ) : null}
         <form className="mt-3 flex flex-wrap gap-2" onSubmit={(event) => { event.preventDefault(); setBankPage(0); setBankSearch(bankQuery.trim()); }}>
           <input className={`${inputClass} max-w-md`} value={bankQuery} onChange={(event) => setBankQuery(event.target.value)} placeholder="Search titles or prompts" />
           <Button type="submit" variant="secondary">Search</Button>
@@ -342,6 +358,16 @@ function Assessments() {
                   <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-[#4c6b16]">
                     <span>{String(question.type)} · v{String(question.version_number)} · {String(question.points)} pt</span>
                     <DifficultyBadge difficulty={question.difficulty ? String(question.difficulty) : null} />
+                    {Array.isArray(question.skillTags) ? question.skillTags.map((tag: string) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        className="rounded-full border border-[#d7e1da] px-2 py-0.5 normal-case tracking-normal text-[#44574e]"
+                        onClick={() => { setBankFilter("bank"); setSkillTag(tag); setBankPage(0); }}
+                      >
+                        {tag}
+                      </button>
+                    )) : null}
                   </div>
                   <div className="mt-3">
                     <ProblemPrompt

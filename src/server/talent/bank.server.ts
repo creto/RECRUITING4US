@@ -1,4 +1,5 @@
 import { CODING_LANGUAGE_IDS } from "@/domain/coding-languages";
+import { codingBankTagField } from "@/domain/coding-topics";
 import { orderedOptions } from "@/domain/candidate-view";
 import { assessmentNotice } from "@/domain/mail";
 import { DEFAULT_TEXT_RUBRIC } from "@/domain/rules";
@@ -20,7 +21,7 @@ export function flag(value: unknown): boolean {
 const codingBankReady = new Set<string>();
 const codingBankInflight = new Map<string, Promise<void>>();
 
-/** Idempotent. Publishes the 500-problem coding bank and a pooled write-code assessment. */
+/** Idempotent. Publishes the write-code bank (2500 problems) and a pooled assessment. */
 export async function ensureCodingBank(companyId: string) {
   if (codingBankReady.has(companyId)) return;
   const pending = codingBankInflight.get(companyId);
@@ -58,28 +59,66 @@ async function ensureCodingBankOnce(companyId: string) {
   if (questionCount >= CODING_BANK.length && exam[0] && itemCount >= CODING_BANK.length) {
     return;
   }
-  if (questionCount < CODING_BANK.length) {
+  const needQuestions = questionCount < CODING_BANK.length;
+  const needTagBackfill = await sql<{ n: number }>`
+    select count(*)::int as n from questions
+    where company_id = ${companyId}
+      and logical_key like 'bank:%'
+      and tags in ('coding-bank:easy', 'coding-bank:medium', 'coding-bank:hard')
+  `;
+  if (needQuestions || Number(needTagBackfill[0]?.n ?? 0) > 0) {
+    const have = await sql<{ logical_key: string; tags: string }>`
+      select logical_key, tags from questions
+      where company_id = ${companyId} and logical_key like 'bank:%'
+    `;
+    const byKey = new Map(have.map((row) => [row.logical_key, row.tags]));
     for (const item of CODING_BANK) {
       const logical = `bank:${item.key}`;
       const questionId = bankId(companyId, `q:${item.key}`);
       const points = item.difficulty === "hard" ? 3 : item.difficulty === "medium" ? 2 : 1;
-      await sql`
-        insert into questions (id, company_id, logical_key, type, tags)
-        values (${questionId}, ${companyId}, ${logical}, 'code', ${`coding-bank:${item.difficulty}`})
-        on conflict (company_id, logical_key) do nothing
-      `;
+      const tagField = codingBankTagField(item.difficulty, item.tags);
+      const existingTags = byKey.get(logical);
+      if (existingTags == null) {
+        await sql`
+          insert into questions (id, company_id, logical_key, type, tags)
+          values (${questionId}, ${companyId}, ${logical}, 'code', ${tagField})
+          on conflict (company_id, logical_key) do nothing
+        `;
+      } else if (existingTags !== tagField) {
+        await sql`
+          update questions set tags = ${tagField}
+          where company_id = ${companyId} and logical_key = ${logical}
+        `;
+      }
       await sql`
         insert into question_versions (
           id, company_id, question_id, version_number, prompt, payload, key_payload, rubric, points
         ) values (
           ${bankId(companyId, `v:${item.key}`)}, ${companyId}, ${questionId}, 1, ${item.prompt},
-          ${json({ mode: "code", languages: [...CODING_LANGUAGE_IDS], difficulty: item.difficulty, title: item.title, judged: false })}::jsonb,
+          ${json({
+            mode: "code",
+            languages: [...CODING_LANGUAGE_IDS],
+            difficulty: item.difficulty,
+            title: item.title,
+            tags: item.tags,
+            judged: false,
+          })}::jsonb,
           '{}'::jsonb,
           ${json(DEFAULT_TEXT_RUBRIC)}::jsonb,
           ${points}
         )
         on conflict (company_id, question_id, version_number) do nothing
       `;
+      if (existingTags == null || existingTags !== tagField) {
+        await sql`
+          update question_versions
+          set payload = jsonb_set(
+            jsonb_set(payload, '{tags}', ${json(item.tags)}::jsonb, true),
+            '{title}', ${json(item.title)}::jsonb, true
+          )
+          where company_id = ${companyId} and id = ${bankId(companyId, `v:${item.key}`)}
+        `;
+      }
     }
     await sql`
       update question_versions v
@@ -109,7 +148,7 @@ async function ensureCodingBankOnce(companyId: string) {
 
 const CODING_EXAM_NAME = "Assessment · Coding problems";
 const CODING_EXAM_DESCRIPTION =
-  "Five hundred original write-code problems. A timed paper draws two easy, two medium, and one hard problem. Answers are stored for a person to grade. These prompts were written for this bank.";
+  "Twenty-five hundred original write-code problems with skill tags (arrays, stacks, trees, graphs, DP, and more). A timed paper draws two easy, two medium, and one hard problem. Answers are stored for a person to grade. These prompts were written for this bank.";
 const CODING_EXAM_INSTRUCTIONS =
   "Ninety minutes. Two easy problems, two medium problems, and one hard problem are drawn from the bank and stay fixed for this attempt. Pick any supported programming language in the editor. They are not auto-judged. A person scores them. Sample runs execute every language in the editor through Judge0 CE (or the local Node jail for JavaScript/TypeScript when SAMPLE_RUN_LOCAL=1).";
 
@@ -137,13 +176,13 @@ async function ensureCodingExam(companyId: string) {
       instructions, score_release, published_at, content_hash, proctored
     ) values (
       ${versionId}, ${companyId}, ${assessmentId}, 1, 'PUBLISHED', ${90 * 60},
-      ${CODING_EXAM_INSTRUCTIONS}, 'AGGREGATE', now(), 'coding-500', false
+      ${CODING_EXAM_INSTRUCTIONS}, 'AGGREGATE', now(), 'coding-2500', false
     )
     on conflict (id) do nothing
   `;
   await sql`
     update assessment_versions
-    set instructions = ${CODING_EXAM_INSTRUCTIONS}, duration_seconds = ${90 * 60}, content_hash = 'coding-500'
+    set instructions = ${CODING_EXAM_INSTRUCTIONS}, duration_seconds = ${90 * 60}, content_hash = 'coding-2500'
     where id = ${versionId} and company_id = ${companyId}
   `;
   for (let index = 0; index < sections.length; index += 1) {

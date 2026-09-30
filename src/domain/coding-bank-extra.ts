@@ -1,7 +1,11 @@
-import type { CodingProblem } from "./coding-bank.ts";
-
 /** Original write-code prompts generated for this bank. Not copied from another site. */
-export const CODING_EXTRA: readonly CodingProblem[] = [
+export const CODING_EXTRA: readonly {
+  key: string;
+  difficulty: "easy" | "medium" | "hard";
+  title: string;
+  prompt: string;
+  tags?: string[];
+}[] = [
   {
     "key": "even-index-sum",
     "difficulty": "easy",

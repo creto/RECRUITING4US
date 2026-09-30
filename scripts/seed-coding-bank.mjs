@@ -42,10 +42,14 @@ function ladderId(companyId, name) {
 function pointsFor(difficulty) {
   return difficulty === "hard" ? 3 : difficulty === "medium" ? 2 : 1;
 }
+function codingTags(item) {
+  const skills = Array.isArray(item.tags) ? item.tags.filter(Boolean) : [];
+  return [`coding-bank:${item.difficulty}`, ...skills].join(" ");
+}
 
 const NAME = "Assessment · Coding problems";
 const DESCRIPTION =
-  "Five hundred original write-code problems. A timed paper draws two easy, two medium, and one hard problem. Answers are stored for a person to grade. These prompts were written for this bank.";
+  "Twenty-five hundred original write-code problems with skill tags. A timed paper draws two easy, two medium, and one hard problem. Answers are stored for a person to grade. These prompts were written for this bank.";
 const INSTRUCTIONS =
   "Ninety minutes. Two easy problems, two medium problems, and one hard problem are drawn from the bank and stay fixed for this attempt. They are not auto-judged. A person scores them.";
 const SECTIONS = [
@@ -100,12 +104,17 @@ for (const slug of slugs) {
     const questionId = bankId(companyId, `q:${item.key}`);
     const versionId = bankId(companyId, `v:${item.key}`);
     const points = pointsFor(item.difficulty);
+    const tagField = codingTags(item);
     const q = await client.query(
       `insert into questions (id, company_id, logical_key, type, tags)
        values ($1, $2, $3, 'code', $4)
        on conflict (company_id, logical_key) do nothing
        returning id`,
-      [questionId, companyId, logical, `coding-bank:${item.difficulty}`],
+      [questionId, companyId, logical, tagField],
+    );
+    await client.query(
+      `update questions set tags = $1 where company_id = $2 and logical_key = $3 and tags is distinct from $1`,
+      [tagField, companyId, logical],
     );
     if (q.rowCount) insertedQ += 1;
     const owned = await client.query(
@@ -119,6 +128,7 @@ for (const slug of slugs) {
       languages: ["typescript"],
       difficulty: item.difficulty,
       title: item.title,
+      tags: Array.isArray(item.tags) ? item.tags : [],
       judged: false,
     };
     const v = await client.query(
@@ -152,13 +162,13 @@ for (const slug of slugs) {
     `insert into assessment_versions (
        id, company_id, assessment_id, version_number, status, duration_seconds,
        instructions, score_release, published_at, content_hash, proctored
-     ) values ($1, $2, $3, 1, 'PUBLISHED', $4, $5, 'AGGREGATE', now(), 'coding-500', false)
+     ) values ($1, $2, $3, 1, 'PUBLISHED', $4, $5, 'AGGREGATE', now(), 'coding-2500', false)
      on conflict (id) do nothing`,
     [versionId, companyId, assessmentId, 90 * 60, INSTRUCTIONS],
   );
   await client.query(
     `update assessment_versions
-     set instructions = $1, duration_seconds = $2, content_hash = 'coding-500', status = 'PUBLISHED'
+     set instructions = $1, duration_seconds = $2, content_hash = 'coding-2500', status = 'PUBLISHED'
      where id = $3 and company_id = $4`,
     [INSTRUCTIONS, 90 * 60, versionId, companyId],
   );

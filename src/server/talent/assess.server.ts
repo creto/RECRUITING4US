@@ -45,6 +45,7 @@ import { ensureReadCodeBank } from "./read-code.server";
 import { candidateItem, answerComplete, coerceAnswer, orderedOptions } from "@/domain/candidate-view";
 import { isCodingLanguageId, sampleRunBlockedReason } from "@/domain/coding-languages";
 import { readPersonality, scorePersonality, type PersonalityResult } from "@/domain/personality";
+import { CODING_SKILL_TAGS, parseCodingBankSkills } from "@/domain/coding-topics";
 import { ensureReview, rememberEvent } from "./workflows.server";
 import { endAttemptLive, ensureAttemptLive, liveTokenForAttempt, mirrorAttemptLive, postAttemptLiveChat, pushAttemptLiveBuffer, readAttemptLiveChat, touchAttemptLive } from "./attempt-live.server";
 import { applicationIdGateHint, assessmentInviteHref, assessmentInvitePath, normalizeApplicationId } from "@/domain/assessment-invite";
@@ -157,7 +158,7 @@ export async function getAssessment(userId: string, slug: string, assessmentId: 
 export async function listQuestions(
   userId: string,
   slug: string,
-  opts: { filter?: "all" | "bank" | "read" | "other"; limit?: number; offset?: number; q?: string } = {},
+  opts: { filter?: "all" | "bank" | "read" | "other"; limit?: number; offset?: number; q?: string; skillTag?: string } = {},
 ) {
   const actor = await requireActor(userId, slug);
   allow(actor, "assessment.author");
@@ -167,6 +168,8 @@ export async function listQuestions(
   const limit = Math.min(100, Math.max(1, Number(opts.limit ?? 40)));
   const offset = Math.max(0, Number(opts.offset ?? 0));
   const needle = (opts.q ?? "").trim().slice(0, 80);
+  const skillTag = (opts.skillTag ?? "").trim().toLowerCase().slice(0, 40);
+  const skillNeedle = skillTag ? ` ${skillTag} ` : "";
   const bank = filter === "bank";
   const read = filter === "read";
   const other = filter === "other";
@@ -185,6 +188,7 @@ export async function listQuestions(
         or (not ${bank} and not ${read} and not ${other})
       )
       and (${needle} = '' or v.prompt ilike ${"%" + needle + "%"} or coalesce(v.payload->>'title', '') ilike ${"%" + needle + "%"})
+      and (${skillTag} = '' or (' ' || q.tags || ' ') like ${"%" + skillNeedle + "%"} or (' ' || coalesce(v.payload->>'tags', '') || ' ') like ${"%" + skillNeedle + "%"})
   `;
   const rows = await sql<{
     id: string;
@@ -206,7 +210,11 @@ export async function listQuestions(
       v.payload->>'title' as title,
       v.version_number, v.id as version_id, v.points,
       v.payload->>'difficulty' as difficulty,
-      case when q.type in ('single', 'multi', 'likert') then v.payload else '{}'::jsonb end as payload,
+      case
+        when q.type in ('single', 'multi', 'likert') then v.payload
+        when q.tags like 'coding-bank%' or q.tags like 'read-code%' then jsonb_build_object('tags', coalesce(v.payload->'tags', '[]'::jsonb), 'difficulty', v.payload->>'difficulty', 'title', v.payload->>'title')
+        else '{}'::jsonb
+      end as payload,
       case when q.type in ('single', 'multi', 'numeric') then v.rubric else null end as rubric,
       case when q.type in ('single', 'multi', 'numeric') then v.key_payload else '{}'::jsonb end as key_payload
     from questions q
@@ -222,6 +230,7 @@ export async function listQuestions(
         or (not ${bank} and not ${read} and not ${other})
       )
       and (${needle} = '' or v.prompt ilike ${"%" + needle + "%"} or coalesce(v.payload->>'title', '') ilike ${"%" + needle + "%"})
+      and (${skillTag} = '' or (' ' || q.tags || ' ') like ${"%" + skillNeedle + "%"} or (' ' || coalesce(v.payload->>'tags', '') || ' ') like ${"%" + skillNeedle + "%"})
     order by
       case when q.tags like 'coding-bank%' or q.tags like 'read-code%' then 1 else 0 end,
       q.created_at desc
@@ -238,10 +247,15 @@ export async function listQuestions(
           key: row.key_payload,
         })
       : null;
+    const payloadTags = row.payload && typeof row.payload === "object" && Array.isArray((row.payload as { tags?: unknown }).tags)
+      ? ((row.payload as { tags: unknown[] }).tags).map(String)
+      : [];
+    const skillTags = payloadTags.length ? payloadTags : parseCodingBankSkills(row.tags);
     return {
       id: row.id,
       type: row.type,
       tags: row.tags,
+      skillTags,
       archived: row.archived,
       prompt: row.prompt,
       title: row.title,
@@ -261,6 +275,8 @@ export async function listQuestions(
     limit,
     offset,
     filter,
+    skillTag: skillTag || null,
+    skillTags: [...CODING_SKILL_TAGS],
   };
 }
 

@@ -551,6 +551,7 @@ export const listQuestions = createServerFn({ method: "POST" })
     limit: z.number().int().min(1).max(100).optional(),
     offset: z.number().int().min(0).max(100000).optional(),
     q: z.string().max(80).optional(),
+    skillTag: z.string().max(40).optional(),
   }))
   .handler(async ({ context, data }) => {
     const userId = context.userId;
@@ -560,6 +561,7 @@ export const listQuestions = createServerFn({ method: "POST" })
       limit: data.limit,
       offset: data.offset,
       q: data.q,
+      skillTag: data.skillTag,
     }) as any;
   });
 

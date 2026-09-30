@@ -7,15 +7,15 @@ function personalityId(companyId: string, name: string) {
 }
 
 const INSTRUCTIONS =
-  "Twenty-five statements. Choose how much you agree. There is no correct answer. The result is a preference summary on five scales, not a percentage and not a hiring decision. This questionnaire is original. It is not the 16Personalities test and not the Myers-Briggs Type Indicator.";
+  "One hundred twenty-five statements. Choose how much you agree. There is no correct answer. The result is a preference summary on five scales, not a percentage and not a hiring decision. This questionnaire is original. It is not the 16Personalities test and not the Myers-Briggs Type Indicator.";
 
 const NAME = "Assessment 3 · Personality";
 const DESCRIPTION =
-  "Third assessment. Twenty-five agree-or-disagree statements. Five scales — mind, information, decisions, structure, and identity — produce a type such as ENFP-A. There is no correct answer and no percentage. It is not sent automatically with a CV. The statements are original. This is not the 16Personalities test and not the Myers-Briggs Type Indicator.";
+  "Third assessment. One hundred twenty-five agree-or-disagree statements. Five scales — mind, information, decisions, structure, and identity — produce a type such as ENFP-A. There is no correct answer and no percentage. It is not sent automatically with a CV. The statements are original. This is not the 16Personalities test and not the Myers-Briggs Type Indicator.";
 
 const personalityReady = new Set<string>();
 
-/** Idempotent. Publishes the 25-statement personality questionnaire. */
+/** Idempotent. Publishes the personality questionnaire (extended item bank; same scoring). */
 export async function ensurePersonalityAssessment(companyId: string) {
   if (personalityReady.has(companyId)) return;
   enterTenant({ companyId, publicSlug: "" });
@@ -68,10 +68,19 @@ export async function ensurePersonalityAssessment(companyId: string) {
       id, company_id, assessment_id, version_number, status, duration_seconds,
       instructions, score_release, published_at, content_hash, proctored
     ) values (
-      ${versionId}, ${companyId}, ${assessmentId}, 1, 'PUBLISHED', ${20 * 60},
-      ${INSTRUCTIONS}, 'AGGREGATE', now(), 'work-style-25', false
+      ${versionId}, ${companyId}, ${assessmentId}, 1, 'PUBLISHED', ${40 * 60},
+      ${INSTRUCTIONS}, 'AGGREGATE', now(), 'work-style-125', false
     )
     on conflict (id) do nothing
+  `;
+  await sql`
+    update assessments set name = ${NAME}, description = ${DESCRIPTION}
+    where id = ${assessmentId} and company_id = ${companyId}
+  `;
+  await sql`
+    update assessment_versions
+    set instructions = ${INSTRUCTIONS}, duration_seconds = ${40 * 60}, content_hash = 'work-style-125'
+    where id = ${versionId} and company_id = ${companyId}
   `;
   await sql`
     insert into assessment_sections (
