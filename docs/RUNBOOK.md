@@ -9,9 +9,9 @@ This matches the code. It does not describe Redis, MinIO, or a code runner.
 
 4. Build with `npm run build`. The build applies SQL only when `DATABASE_URL` is set. The embedded database applies `migrations/*.sql` when the app starts.
 5. Count handwritten lines with `node scripts/measure-loc.mjs`.
-6. Inspect the outbox helper with `node scripts/outbox-worker.mjs`. It must not mark events processed.
+6. With a shared `DATABASE_URL`, run the outbox worker: `npm run outbox:worker` (or `OUTBOX_ONCE=1 npm run outbox:worker` for a single tick). It drains pending `outbox_events` and due `message_intents`. Without `DATABASE_URL` it exits without draining.
 
-If a workflow row stays pending, open the company workspace so the web process leases it again. If `attempts` reaches 5, read `last_error` on `outbox_events` instead of retrying forever.
+If a workflow row stays pending, the worker or opening the company workspace leases it again. If `attempts` reaches 5, read `last_error` on `outbox_events` instead of retrying forever.
 
 If a file will not download, its `scan_state` is not `CLEAN`. Infected files stay blocked.
 

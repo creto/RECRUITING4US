@@ -2062,6 +2062,8 @@ export async function submitApplication(input: ApplyInput) {
   if (!job || job.status !== "PUBLISHED" || !job.stage_id) {
     throw new Error("This job is not accepting applications.");
   }
+  // Careers apply uses the typed form email. A signed-in account is linked only
+  // when it is the same address, so a guest/demo session cannot overwrite it.
   const email = normalizeEmail(input.email);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid email address.");
   let linkedUserId: string | null = null;
@@ -2140,7 +2142,11 @@ export async function submitApplication(input: ApplyInput) {
         ${input.phone ?? null}, 'CAREERS', ${linkedUserId}
       )
       on conflict (company_id, email_normalized) do update
-      set user_id = coalesce(candidates.user_id, excluded.user_id)
+      set
+        name = excluded.name,
+        email = excluded.email,
+        phone = coalesce(excluded.phone, candidates.phone),
+        user_id = coalesce(candidates.user_id, excluded.user_id)
     `;
     const candidate = await sql<{ id: string }>`
       select id from candidates where company_id = ${job.company_id} and email_normalized = ${email}

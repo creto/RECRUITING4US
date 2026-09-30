@@ -19,6 +19,7 @@
     "typecheck": "tsc --noEmit",
     "check:auth": "node scripts/check-auth-invariant.mjs",
     "test": "node --experimental-strip-types --import ./scripts/test-alias.mjs --test 'src/**/*.test.ts'",
+    "outbox:worker": "node --experimental-strip-types --import ./scripts/test-alias.mjs scripts/outbox-worker.mjs",
     "e2e": "node scripts/e2e-critical.mjs",
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write ."
