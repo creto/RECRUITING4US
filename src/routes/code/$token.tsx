@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { getCodeExercise, runCode } from "@/server/talent.functions";
-import { Alert, Button, Gate, Loading, useAuthed } from "@/components/talent/kit";
+import { Alert, Button, Gate, Loading, ScreenBack, useAuthed } from "@/components/talent/kit";
 import { examPaper } from "@/components/talent/exam-shell";
 import { CodeBlock, DifficultyBadge, ProblemPrompt } from "@/components/talent/code-block";
 
@@ -23,6 +23,9 @@ function CodeExercise() {
     <Gate pending={state.isPending} signedOut={state.signedOut}>
       <main className={`${examPaper} min-h-screen bg-[#f4f7f5]`}>
         <div className="mx-auto max-w-4xl px-4 py-8">
+        <div className="sticky top-0 z-20 -mx-4 mb-4 border-b border-[#d7e1da] bg-[#f4f7f5]/95 px-4 py-3 backdrop-blur">
+          <ScreenBack fallback="/candidate" />
+        </div>
         <p className="text-[11px] uppercase tracking-[0.2em] text-[#4c6b16]">Coding exercise</p>
         <div className="mt-1 flex flex-wrap items-center gap-3">
           <h1 className="text-4xl text-[#17211c]">{state.data?.title ?? "Coding exercise"}</h1>

@@ -5,7 +5,7 @@ import { questionIndex, saveStatusLabel } from "@/domain/rules";
 import { ExamProctor } from "@/components/talent/proctor";
 import { ExamDesk, ExamLiveChat, PersonalityCard, examPaper, type ExamChatLine } from "@/components/talent/exam-shell";
 import { answerComplete, type SavedAnswer } from "@/domain/candidate-view";
-import { Alert, AppLink, Loading, PageTitle, useAuthed, when } from "@/components/talent/kit";
+import { Alert, AppLink, Loading, PageTitle, ScreenBack, useAuthed, when } from "@/components/talent/kit";
 import { readAssessAccess, takeAssessAccessFromSearch } from "@/domain/assess-access-storage";
 import { portalHrefWithAccess, readPortalAccess } from "@/domain/portal-access-storage";
 import { RedirectToSignIn } from "@/lib/auth/gates";
@@ -82,6 +82,9 @@ function AuthedAttempt({ attemptId }: { attemptId: string }) {
   return (
     <main className={`${examPaper} min-h-screen bg-[#f4f7f5]`}>
       <div className="mx-auto max-w-6xl px-4 py-6">
+        <div className="sticky top-0 z-20 -mx-4 mb-4 border-b border-[#d7e1da] bg-[#f4f7f5]/95 px-4 py-3 backdrop-blur">
+          <ScreenBack fallback="/candidate" />
+        </div>
         {error ? <Alert>{error}</Alert> : null}
         {state.data ? <Delivery key={state.data.receipt?.id ?? state.data.attempt.status} view={state.data} /> : null}
       </div>
@@ -124,6 +127,9 @@ function GuestAttempt({ attemptId, accessToken }: { attemptId: string; accessTok
   return (
     <main className={`${examPaper} min-h-screen bg-[#f4f7f5]`}>
       <div className="mx-auto max-w-6xl px-4 py-6">
+        <div className="sticky top-0 z-20 -mx-4 mb-4 border-b border-[#d7e1da] bg-[#f4f7f5]/95 px-4 py-3 backdrop-blur">
+          <ScreenBack fallback={portalAppId && portalAccess ? portalHrefWithAccess(portalAppId, portalAccess) : "/portal"} />
+        </div>
         {portalAppId && portalAccess ? (
           <p className="mb-4 text-sm">
             <AppLink className="text-link" href={portalHrefWithAccess(portalAppId, portalAccess)}>

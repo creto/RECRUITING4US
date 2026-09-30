@@ -989,8 +989,10 @@ export async function readLive(userId: string, token: string) {
         limit 40
       `
     : [];
+  const companies = await sql<{ slug: string }>`select slug from companies where id = ${who.companyId}`;
   return {
     role: who.role,
+    companySlug: companies[0]?.slug ?? "",
     title: session.title,
     admitted,
     meetingUrl: session.meeting_url,

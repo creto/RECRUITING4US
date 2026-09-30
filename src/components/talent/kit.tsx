@@ -17,6 +17,26 @@ function loadShared<T>(key: string, loader: () => Promise<T>): Promise<T> {
   return promise;
 }
 
+/** Leave a full-screen page. Goes to the previous screen when there is one. */
+export function ScreenBack({ fallback, label = "Back" }: { fallback: string; label?: string }) {
+  const router = useRouter();
+  return (
+    <button
+      type="button"
+      className="inline-flex min-h-11 items-center rounded-full border border-[#d7e1da] bg-white px-4 text-sm text-[#17211c]"
+      onClick={() => {
+        if (window.history.length > 1) {
+          router.history.back();
+          return;
+        }
+        void router.navigate({ href: fallback });
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
 /** Refetch the records on screen without reloading the whole app. */
 export function refreshPage() {
   if (refreshers.size === 0) {

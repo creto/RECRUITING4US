@@ -1,6 +1,6 @@
 /** Exact English to Spanish. Full text nodes only. Unknown text stays in English. */
 export const ES: Record<string, string> = {
-  "Skip to content": "Saltar al contenido",
+  "Back": "Atrás",
   Hiring: "Contratación",
   Evaluate: "Evaluar",
   Decide: "Decidir",

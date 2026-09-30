@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { bookSlot, readBooking, rescheduleSlot } from "@/server/talent.functions";
-import { Alert, Button, Gate, Loading, PageTitle, refreshPage, useAuthed, when } from "@/components/talent/kit";
+import { Alert, Button, Gate, Loading, PageTitle, refreshPage, ScreenBack, useAuthed, when } from "@/components/talent/kit";
 import { useState } from "react";
 
 export const Route = createFileRoute("/book/$token")({ component: Book });
@@ -13,6 +13,9 @@ function Book() {
   return (
     <Gate pending={state.isPending} signedOut={state.signedOut}>
       <main className="mx-auto max-w-xl px-4 py-8">
+        <div className="sticky top-0 z-20 -mx-4 mb-4 border-b border-line bg-bg/95 px-4 py-3 backdrop-blur">
+          <ScreenBack fallback="/candidate" />
+        </div>
         <PageTitle title={state.data?.title || "Pick a time"} lede={`Times are shown in ${state.data?.timezone ?? "the interview timezone"}. Booking one slot closes it for everyone else.`} />
         {state.loading ? <Loading /> : null}
         {state.error ? <Alert>{state.error}</Alert> : null}

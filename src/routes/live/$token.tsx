@@ -4,7 +4,7 @@ import { admitLive, endLive, livePackage, readLive, runLiveSample, syncLive } fr
 import { diffEdit } from "@/domain/platform/collab";
 import { useCandidateSignals } from "@/components/talent/live-signals";
 import { ProblemPrompt } from "@/components/talent/code-block";
-import { Alert, Button, Gate, Loading, PageTitle, useAuthed, when } from "@/components/talent/kit";
+import { Alert, Button, Gate, Loading, PageTitle, ScreenBack, useAuthed, when } from "@/components/talent/kit";
 
 export const Route = createFileRoute("/live/$token")({ component: LiveRoom });
 
@@ -118,6 +118,9 @@ function LiveRoom() {
   return (
     <Gate pending={state.isPending} signedOut={state.signedOut}>
       <main className="mx-auto max-w-5xl px-4 py-6">
+        <div className="sticky top-0 z-20 -mx-4 mb-4 border-b border-line bg-bg/95 px-4 py-3 backdrop-blur">
+          <ScreenBack fallback={room?.role === "CANDIDATE" ? "/candidate" : room?.companySlug ? `/app/${room.companySlug}/assessments` : "/app"} />
+        </div>
         <PageTitle title={room?.title || "Interview room"} lede={room?.meetingNote} />
         {state.loading ? <Loading /> : null}
         {state.error ? <Alert>{state.error}</Alert> : null}
