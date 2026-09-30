@@ -13,7 +13,7 @@ function Home() {
           <Link to="/portal" className="text-sm text-link">Applicant portal</Link>
           <SignInGate
             fallback={
-              <Link to="/login" className="inline-flex min-h-11 items-center rounded-full bg-accent px-5 text-sm text-accent-ink">
+              <Link to="/login" search={{ next: undefined }} className="inline-flex min-h-11 items-center rounded-full bg-accent px-5 text-sm text-accent-ink">
                 Enter
               </Link>
             }

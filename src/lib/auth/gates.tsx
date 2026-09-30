@@ -63,7 +63,7 @@ export function RedirectToSignIn({ to = SIGN_IN_PATH }: { to?: string }) {
   if (next) {
     return <Navigate to="/login" search={{ next }} />;
   }
-  return <Navigate to="/login" />;
+  return <Navigate to="/login" search={{ next: undefined }} />;
 }
 
 export function SignInGate({
