@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { deleteTemplate, listInbox, listMailbox, listTemplates, queuePlatformMail, saveTemplate, suppressAddress, unsuppressAddress } from "@/server/talent.functions";
-import { Alert, AppLink, Button, Empty, Field, inputClass, Loading, MailCard, PageTitle, refreshPage, useAuthed, useCompanyWorkspace, when } from "@/components/talent/kit";
-import { RichMailEditor, SafeMailBody, TemplateChoices, type MailTemplatePick } from "@/components/talent/mail-compose";
-import { editorIsEmpty, plainToEditorHtml } from "@/domain/mail-html";
+import { Alert, AppLink, Button, Empty, Field, inputClass, Loading, PageTitle, refreshPage, useAuthed, useCompanyWorkspace, when } from "@/components/talent/kit";
+import { SafeMailBody, TemplateChoices, type MailTemplatePick } from "@/components/talent/mail-compose";
+import { htmlToPlain, looksLikeHtml } from "@/domain/mail-html";
 
 export const Route = createFileRoute("/app/$companySlug/mail")({ component: Mail });
 
@@ -23,9 +23,6 @@ function Mail() {
   const [sendName, setSendName] = useState("");
   const [sendId, setSendId] = useState("");
   const [sendTo, setSendTo] = useState("");
-  const [sendSubject, setSendSubject] = useState("");
-  const [sendBody, setSendBody] = useState("");
-  const [sendKey, setSendKey] = useState(0);
   const [notice, setNotice] = useState("");
   const [pending, setPending] = useState(false);
   const workspace = useCompanyWorkspace();
@@ -36,53 +33,38 @@ function Mail() {
   const statuses = uniqueValues([...(box.data?.messages ?? []), ...(delivery.data?.intents ?? [])], "status");
   const kinds = uniqueValues(delivery.data?.intents ?? [], "kind");
   function loadTemplate(template: MailTemplatePick) {
-    setSendSubject(template.subject);
-    setSendBody(plainToEditorHtml(template.body));
-    setSendKey((n) => n + 1);
     setError(null);
     const who = sendName.trim();
     const id = sendId.trim();
     const recipient = sendTo.trim();
     if (who.length < 2 && id.length < 8 && !recipient.includes("@")) {
-      setNotice(`Loaded "${template.name}". Add a To address, a name, or an application id, then press Use again.`);
+      setNotice(`"${template.name}" is ready. Add a To address, a name, or an application id, then press it again.`);
       return;
     }
     setPending(true);
     queuePlatformMail({ data: { slug: companySlug, applicationId: id, candidateName: who, to: recipient, kind: "FOLLOW_UP", subject: template.subject, body: template.body, idempotencyKey: crypto.randomUUID() } })
-      .then(() => { setNotice(`Queued "${template.name}". Stored, accepted, delivered, bounced, or failed shows in the delivery queue on this page.`); refreshPage(); })
+      .then(() => { setNotice(`Queued "${template.name}" in the company card. Stored, accepted, delivered, bounced, or failed shows in the delivery queue.`); refreshPage(); })
       .catch((err) => setError(err instanceof Error ? err.message : "Could not queue."))
       .finally(() => setPending(false));
   }
+  function startEdit(template: MailTemplatePick) {
+    const wording = looksLikeHtml(template.body) ? htmlToPlain(template.body) : template.body;
+    setEditing(template.id);
+    setName(template.name);
+    setSubject(template.subject);
+    setBody(wording);
+  }
   return (
     <div>
-      <PageTitle title="Mail" lede="Templates, the mailbox, and delivery for this company. A queued message is sent as the same card as the apply form: company name, the message in a field, and the footer from Settings." />
+      <PageTitle title="Mail" lede="Every message from this page is one of your templates, inside the company card. The inbox shows that card, with Powered by RECRUIT4US at the bottom." />
       {templates.error ? <Alert>{templates.error}</Alert> : null}
       {error ? <div className="mb-3"><Alert>{error}</Alert></div> : null}
       <p className="mb-4 text-sm text-muted">{templates.data?.note}</p>
       <div className="grid gap-6 lg:grid-cols-2">
         <section>
-          <h2 className="text-2xl">Write</h2>
-          <p className="mt-2 text-sm text-muted">Press a template to send it when To, a name, or an application id is filled. Otherwise it loads here so you can edit it, then queue it. Tokens: {"{{candidate_name}} {{job_title}} {{company_name}} {{recruiter_name}}"}</p>
-          <form className="mt-3 space-y-2" onSubmit={(event) => {
-            event.preventDefault();
-            const who = sendName.trim();
-            const id = sendId.trim();
-            const recipient = sendTo.trim();
-            if (who.length < 2 && id.length < 8 && !recipient.includes("@")) {
-              setError("Give a To address, a candidate name, or an application id.");
-              return;
-            }
-            if (sendSubject.trim().length < 2 || editorIsEmpty(sendBody)) {
-              setError("Write a subject and a message.");
-              return;
-            }
-            setError(null);
-            setPending(true);
-            queuePlatformMail({ data: { slug: companySlug, applicationId: id, candidateName: who, to: recipient, kind: "FOLLOW_UP", subject: sendSubject, body: sendBody, idempotencyKey: crypto.randomUUID() } })
-              .then(() => { setNotice("Queued. Stored, accepted, delivered, bounced, or failed shows in the delivery queue on this page."); refreshPage(); })
-              .catch((err) => setError(err instanceof Error ? err.message : "Could not queue."))
-              .finally(() => setPending(false));
-          }}>
+          <h2 className="text-2xl">Send a template</h2>
+          <p className="mt-2 text-sm text-muted">There is no separate message box. Press a template to send that wording. Tokens: {"{{candidate_name}} {{job_title}} {{company_name}} {{recruiter_name}}"}</p>
+          <div className="mt-3 space-y-2">
             <Field label="To">
               <input className={inputClass} type="text" inputMode="email" value={sendTo} onChange={(event) => setSendTo(event.target.value)} placeholder="oscar@gmail.com or any outside inbox" />
             </Field>
@@ -92,55 +74,62 @@ function Mail() {
             <Field label="Application id">
               <input className={inputClass} value={sendId} onChange={(event) => setSendId(event.target.value)} placeholder="Or paste an application id" />
             </Field>
-            <p className="text-sm text-muted">To can be any address, including one that is not on your account. A name sends only when one application matches. If several match, the error lists their ids. An application id is used as written and ignores the name. With only a To address, the message is queued to that inbox.</p>
+            <p className="text-sm text-muted">To can be any address. A name sends only when one application matches. An application id is used as written.</p>
             <TemplateChoices
               templates={templates.data?.templates ?? []}
               pendingId={pending ? "sending" : null}
-              hint="Press a template name to queue it now, or to load it into the message if no recipient is filled yet."
+              hint="Press a template to queue it in the company card."
               onChoose={loadTemplate}
             />
             {notice ? <p className="text-sm">{notice}</p> : null}
-            <Field label="Subject">
-              <input className={inputClass} value={sendSubject} onChange={(event) => setSendSubject(event.target.value)} />
-            </Field>
-            <Field label="Message">
-              <RichMailEditor key={sendKey} value={sendBody} onChange={setSendBody} />
-            </Field>
-            {sendBody.trim() ? <MailCard name={workspace.data?.company.name ?? "Company"} body={sendBody} /> : null}
-            <Button type="submit" disabled={pending}>Queue message</Button>
-          </form>
+          </div>
           <h2 className="mt-8 text-2xl">Templates</h2>
-          <p className="mt-2 text-sm text-muted">Use sends that template with the To, name, or application id above. Edit changes the saved wording.</p>
+          <p className="mt-2 text-sm text-muted">Edit the wording inside the card. The Powered by line is part of every send and is not a field.</p>
           <ul className="mt-3 space-y-2">
             {(templates.data?.templates ?? []).map((template) => (
               <li key={template.id} className="rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-3 text-sm">
                 <p className="font-medium">{template.name}</p>
                 <p className="text-muted">{template.subject}</p>
                 <div className="mt-2 flex gap-2">
-                  <Button type="button" disabled={pending} onClick={() => loadTemplate(template)}>Use</Button>
-                  <Button type="button" variant="secondary" onClick={() => { setEditing(template.id); setName(template.name); setSubject(template.subject); setBody(template.body); }}>Edit</Button>
+                  <Button type="button" disabled={pending} onClick={() => loadTemplate(template)}>Send</Button>
+                  <Button type="button" variant="secondary" onClick={() => startEdit(template)}>Edit</Button>
                   <Button type="button" variant="danger" onClick={() => deleteTemplate({ data: { slug: companySlug, id: template.id } }).then(() => refreshPage()).catch((err) => setError(err.message))}>Delete</Button>
                 </div>
               </li>
             ))}
           </ul>
-          <form className="mt-4 space-y-2" onSubmit={(event) => {
+          <form className="mt-4 space-y-3" onSubmit={(event) => {
             event.preventDefault();
             saveTemplate({ data: { slug: companySlug, id: editing, name, subject, body } })
               .then(() => { setEditing(undefined); setName(""); setSubject(""); setBody(""); refreshPage(); })
               .catch((err) => setError(err instanceof Error ? err.message : "Could not save."));
           }}>
-            <Field label={editing ? "Edit template" : "New template"}>
+            <Field label={editing ? "Template name" : "New template name"}>
               <input className={inputClass} value={name} onChange={(event) => setName(event.target.value)} required />
             </Field>
-            <Field label="Subject">
-              <input className={inputClass} value={subject} onChange={(event) => setSubject(event.target.value)} required />
-            </Field>
-            <Field label="Message">
-              <RichMailEditor key={editing ?? "new"} value={body} onChange={setBody} required />
-            </Field>
-            {body.trim() ? <MailCard name={workspace.data?.company.name ?? "Company"} body={body} /> : null}
-            <Button type="submit">{editing ? "Save template" : "Add template"}</Button>
+            <article className="overflow-hidden rounded-[28px] border border-[#d7e1da] bg-white shadow-[0_18px_40px_rgba(20,34,27,0.08)]">
+              <div className="bg-accent px-5 py-4 text-accent-ink">
+                <p className="text-[11px] font-medium uppercase tracking-[0.16em]">Inbox</p>
+                <p className="mt-1 text-2xl leading-tight">{workspace.data?.company.name ?? "Company"}</p>
+              </div>
+              <div className="space-y-3 px-5 py-4">
+                <Field label="Subject">
+                  <input className={inputClass} value={subject} onChange={(event) => setSubject(event.target.value)} required />
+                </Field>
+                <Field label="Message">
+                  <textarea className={`${inputClass} min-h-40 py-3 leading-relaxed`} value={body} onChange={(event) => setBody(event.target.value)} required />
+                </Field>
+                <p className="text-xs text-muted">A web address on its own line becomes a button in the inbox.</p>
+              </div>
+              <div className="flex items-center gap-3 border-t border-[#d7e1da] bg-[#f7faf8] px-5 py-4">
+                <img src="/mark.png" alt="" width={72} height={40} className="h-8 w-auto" />
+                <p className="text-xs text-muted">Powered by <span className="font-medium text-ink">RECRUIT4US</span></p>
+              </div>
+            </article>
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit">{editing ? "Save template" : "Add template"}</Button>
+              {editing ? <Button type="button" variant="ghost" onClick={() => { setEditing(undefined); setName(""); setSubject(""); setBody(""); }}>Cancel</Button> : null}
+            </div>
           </form>
         </section>
         <section>

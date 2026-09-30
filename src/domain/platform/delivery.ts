@@ -150,6 +150,8 @@ export type MailBrand = {
   footer: string;
   logoUrl: string;
   accent: string;
+  /** Absolute https URL of the product mark. Empty keeps the text footer only. */
+  markUrl?: string;
 };
 
 function escapeHtml(value: string): string {
@@ -268,7 +270,7 @@ export function brandPlain(body: string, brand: MailBrand): string {
   const footer = brand.footer.trim();
   const head = name ? `${name}\n\n` : "";
   const foot = footer ? `\n\n${footer}` : "";
-  return `${head}${body.trim()}${foot}`.trim();
+  return `${head}${body.trim()}${foot}\n\nPowered by RECRUIT4US`.trim();
 }
 
 /** HTML the provider receives. Same card as the apply form, in a sans-serif with the company color. */
@@ -285,5 +287,9 @@ export function brandHtml(body: string, brand: MailBrand, logoCid: boolean, rich
   const footer = brand.footer.trim()
     ? `<p style="margin:16px 0 0;color:#5c6b63;font-family:${MAIL_FONT};font-size:13px;line-height:1.45">${escapeHtml(brand.footer.trim())}</p>`
     : "";
-  return `<!DOCTYPE html><html><body style="margin:0;background:#e7eee9;color:#14221b;font-family:${MAIL_FONT}"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#e7eee9;font-family:${MAIL_FONT}"><tr><td align="center" style="padding:32px 16px;font-family:${MAIL_FONT}"><table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #d7e1da;border-radius:24px;font-family:${MAIL_FONT}"><tr><td style="height:8px;background:${accent};border-radius:24px 24px 0 0;font-size:0;line-height:0">&nbsp;</td></tr><tr><td style="padding:22px 22px 8px;background:${accent};font-family:${MAIL_FONT};color:${headerInk}">${logo}<p style="margin:0;font-family:${MAIL_FONT};font-size:24px;line-height:1.2;font-weight:700;color:${headerInk}">${name}</p></td></tr><tr><td style="padding:18px 22px 8px;font-family:${MAIL_FONT}"><p style="margin:0 0 8px;font-family:${MAIL_FONT};font-size:12px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:#3d5c16">Message</p><div style="border:1px solid #d7e1da;border-radius:12px;background:#f7faf8;padding:14px 16px;font-family:${MAIL_FONT};font-size:16px;line-height:1.55;color:#14221b">${message}</div>${footer}</td></tr><tr><td style="height:8px;background:${accent};border-radius:0 0 24px 24px;font-size:0;line-height:0">&nbsp;</td></tr></table></td></tr></table></body></html>`;
+  const mark = /^https:\/\//i.test(brand.markUrl ?? "")
+    ? `<img src="${escapeHtml(brand.markUrl ?? "")}" alt="" width="72" height="40" style="display:block;width:72px;height:auto;border:0" />`
+    : "";
+  const powered = `<table role="presentation" cellpadding="0" cellspacing="0" style="font-family:${MAIL_FONT}"><tr><td style="vertical-align:middle">${mark}</td><td style="vertical-align:middle;padding-left:${mark ? "12px" : "0"};font-family:${MAIL_FONT};font-size:12px;line-height:1.4;color:#5c6b63">Powered by <strong style="color:#14221b">RECRUIT4US</strong></td></tr></table>`;
+  return `<!DOCTYPE html><html><body style="margin:0;background:#e7eee9;color:#14221b;font-family:${MAIL_FONT}"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#e7eee9;font-family:${MAIL_FONT}"><tr><td align="center" style="padding:32px 16px;font-family:${MAIL_FONT}"><table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #d7e1da;border-radius:24px;font-family:${MAIL_FONT}"><tr><td style="height:8px;background:${accent};border-radius:24px 24px 0 0;font-size:0;line-height:0">&nbsp;</td></tr><tr><td style="padding:22px 22px 8px;background:${accent};font-family:${MAIL_FONT};color:${headerInk}">${logo}<p style="margin:0;font-family:${MAIL_FONT};font-size:24px;line-height:1.2;font-weight:700;color:${headerInk}">${name}</p></td></tr><tr><td style="padding:18px 22px 8px;font-family:${MAIL_FONT}"><p style="margin:0 0 8px;font-family:${MAIL_FONT};font-size:12px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:#3d5c16">Message</p><div style="border:1px solid #d7e1da;border-radius:12px;background:#f7faf8;padding:14px 16px;font-family:${MAIL_FONT};font-size:16px;line-height:1.55;color:#14221b">${message}</div>${footer}</td></tr><tr><td style="padding:16px 22px 18px;border-top:1px solid #d7e1da;background:#f7faf8;font-family:${MAIL_FONT}">${powered}</td></tr><tr><td style="height:8px;background:${accent};border-radius:0 0 24px 24px;font-size:0;line-height:0">&nbsp;</td></tr></table></td></tr></table></body></html>`;
 }

@@ -87,6 +87,7 @@ async function companyBrand(companyId: string): Promise<MailBrand & { logoMime: 
     footer: row?.mail_footer ?? "",
     logoUrl: row?.mail_logo_url ?? "",
     accent: row?.embed_accent ?? "",
+    markUrl: publicAppOrigin().startsWith("https://") ? `${publicAppOrigin()}/mark.png` : "",
     logoMime: row?.mail_logo_mime ?? "",
     logoBytes: row?.mail_logo_bytes ?? "",
   };

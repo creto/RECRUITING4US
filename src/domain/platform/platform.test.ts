@@ -47,8 +47,9 @@ describe("delivery", () => {
     if ("error" in many) assert.match(many.error, /a · Engineer · Ada/);
     const branded = brandPlain("Hello Ada", { companyName: "Northstar", fromName: "Northstar Hiring", footer: "Reply to this note.", logoUrl: "", accent: "#cefa90" });
     assert.match(branded, /^Northstar Hiring/);
-    assert.match(branded, /Reply to this note\.$/);
-    const html = brandHtml("Hello <Ada>", { companyName: "Northstar", fromName: "", footer: "", logoUrl: "https://cdn.example/logo.png", accent: "#cefa90" }, false);
+    assert.match(branded, /Reply to this note\./);
+    assert.match(branded, /Powered by RECRUIT4US$/);
+    const html = brandHtml("Hello <Ada>", { companyName: "Northstar", fromName: "", footer: "", logoUrl: "https://cdn.example/logo.png", accent: "#cefa90", markUrl: "https://cdn.example/mark.png" }, false);
     assert.match(html, /Hello \u0026lt;Ada\u0026gt;/);
     assert.doesNotMatch(html, /Hello <Ada>/);
     assert.match(html, />Message</);
@@ -56,6 +57,9 @@ describe("delivery", () => {
     assert.match(html, /font-family:-apple-system,BlinkMacSystemFont/);
     assert.doesNotMatch(html, /Georgia|,serif|Times/);
     assert.match(html, /background:#cefa90/);
+    assert.match(html, /Powered by/);
+    assert.match(html, /RECRUIT4US/);
+    assert.match(html, /https:\/\/cdn\.example\/mark\.png/);
     const linked = brandHtml("See the page\nhttps://jobs.example/candidate/applications/abc", { companyName: "Northstar", fromName: "", footer: "", logoUrl: "", accent: "#cefa90" }, false);
     assert.match(linked, /href="https:\/\/jobs\.example\/candidate\/applications\/abc"/);
     assert.match(linked, /Open your application/);
