@@ -18,6 +18,7 @@ import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AppCompanySlugRouteRouteImport } from './routes/app/$companySlug/route'
 import { Route as BookTokenRouteImport } from './routes/book/$token'
 import { Route as CandidateIndexRouteImport } from './routes/candidate/index'
+import { Route as AssessTokenRouteImport } from './routes/assess/$token'
 import { Route as CodeTokenRouteImport } from './routes/code/$token'
 import { Route as InviteTokenRouteImport } from './routes/invite/$token'
 import { Route as LiveTokenRouteImport } from './routes/live/$token'
@@ -101,6 +102,11 @@ const BookTokenRoute = BookTokenRouteImport.update({
 const CandidateIndexRoute = CandidateIndexRouteImport.update({
   id: '/candidate/',
   path: '/candidate/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AssessTokenRoute = AssessTokenRouteImport.update({
+  id: '/assess/$token',
+  path: '/assess/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CodeTokenRoute = CodeTokenRouteImport.update({
@@ -318,6 +324,7 @@ export interface FileRoutesByFullPath {
   '/track': typeof TrackRoute
   '/app/$companySlug': typeof AppCompanySlugRouteRouteWithChildren
   '/book/$token': typeof BookTokenRoute
+  '/assess/$token': typeof AssessTokenRoute
   '/code/$token': typeof CodeTokenRoute
   '/invite/$token': typeof InviteTokenRoute
   '/live/$token': typeof LiveTokenRoute
@@ -367,6 +374,7 @@ export interface FileRoutesByTo {
   '/status': typeof StatusRoute
   '/track': typeof TrackRoute
   '/book/$token': typeof BookTokenRoute
+  '/assess/$token': typeof AssessTokenRoute
   '/code/$token': typeof CodeTokenRoute
   '/invite/$token': typeof InviteTokenRoute
   '/live/$token': typeof LiveTokenRoute
@@ -418,6 +426,7 @@ export interface FileRoutesById {
   '/track': typeof TrackRoute
   '/app/$companySlug': typeof AppCompanySlugRouteRouteWithChildren
   '/book/$token': typeof BookTokenRoute
+  '/assess/$token': typeof AssessTokenRoute
   '/code/$token': typeof CodeTokenRoute
   '/invite/$token': typeof InviteTokenRoute
   '/live/$token': typeof LiveTokenRoute
@@ -470,6 +479,7 @@ export interface FileRouteTypes {
     | '/track'
     | '/app/$companySlug'
     | '/book/$token'
+    | '/assess/$token'
     | '/code/$token'
     | '/invite/$token'
     | '/live/$token'
@@ -519,6 +529,7 @@ export interface FileRouteTypes {
     | '/status'
     | '/track'
     | '/book/$token'
+    | '/assess/$token'
     | '/code/$token'
     | '/invite/$token'
     | '/live/$token'
@@ -569,6 +580,7 @@ export interface FileRouteTypes {
     | '/track'
     | '/app/$companySlug'
     | '/book/$token'
+    | '/assess/$token'
     | '/code/$token'
     | '/invite/$token'
     | '/live/$token'
@@ -620,6 +632,7 @@ export interface RootRouteChildren {
   TrackRoute: typeof TrackRoute
   AppCompanySlugRouteRoute: typeof AppCompanySlugRouteRouteWithChildren
   BookTokenRoute: typeof BookTokenRoute
+  AssessTokenRoute: typeof AssessTokenRoute
   CodeTokenRoute: typeof CodeTokenRoute
   InviteTokenRoute: typeof InviteTokenRoute
   LiveTokenRoute: typeof LiveTokenRoute
@@ -703,6 +716,13 @@ declare module '@tanstack/react-router' {
       path: '/candidate'
       fullPath: '/candidate/'
       preLoaderRoute: typeof CandidateIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/assess/$token': {
+      id: '/assess/$token'
+      path: '/assess/$token'
+      fullPath: '/assess/$token'
+      preLoaderRoute: typeof AssessTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/code/$token': {
@@ -1057,6 +1077,7 @@ const rootRouteChildren: RootRouteChildren = {
   TrackRoute: TrackRoute,
   AppCompanySlugRouteRoute: AppCompanySlugRouteRouteWithChildren,
   BookTokenRoute: BookTokenRoute,
+  AssessTokenRoute: AssessTokenRoute,
   CodeTokenRoute: CodeTokenRoute,
   InviteTokenRoute: InviteTokenRoute,
   LiveTokenRoute: LiveTokenRoute,

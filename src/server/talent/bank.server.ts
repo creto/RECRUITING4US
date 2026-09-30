@@ -5,6 +5,7 @@ import { assertSameSiteRequest } from "@/lib/auth/isolation.server";
 import { enterTenant } from "@/lib/tenant";
 import { allow, audit, db, json, nid, requireActor, sha256 } from "./db.server";
 import { rememberEvent } from "./workflows.server";
+import { assessmentInviteHref } from "@/domain/assessment-invite";
 
 function bankId(companyId: string, name: string) {
   return sha256(`${companyId}:coding-bank:${name}`).slice(0, 24);
@@ -343,13 +344,15 @@ export async function sendAssessmentToFits(userId: string, input: { slug: string
     `;
     if (existing[0]) continue;
     const id = nid();
+    const inviteToken = crypto.randomUUID();
+    const inviteHref = assessmentInviteHref(inviteToken, (process.env.BETTER_AUTH_URL ?? "").trim().replace(/\/$/, ""));
     await sql`
       insert into assignments (
         id, company_id, application_id, assessment_version_id, status, start_by,
-        duration_seconds, multiplier_basis_points, extra_seconds
+        duration_seconds, multiplier_basis_points, extra_seconds, invite_token
       ) values (
         ${id}, ${actor.companyId}, ${fit.application_id}, ${version.id}, 'INVITED', ${startBy},
-        ${version.duration_seconds}, 10000, 0
+        ${version.duration_seconds}, 10000, 0, ${inviteToken}
       )
     `;
     await sql`
@@ -357,7 +360,7 @@ export async function sendAssessmentToFits(userId: string, input: { slug: string
       values (
         ${nid()}, ${actor.companyId}, ${fit.email},
         ${"Assessment: " + version.name},
-        ${"A recruiter sent this assessment because the CV was a fit. It is in the candidate portal. Opening this message does not start the timer. This message was captured inside RECRUIT4US and was not delivered by an outside mail server."},
+        ${"A recruiter sent this assessment because the CV was a fit. Opening this message does not start the timer. This message was captured inside RECRUIT4US and was not delivered by an outside mail server. Invite: " + inviteHref},
         'CAPTURED', ${id}
       )
     `;

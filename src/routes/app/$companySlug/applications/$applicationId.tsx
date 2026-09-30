@@ -195,6 +195,22 @@ function ApplicationPage() {
             <article key={String(item.id)} className="rounded-[24px] border border-line bg-white shadow-[0_8px_24px_rgba(20,34,27,0.04)] p-4 text-sm">
               <h2 className="text-xl">{String(item.assessment_name)}</h2>
               <p className="text-muted">{String(item.status)} · start by {when(String(item.start_by))} · attempts {String(item.attempts)}</p>
+              {item.invite_token ? (
+                <p className="mt-2">
+                  Candidate invite:{" "}
+                  <a className="text-link" href={`/assess/${String(item.invite_token)}`} target="_blank" rel="noreferrer">
+                    /assess/{String(item.invite_token)}
+                  </a>
+                  {" · "}
+                  <button
+                    type="button"
+                    className="text-link"
+                    onClick={() => void navigator.clipboard.writeText(`${window.location.origin}/assess/${String(item.invite_token)}`)}
+                  >
+                    Copy
+                  </button>
+                </p>
+              ) : null}
               <p className="mt-2">{scoreLine(item)}</p>
               {item.attempt_id ? (
                 <form className="mt-3 grid gap-2 md:grid-cols-2" onSubmit={(event) => {

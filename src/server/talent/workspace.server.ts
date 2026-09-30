@@ -1199,7 +1199,7 @@ export async function getApplication(userId: string, slug: string, applicationId
   `;
   const assignments = await sql`
     select g.id, s.id as assessment_id, g.status, s.name as assessment_name, s.auto_send,
-      v.duration_seconds, v.proctored,
+      v.duration_seconds, v.proctored, g.invite_token,
       to_char(g.start_by at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as start_by,
       v.score_release,
       (select count(*) from attempts t where t.assignment_id = g.id) as attempts,

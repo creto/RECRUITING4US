@@ -7,6 +7,7 @@ import { assertSameSiteRequest } from "@/lib/auth/isolation.server";
 import { enterTenant } from "@/lib/tenant";
 import { allow, audit, db, json, nid, requireActor, sha256 } from "./db.server";
 import { rememberEvent } from "./workflows.server";
+import { assessmentInviteHref } from "@/domain/assessment-invite";
 
 const LADDER = [
   ["Applied", "APPLIED"],
@@ -415,21 +416,23 @@ async function assignPaper(companyId: string, applicationId: string, email: stri
   `;
   if (existing[0]) return existing[0].id;
   const id = nid();
+  const inviteToken = crypto.randomUUID();
+  const inviteHref = assessmentInviteHref(inviteToken, (process.env.BETTER_AUTH_URL ?? "").trim().replace(/\/$/, ""));
   const startBy = new Date(Date.now() + 14 * 86400000).toISOString();
   await sql`
     insert into assignments (
       id, company_id, application_id, assessment_version_id, status, start_by,
-      duration_seconds, multiplier_basis_points, extra_seconds
+      duration_seconds, multiplier_basis_points, extra_seconds, invite_token
     ) values (
       ${id}, ${companyId}, ${applicationId}, ${item.versionId}, 'INVITED', ${startBy},
-      ${item.seconds}, 10000, 0
+      ${item.seconds}, 10000, 0, ${inviteToken}
     )
   `;
   await sql`
     insert into mail_messages (id, company_id, to_email, subject, body, status, related_id)
     values (
       ${nid()}, ${companyId}, ${email}, ${"Assessment: " + item.name},
-      ${`${body} Open the candidate portal to start. Opening this record does not start the timer.`},
+      ${`${body} Open your assessment invite to start (opening this record does not start the timer): ${inviteHref}`},
       'CAPTURED', ${id}
     )
   `;

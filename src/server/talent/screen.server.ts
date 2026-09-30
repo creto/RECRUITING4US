@@ -9,6 +9,7 @@ import { loadFileBytes, storeFileBytes } from "./object-store.server";
 import { allow, audit, db, json, nid, requireActor } from "./db.server";
 import { rememberEvent } from "./workflows.server";
 import { enterTenant } from "@/lib/tenant";
+import { assessmentInviteHref } from "@/domain/assessment-invite";
 
 const GOOD_CV = "Amina Okonkwo. Software engineer. I have shipped production services in TypeScript for six years. I design PostgreSQL schemas and write SQL for reporting. I also use React for internal tools.";
 const WEAK_CV = "Jonah Hale. Retail supervisor. I managed a store team, scheduled shifts, and handled customer complaints. I use spreadsheets for the weekly roster. I have not worked in software.";
@@ -248,14 +249,16 @@ async function sendAssessment(
   `;
   if (existing[0]) return existing[0].id;
   const id = nid();
+  const inviteToken = crypto.randomUUID();
+  const inviteHref = assessmentInviteHref(inviteToken, (process.env.BETTER_AUTH_URL ?? "").trim().replace(/\/$/, ""));
   const startBy = new Date(Date.now() + 14 * 86400000).toISOString();
   await sql`
     insert into assignments (
       id, company_id, application_id, assessment_version_id, status, start_by,
-      duration_seconds, multiplier_basis_points, extra_seconds
+      duration_seconds, multiplier_basis_points, extra_seconds, invite_token
     ) values (
       ${id}, ${companyId}, ${app.id}, ${version.id}, 'INVITED', ${startBy},
-      ${version.duration_seconds}, 10000, 0
+      ${version.duration_seconds}, 10000, 0, ${inviteToken}
     )
   `;
   await sql`
@@ -263,7 +266,7 @@ async function sendAssessment(
     values (
       ${nid()}, ${companyId}, ${app.email},
       ${"Assessment: " + version.name},
-      ${"Your CV matched the must-have skills for this role. The assessment is in the candidate portal. Opening this message does not start the timer. This message was captured inside RECRUIT4US and was not delivered."},
+      ${"Your CV matched the must-have skills for this role. Opening this message does not start the timer. This message was captured inside RECRUIT4US and was not delivered. Invite: " + inviteHref},
       'CAPTURED', ${id}
     )
   `;

@@ -16,6 +16,7 @@ import {
   planExtension,
   seededShuffle,
   validateAssessmentPublish,
+  normalizeEmail,
 } from "@/domain/rules";
 import { runnerAvailability } from "@/domain/edge";
 import { stageNameList, trackBar } from "@/domain/sheet";
@@ -41,8 +42,30 @@ import { candidateItem, answerComplete, coerceAnswer, orderedOptions } from "@/d
 import { readPersonality, scorePersonality, type PersonalityResult } from "@/domain/personality";
 import { ensureReview, rememberEvent } from "./workflows.server";
 import { endAttemptLive, ensureAttemptLive, mirrorAttemptLive, touchAttemptLive } from "./attempt-live.server";
+import { assessmentInviteHref, assessmentInvitePath } from "@/domain/assessment-invite";
+
 
 const HUMAN_TYPES = new Set(["text", "code", "file", "sql", "spreadsheet", "recording"]);
+
+function publicAppOrigin(): string {
+  const raw = (process.env.BETTER_AUTH_URL ?? process.env.APP_ORIGIN ?? "").trim();
+  return raw.replace(/\/$/, "");
+}
+
+function newInviteToken(): string {
+  return crypto.randomUUID();
+}
+
+function assessmentInviteMailBody(token: string, intro: string): string {
+  const href = assessmentInviteHref(token, publicAppOrigin());
+  return `${intro}\n\nOpen your assessment invite (sign in with the invited email; opening the message does not start the timer):\n${href}\n\n{{company_name}}`;
+}
+
+function assessmentInviteCapturedBody(token: string, intro: string): string {
+  const href = assessmentInviteHref(token, publicAppOrigin());
+  return `${intro} Invite: ${href}`;
+}
+
 
 export async function listAssessments(userId: string, slug: string) {
   const actor = await requireActor(userId, slug);
@@ -428,13 +451,14 @@ export async function assignAssessment(
   const startBy = new Date(input.startBy);
   if (Number.isNaN(startBy.getTime())) throw new Error("Choose a start-by date.");
   const id = nid();
+  const inviteToken = newInviteToken();
   await sql`
     insert into assignments (
       id, company_id, application_id, assessment_version_id, status, start_by,
-      duration_seconds, multiplier_basis_points, extra_seconds
+      duration_seconds, multiplier_basis_points, extra_seconds, invite_token
     ) values (
       ${id}, ${actor.companyId}, ${input.applicationId}, ${versions[0].id}, 'INVITED', ${startBy.toISOString()},
-      ${versions[0].duration_seconds}, ${input.multiplierBasisPoints}, ${input.extraSeconds}
+      ${versions[0].duration_seconds}, ${input.multiplierBasisPoints}, ${input.extraSeconds}, ${inviteToken}
     )
   `;
   const people = await sql<{ email: string; name: string }>`
@@ -444,13 +468,14 @@ export async function assignAssessment(
     join assessments s on s.id = v.assessment_id
     where a.id = ${input.applicationId}
   `;
+  const invitePath = assessmentInvitePath(inviteToken);
   if (people[0]) {
     await sql`
       insert into mail_messages (id, company_id, to_email, subject, body, status, related_id)
       values (
         ${nid()}, ${actor.companyId}, ${people[0].email},
         ${"Assessment: " + people[0].name},
-        ${"You have an assessment to complete in the candidate portal before the start-by time. Opening this message does not start the timer. An outside email is queued separately and is not delivered unless a mail provider is configured."},
+        ${assessmentInviteCapturedBody(inviteToken, "You have an assessment to complete before the start-by time. An outside email is queued separately and is not delivered unless a mail provider is configured.")},
         'CAPTURED', ${id}
       )
     `;
@@ -461,7 +486,7 @@ export async function assignAssessment(
       applicationId: input.applicationId,
       kind: "ASSESSMENT",
       subject: "Assessment: " + (people[0]?.name ?? "assignment"),
-      body: "Hello {{candidate_name}},\n\nYou have an assessment to complete in the candidate portal before the start-by time. Opening this message does not start the timer.\n\n{{company_name}}",
+      body: assessmentInviteMailBody(inviteToken, "Hello {{candidate_name}},\n\nYou have an assessment to complete before the start-by time."),
       cc: "",
       bcc: "",
       idempotencyKey: `assessment:${id}`,
@@ -474,7 +499,58 @@ export async function assignAssessment(
     assignmentId: id,
   });
   await audit(actor, "assessment.assign", "assignment", id, "Assessment assigned.");
-  return { assignmentId: id };
+  return { assignmentId: id, inviteToken, invitePath };
+}
+
+
+export async function getAssessmentInvite(userId: string, token: string) {
+  const user = await requireUser(userId);
+  const sql = await db();
+  const found = await sql.query<{ company_id: string | null }>(
+    "select app_company_for_assessment($1) as company_id",
+    [token],
+  );
+  const companyId = found[0]?.company_id;
+  if (!companyId) throw new Error("This assessment link is not valid.");
+  enterTenant({ userId: user.id, companyId });
+  const rows = await sql<{
+    id: string;
+    status: string;
+    application_id: string;
+    candidate_email: string;
+    assessment_name: string;
+    duration_seconds: number;
+    start_by: string;
+    active_attempt: string | null;
+  }>`
+    select g.id, g.status, g.application_id, c.email as candidate_email, s.name as assessment_name,
+      g.duration_seconds,
+      to_char(g.start_by at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as start_by,
+      (select t.id from attempts t
+        where t.assignment_id = g.id and t.status in ('NOT_STARTED', 'IN_PROGRESS')
+        order by t.ordinal desc limit 1) as active_attempt
+    from assignments g
+    join applications a on a.id = g.application_id and a.company_id = g.company_id
+    join candidates c on c.id = a.candidate_id and c.company_id = a.company_id
+    join assessment_versions v on v.id = g.assessment_version_id and v.company_id = g.company_id
+    join assessments s on s.id = v.assessment_id and s.company_id = v.company_id
+    where g.company_id = ${companyId} and g.invite_token = ${token}
+  `;
+  const row = rows[0];
+  if (!row) throw new Error("This assessment link is not valid.");
+  if (normalizeEmail(user.email) !== normalizeEmail(row.candidate_email)) {
+    throw new Error("This assessment belongs to a different email address.");
+  }
+  return {
+    assignmentId: row.id,
+    status: row.status,
+    assessmentName: row.assessment_name,
+    durationSeconds: Number(row.duration_seconds),
+    startBy: row.start_by,
+    activeAttemptId: row.active_attempt,
+    invitePath: assessmentInvitePath(token),
+    email: user.email,
+  };
 }
 
 async function candidateOwns(userId: string, applicationId: string) {
@@ -586,6 +662,7 @@ export async function getMyApplication(userId: string, applicationId: string) {
   });
   const assignments = await sql`
     select g.id, g.status, s.name, v.duration_seconds, v.instructions, v.proctored, g.multiplier_basis_points, g.extra_seconds,
+      g.invite_token,
       to_char(g.start_by at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as start_by,
       (select t.id from attempts t where t.assignment_id = g.id and t.status = 'IN_PROGRESS' limit 1) as active_attempt
     from assignments g

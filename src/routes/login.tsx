@@ -1,13 +1,25 @@
 import { useState } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { authClient, GROK_PROVIDERS, signIn } from "@/lib/auth/client";
 import { seedDemo } from "@/server/talent.functions";
 import { Alert, BrandBar, Button, Field, inputClass, Wordmark } from "@/components/talent/kit";
 
 export const Route = createFileRoute("/login")({ component: Login });
 
+function safeNextPath(raw: string | null | undefined): string {
+  if (!raw) return "/app";
+  const value = raw.trim();
+  if (!value.startsWith("/") || value.startsWith("//") || value.includes("://")) return "/app";
+  if (value.startsWith("/login")) return "/app";
+  return value.slice(0, 300);
+}
+
 function Login() {
   const navigate = useNavigate();
+  const search = useRouterState({ select: (state) => state.location.searchStr });
+  const fromRouter = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search).get("next");
+  const fromWindow = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("next") : null;
+  const nextPath = safeNextPath(fromRouter || fromWindow);
   const [mode, setMode] = useState<"in" | "up">("in");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -46,7 +58,7 @@ function Login() {
       }
       const signed = await authClient.signIn.email({ email, password });
       if (signed.error) throw new Error(signed.error.message ?? "Could not sign in.");
-      await navigate({ to: "/app" });
+      await navigate({ href: nextPath });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not sign in.");
     } finally {
@@ -102,7 +114,7 @@ function Login() {
                   className="w-full"
                   type="button"
                   disabled={pending}
-                  onClick={() => signIn(provider.providerId, { callbackURL: "/app" })}
+                  onClick={() => signIn(provider.providerId, { callbackURL: nextPath })}
                 >
                   Continue with {provider.label}
                 </Button>

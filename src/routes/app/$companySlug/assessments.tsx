@@ -62,6 +62,7 @@ function Assessments() {
   );
   const [sendApplicationId, setSendApplicationId] = useState("");
   const [sendAssessmentId, setSendAssessmentId] = useState("");
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
   const preview = useAuthed(
     () => previewAssessment({ data: { slug: companySlug, assessmentId: previewId ?? "" } }) as Promise<AssessmentPreview>,
     [companySlug, previewId],
@@ -77,6 +78,7 @@ function Assessments() {
     event.preventDefault();
     setError(null);
     setNote(null);
+    setInviteLink(null);
     if (sendApplicationId.trim().length < 8 || !sendAssessmentId) {
       setError("Paste an application id and choose a published assessment.");
       return;
@@ -92,6 +94,8 @@ function Assessments() {
           extraSeconds: 0,
         },
       });
+      const path = result.invitePath || (result.inviteToken ? `/assess/${result.inviteToken}` : "");
+      setInviteLink(path || null);
       setNote(`Sent. Assignment ${result.assignmentId}. The candidate can start within 14 days.`);
       setSendApplicationId("");
       refreshPage();
@@ -180,6 +184,7 @@ function Assessments() {
       {tests.error ? <Alert>{tests.error}</Alert> : null}
       {error ? <div className="mb-3"><Alert>{error}</Alert></div> : null}
       {note ? <p className="mb-3 text-sm text-ok">{note}</p> : null}
+      {inviteLink ? <p className="mb-3 text-sm">Candidate invite: <a className="text-link" href={inviteLink} target="_blank" rel="noreferrer">{inviteLink}</a> · <button type="button" className="text-link" onClick={() => void navigator.clipboard.writeText(`${window.location.origin}${inviteLink}`)}>Copy</button></p> : null}
       <LiveExams companySlug={companySlug} />
       {previewId ? (
         <div className="mb-6">
