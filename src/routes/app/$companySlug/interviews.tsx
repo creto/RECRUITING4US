@@ -4,6 +4,7 @@ import { cancelInterview, createSlot, feedbackFor, interviewIcs, listInterviews,
 import { RATINGS } from "@/domain/scorecard";
 import { Alert, AppLink, Button, Empty, Field, inputClass, Loading, PageTitle, refreshPage, useAuthed, when } from "@/components/talent/kit";
 import { DateTimeLocalField } from "@/components/talent/datetime-local";
+import { SchedulingDesk } from "./calendar";
 
 export const Route = createFileRoute("/app/$companySlug/interviews")({ component: Interviews });
 
@@ -35,7 +36,7 @@ function Interviews() {
   if (state.error) return <Alert>{state.error}</Alert>;
   return (
     <div>
-      <PageTitle title="Interviews" lede="Scheduled conversations on the left. Rankings from submitted recommendations on the right." />
+      <PageTitle title="Interviews" lede="Scheduled conversations, scorecards, and the calendar connection. Self-schedule links and sync retries stay on this page." />
       <p className="mb-4 text-sm text-muted">
         {calendar
           ? `External calendar: ${calendar.status}.${calendar.error ? ` ${calendar.error}` : ""}`
@@ -116,6 +117,7 @@ function Interviews() {
         </div>
         <Scoreboard slug={companySlug} />
       </div>
+      <SchedulingDesk companySlug={companySlug} />
       {error ? <div className="mt-3"><Alert>{error}</Alert></div> : null}
     </div>
   );

@@ -273,6 +273,10 @@ export function MailCard({ name, body, footer, accent }: { name: string; body: s
         )}
         {foot ? <p className="mt-4 text-[13px] text-muted">{foot}</p> : null}
       </div>
+      <div className="flex items-center gap-3 border-t border-line bg-[#f7faf8] px-4 py-3">
+        <img src="/mark.png" alt="" width={72} height={40} className="h-8 w-auto" />
+        <p className="text-xs text-muted">Powered by <span className="font-medium text-ink">RECRUIT4US</span></p>
+      </div>
       <div className="h-2 bg-accent" style={color ? { background: color } : undefined} />
     </article>
   );
@@ -360,7 +364,6 @@ const NAV = [
     items: [
       ["/mail", "Mail"],
       ["/crm", "Sourcing"],
-      ["/calendar", "Scheduling"],
     ],
   },
   {
