@@ -24,6 +24,7 @@ export const ES: Record<string, string> = {
   Delivery: "Entrega",
   Sourcing: "Búsqueda",
   Scheduling: "Agenda",
+  Calendar: "Calendario",
   Reports: "Informes",
   Automations: "Automatizaciones",
   Integrity: "Integridad",

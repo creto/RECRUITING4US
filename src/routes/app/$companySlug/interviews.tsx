@@ -36,7 +36,7 @@ function Interviews() {
   if (state.error) return <Alert>{state.error}</Alert>;
   return (
     <div>
-      <PageTitle title="Interviews" lede="Scheduled conversations, scorecards, and the calendar connection. Self-schedule links and sync retries stay on this page." />
+      <PageTitle title="Scheduling" lede="Scheduled conversations, scorecards, and the calendar connection. Self-schedule links and sync retries stay on this page." />
       <p className="mb-4 text-sm text-muted">
         {calendar
           ? `External calendar: ${calendar.status}.${calendar.error ? ` ${calendar.error}` : ""}`

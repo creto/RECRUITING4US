@@ -347,7 +347,7 @@ const NAV = [
     items: [
       ["/assessments", "Assessments"],
       ["/reviews", "Reviews"],
-      ["/interviews", "Interviews"],
+      ["/interviews", "Scheduling"],
       ["/sandboxes", "Sandboxes"],
     ],
   },

@@ -15,7 +15,7 @@ export function SchedulingDesk({ companySlug }: { companySlug: string }) {
   const [error, setError] = useState<string | null>(null);
   return (
     <section id="scheduling" className="mt-10">
-      <h2 className="text-2xl">Scheduling</h2>
+      <h2 className="text-2xl">Calendar</h2>
       <p className="mt-2 text-sm text-muted">Two people cannot take the same open slot. A provider error stays as sync failed until you retry it. ICS is a file, not a connected calendar.</p>
       {state.loading || state.isPending ? <div className="mt-3"><Loading /></div> : null}
       {state.error ? <div className="mt-3"><Alert>{state.error}</Alert></div> : null}
