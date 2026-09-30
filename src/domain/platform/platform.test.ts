@@ -53,7 +53,7 @@ describe("delivery", () => {
     assert.doesNotMatch(html, /Hello <Ada>/);
     assert.match(html, />Message</);
     assert.match(html, /border-radius:24px/);
-    assert.match(html, /font-family:Arial,Helvetica,sans-serif/);
+    assert.match(html, /font-family:-apple-system,BlinkMacSystemFont/);
     assert.doesNotMatch(html, /Georgia|,serif|Times/);
     assert.match(html, /background:#cefa90/);
     const linked = brandHtml("See the page\nhttps://jobs.example/candidate/applications/abc", { companyName: "Northstar", fromName: "", footer: "", logoUrl: "", accent: "#cefa90" }, false);
@@ -63,6 +63,11 @@ describe("delivery", () => {
     const exercise = brandHtml("https://jobs.example/code/token", { companyName: "Northstar", fromName: "", footer: "", logoUrl: "", accent: "#14221b" }, false);
     assert.match(exercise, /Open the coding exercise/);
     assert.match(exercise, /color:#ffffff/);
+    const assess = brandHtml("https://jobs.example/assess/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", { companyName: "Northstar", fromName: "", footer: "", logoUrl: "", accent: "#cefa90" }, false);
+    assert.match(assess, /Open your assessment/);
+    assert.match(assess, /href="https:\/\/jobs\.example\/assess\/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"/);
+    const portal = brandHtml("https://jobs.example/portal", { companyName: "Northstar", fromName: "", footer: "", logoUrl: "", accent: "#cefa90" }, false);
+    assert.match(portal, /Open your applicant portal/);
     const plain = buildRfc822({ from: "jobs@example.com", to: "ada@example.com", cc: "", subject: "Hello", body: "Hi", messageId: "m1@recruit4us" });
     assert.match(plain, /Content-Type: text\/plain/);
     assert.doesNotMatch(plain, /multipart/);

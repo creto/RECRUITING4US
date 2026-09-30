@@ -160,7 +160,7 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "\u0026quot;");
 }
 
-const MAIL_FONT = "Arial,Helvetica,sans-serif";
+const MAIL_FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
 function accentColor(value: string): string {
   return /^#[0-9a-fA-F]{6}$/.test(value) ? value : "#cefa90";
@@ -190,7 +190,9 @@ export function safeMailUrl(value: string): string | null {
 }
 
 function mailLinkLabel(url: string): string {
+  if (url.includes("/assess/")) return "Open your assessment";
   if (url.includes("/code/")) return "Open the coding exercise";
+  if (url.includes("/portal")) return "Open your applicant portal";
   if (url.includes("/candidate/offers/")) return "Review the offer";
   if (url.includes("/candidate/")) return "Open your application";
   return "Open this link";

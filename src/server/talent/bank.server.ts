@@ -7,6 +7,7 @@ import { enterTenant } from "@/lib/tenant";
 import { allow, audit, db, json, nid, requireActor, sha256 } from "./db.server";
 import { rememberEvent } from "./workflows.server";
 import { assessmentInviteHref } from "@/domain/assessment-invite";
+import { applicationPortalPath } from "@/domain/application-portal";
 
 function bankId(companyId: string, name: string) {
   return sha256(`${companyId}:coding-bank:${name}`).slice(0, 24);
@@ -385,6 +386,7 @@ export async function sendAssessmentToFits(userId: string, input: { slug: string
       minutes,
       startLabel,
       link: inviteHref,
+      portalLink: inviteOrigin ? `${inviteOrigin}${applicationPortalPath()}` : applicationPortalPath(),
     });
     await sql`
       insert into mail_messages (id, company_id, to_email, subject, body, status, related_id)

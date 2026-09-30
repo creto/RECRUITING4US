@@ -250,7 +250,7 @@ async function sendAssessment(
   if (existing[0]) return existing[0].id;
   const id = nid();
   const inviteToken = crypto.randomUUID();
-  const inviteHref = assessmentInviteHref(inviteToken, (process.env.BETTER_AUTH_URL ?? "").trim().replace(/\/$/, ""));
+  const inviteHref = assessmentInviteHref(inviteToken, (process.env.BETTER_AUTH_URL ?? process.env.APP_ORIGIN ?? "").trim().replace(/\/$/, ""));
   const startBy = new Date(Date.now() + 14 * 86400000).toISOString();
   await sql`
     insert into assignments (

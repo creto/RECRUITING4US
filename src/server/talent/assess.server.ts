@@ -48,6 +48,7 @@ import { readPersonality, scorePersonality, type PersonalityResult } from "@/dom
 import { ensureReview, rememberEvent } from "./workflows.server";
 import { endAttemptLive, ensureAttemptLive, mirrorAttemptLive, touchAttemptLive } from "./attempt-live.server";
 import { applicationIdGateHint, assessmentInviteHref, assessmentInvitePath, normalizeApplicationId } from "@/domain/assessment-invite";
+import { applicationPortalPath } from "@/domain/application-portal";
 import { mintAssessAccess, verifyAssessAccess } from "@/domain/assessment-invite-access";
 import { mintPortalAccess } from "@/domain/application-portal-access";
 import { env } from "@/lib/env.server";
@@ -492,6 +493,7 @@ export async function assignAssessment(
   if (people[0]) {
     const { queueMail, publicAppOrigin: requestOrigin } = await import("./platform.server");
     const plain = (value: string) => value.replace(/[{}]/g, "").replace(/\s+/g, " ").trim();
+    const origin = publicAppOrigin() || requestOrigin();
     const body = assessmentNotice({
       greeting: `Hello ${plain(people[0].candidate_name)},`,
       company: plain(actor.companyName),
@@ -500,7 +502,8 @@ export async function assignAssessment(
       assessment: people[0].name,
       minutes,
       startLabel,
-      link: assessmentInviteHref(inviteToken, publicAppOrigin() || requestOrigin()),
+      link: assessmentInviteHref(inviteToken, origin),
+      portalLink: origin ? `${origin}${applicationPortalPath()}` : applicationPortalPath(),
     });
     await sql`
       insert into mail_messages (id, company_id, to_email, subject, body, status, related_id)
