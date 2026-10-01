@@ -1,8 +1,19 @@
 export const CODING_FOOTER =
+  "Use any supported programming language in the editor. A correct result for the stated rules is what a reviewer grades. State the approach in a short comment if the code is not obvious. These prompts were written for this bank. They are not items from another site.";
+
+const CODING_FOOTER_OLD =
   "Use the language of the editor. A correct result for the stated rules is what a reviewer grades. State the approach in a short comment if the code is not obvious. These prompts were written for this bank. They are not items from another site.";
 
 export const CODING_FOOTER_ES =
+  "Usa cualquier lenguaje de programación admitido en el editor. Un revisor califica un resultado correcto según las reglas. Si el código no es obvio, indica el enfoque en un comentario breve. Estos enunciados se escribieron para este banco. No son ejercicios de otro sitio.";
+
+const CODING_FOOTER_OLD_ES =
   "Usa el lenguaje del editor. Un revisor califica un resultado correcto según las reglas. Si el código no es obvio, indica el enfoque en un comentario breve. Estos enunciados se escribieron para este banco. No son ejercicios de otro sitio.";
+
+export const CODING_FOOTERS: Array<[string, string]> = [
+  [CODING_FOOTER, CODING_FOOTER_ES],
+  [CODING_FOOTER_OLD, CODING_FOOTER_OLD_ES],
+];
 
 export const CODING_TITLES: Record<string, string> = {
   "Crate pair": "Par de cajas",

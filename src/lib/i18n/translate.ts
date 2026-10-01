@@ -1,4 +1,4 @@
-import { CODING_FOOTER, CODING_FOOTER_ES, CODING_TASKS, CODING_TITLES } from "./coding-es.ts";
+import { CODING_FOOTERS, CODING_TASKS, CODING_TITLES } from "./coding-es.ts";
 import { ES } from "./catalog.ts";
 
 export type Locale = "en" | "es";
@@ -67,13 +67,14 @@ function translateMental(text: string): string | null {
 }
 
 function translateCoding(text: string): string | null {
-  if (!text.endsWith(CODING_FOOTER)) return null;
-  const body = text.slice(0, text.length - CODING_FOOTER.length).replace(/\n$/, "");
+  const hit = CODING_FOOTERS.find(([english]) => text.endsWith(english));
+  if (!hit) return null;
+  const body = text.slice(0, text.length - hit[0].length).replace(/\n$/, "");
   const parts = body.match(/^([\s\S]*?)\n\nWrite `([\s\S]+?)`\.\n\n([\s\S]*?)\n\nExample\n([\s\S]*)$/);
   if (!parts) return null;
   const title = CODING_TITLES[parts[1]] ?? parts[1];
-  const task = CODING_TASKS[parts[3]] ?? parts[3];
-  return `${title}\n\nEscribe \`${parts[2]}\`.\n\n${task}\n\nEjemplo\n${parts[4]}\n\n${CODING_FOOTER_ES}`;
+  const task = CODING_TASKS[parts[3]] ?? parts[3].replace(/^Topic: /, "Tema: ");
+  return `${title}\n\nEscribe \`${parts[2]}\`.\n\n${task}\n\nEjemplo\n${parts[4]}\n\n${hit[1]}`;
 }
 
 function translatePersonality(text: string): string | null {

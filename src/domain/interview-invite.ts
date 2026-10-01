@@ -61,7 +61,7 @@ export function interviewInviteBody(input: {
     lines.push(input.googleCalendarUrl);
     lines.push("");
   }
-  lines.push("An .ics calendar file is also available from Interviews / your application page.");
+  lines.push("An .ics calendar file is also available from Scheduling or your application page.");
   if (input.appLink) {
     lines.push("");
     lines.push("Open your application:");
