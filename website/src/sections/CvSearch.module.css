@@ -1,0 +1,222 @@
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: clamp(2rem, 5vw, 5rem);
+  align-items: start;
+}
+
+.visual {
+  position: sticky;
+  top: calc(var(--header-h) + 1.5rem);
+}
+.scene {
+  height: min(70svh, 600px);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(80% 70% at 40% 45%, color-mix(in srgb, var(--stage-2) 10%, transparent), transparent 70%),
+    var(--bg-2);
+}
+.fields {
+  position: absolute;
+  left: 1.2rem;
+  bottom: 1.2rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-width: calc(100% - 2.4rem);
+}
+.fields li {
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 560;
+  color: var(--ink-2);
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  border: 1px solid var(--line);
+  transition:
+    background-color 300ms var(--ease-out),
+    color 300ms var(--ease-out);
+}
+.fields li[data-hit] {
+  background: var(--accent-fill);
+  border-color: transparent;
+  color: var(--on-accent);
+}
+
+.search {
+  display: grid;
+  gap: 1rem;
+}
+.inputWrap {
+  position: relative;
+  display: block;
+  margin-top: 0.6rem;
+}
+.icon {
+  position: absolute;
+  left: 1rem;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  translate: 0 -50%;
+  color: var(--accent-ink);
+}
+.input {
+  width: 100%;
+  height: 58px;
+  padding: 0 1rem 0 2.8rem;
+  border-radius: 16px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  font-family: var(--font-code);
+  font-size: 0.95rem;
+  transition:
+    border-color 200ms var(--ease-out),
+    box-shadow 200ms var(--ease-out);
+}
+.input:focus {
+  outline: none;
+  border-color: var(--accent-fill);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-fill) 22%, transparent);
+}
+.input[aria-invalid] {
+  border-color: var(--signal);
+}
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+.preset {
+  height: 40px;
+  padding: 0 0.9rem;
+  border: 0;
+  border-radius: 12px;
+}
+.preset code {
+  font-size: 0.78rem;
+}
+.preset[aria-pressed="true"] {
+  box-shadow:
+    0 0 0 2px var(--accent-fill),
+    var(--glass-shadow);
+}
+
+.status {
+  min-height: 1.6em;
+  color: var(--ink-2);
+}
+.status b {
+  font-size: 1.3rem;
+  color: var(--ink);
+}
+.of {
+  color: var(--ink-3);
+}
+.error {
+  color: var(--signal);
+  font-weight: 600;
+}
+
+.results {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+}
+.row {
+  padding: 1rem 1.1rem;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  opacity: 0.5;
+  transition:
+    opacity 300ms var(--ease-out),
+    border-color 300ms var(--ease-out),
+    background-color 300ms var(--ease-out);
+}
+.row[data-ok] {
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--accent-fill) 55%, transparent);
+  background: var(--surface);
+}
+.rowHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.6rem;
+}
+.rowLabel {
+  font-weight: 650;
+}
+.rowState {
+  font-size: 0.85rem;
+  color: var(--ink-3);
+}
+.row[data-ok] .rowState {
+  color: var(--accent-ink);
+  font-weight: 620;
+}
+.rowFields {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0;
+  font-size: 0.88rem;
+}
+.rowFields div {
+  display: grid;
+  grid-template-columns: 7.5rem 1fr;
+  gap: 0.8rem;
+}
+.rowFields dt {
+  color: var(--ink-3);
+}
+.rowFields dd {
+  margin: 0;
+  color: var(--ink-2);
+}
+.rowFields mark {
+  background: color-mix(in srgb, var(--r4-sprout) 70%, transparent);
+  color: #02140c;
+  border-radius: 4px;
+  padding: 0 3px;
+}
+
+.callout {
+  margin-top: clamp(3.5rem, 7vw, 6rem);
+  display: grid;
+  grid-template-columns: 0.8fr 1.2fr;
+  gap: 2rem;
+  align-items: baseline;
+  padding-top: 2rem;
+  border-top: 2px solid var(--ink);
+}
+.calloutTitle {
+  font-size: var(--step-3);
+  font-weight: 720;
+  font-variation-settings: "wdth" 82;
+  letter-spacing: -0.025em;
+  line-height: 1.02;
+}
+
+@media (max-width: 960px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+  .visual {
+    position: relative;
+    top: auto;
+  }
+  .scene {
+    height: 380px;
+  }
+  .rowFields div {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .callout {
+    grid-template-columns: 1fr;
+    gap: 0.8rem;
+  }
+}

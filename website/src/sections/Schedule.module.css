@@ -1,0 +1,622 @@
+/* A full-bleed band: the one section on this stretch with its own ground. */
+.section {
+  background: var(--bg-2);
+  border-block: 1px solid var(--line);
+}
+
+.layout {
+  display: grid;
+  gap: clamp(2.5rem, 5vw, 4rem);
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 1100px) {
+  .layout {
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.5fr);
+    align-items: start;
+    gap: clamp(3rem, 5vw, 5.5rem);
+  }
+  .intro {
+    position: sticky;
+    top: calc(var(--header-h) + 2rem);
+  }
+}
+
+.head {
+  margin-bottom: 2rem;
+}
+
+.points {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+.points li {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.8rem 0;
+  border-bottom: 1px solid var(--line);
+  font-weight: 580;
+  font-size: 1.02rem;
+}
+.points li::before {
+  content: "";
+  flex: none;
+  width: 7px;
+  height: 12px;
+  background: var(--stage-3);
+  clip-path: polygon(0 0, 45% 0, 100% 50%, 45% 100%, 0 100%, 55% 50%);
+}
+.conditional {
+  margin-top: 1.4rem;
+  max-width: 44ch;
+}
+
+/* ------------------------------------------------------------- board */
+
+.board {
+  position: relative;
+  min-width: 0;
+  padding: clamp(1rem, 2.4vw, 1.8rem);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow:
+    0 0 0 1px var(--line),
+    var(--shot-shadow);
+}
+
+.boardHead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.2rem;
+}
+.week {
+  font-size: var(--step--1);
+  color: var(--ink-3);
+}
+.range {
+  font-size: var(--step-2);
+  font-weight: 700;
+  font-variation-settings: "wdth" 84;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+.tz {
+  flex: none;
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-pill);
+  background: var(--bg-2);
+  font-size: 0.82rem;
+  font-weight: 560;
+  color: var(--ink-2);
+}
+
+/* Desktop week grid. */
+.grid {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 6px;
+  margin: -6px;
+  width: calc(100% + 12px);
+  table-layout: fixed;
+}
+.grid thead th {
+  padding: 0 0 0.4rem;
+  text-align: left;
+  font-weight: 600;
+}
+.grid thead td {
+  width: 4.2rem;
+}
+.dow {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--ink-3);
+  font-weight: 540;
+}
+.dom {
+  display: block;
+  font-size: 1.35rem;
+  font-weight: 700;
+  font-variation-settings: "wdth" 84;
+  line-height: 1.1;
+}
+.time {
+  padding-right: 0.4rem;
+  text-align: left;
+  font-size: 0.88rem;
+  font-weight: 560;
+  color: var(--ink-2);
+  vertical-align: middle;
+}
+.grid td {
+  padding: 0;
+}
+
+.slot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  height: 58px;
+  padding: 0 0.75rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: var(--surface);
+  font-size: 0.84rem;
+  font-weight: 560;
+  color: var(--ink-3);
+  text-align: left;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    opacity var(--dur-med) var(--ease-out),
+    transform 520ms var(--ease-spring);
+}
+.slotState {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  line-height: 1.1;
+}
+.slot[data-state="free"] {
+  color: var(--ink-2);
+}
+@media (hover: hover) {
+  .slot[data-state="free"]:not([aria-disabled="true"]):hover {
+    border-color: var(--stage-2);
+    background: color-mix(in srgb, var(--stage-2) 8%, var(--surface));
+    color: var(--ink);
+  }
+}
+.slot[data-state="free"]:not([aria-disabled="true"]):active {
+  transform: scale(0.97);
+}
+.slot[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: default;
+}
+.slot[data-state="free"][data-moving] {
+  border-color: color-mix(in srgb, var(--stage-2) 60%, var(--line-strong));
+  border-style: dashed;
+  color: var(--ink);
+}
+.slot[data-state="taken"] {
+  border-style: dashed;
+  border-color: var(--line);
+  background: repeating-linear-gradient(-45deg, transparent 0 6px, var(--line) 6px 7px), var(--bg);
+}
+.slot[data-state="mine"] {
+  border-color: var(--stage-2);
+  background: var(--stage-2);
+  color: var(--ink);
+  font-weight: 650;
+  animation: booked 560ms var(--ease-spring) both;
+}
+.slot[data-state="mine"][data-moving] {
+  background: color-mix(in srgb, var(--stage-2) 16%, var(--surface));
+  color: var(--ink);
+  border-style: dashed;
+  animation: none;
+}
+:root[data-theme="dark"] .slot[data-state="mine"]:not([data-moving]) {
+  color: var(--bg);
+}
+@keyframes booked {
+  from {
+    transform: scale(0.9);
+  }
+}
+.check {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  stroke-dasharray: 24;
+  animation: draw 420ms var(--ease-out) 120ms both;
+}
+@keyframes draw {
+  from {
+    stroke-dashoffset: 24;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* The other candidate lands on your slot and is refused. */
+.slot[data-clash] {
+  animation: refuse 520ms var(--ease-out);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--signal) 55%, transparent);
+}
+@keyframes refuse {
+  0%,
+  100% {
+    transform: none;
+  }
+  20% {
+    transform: translateX(-5px);
+  }
+  45% {
+    transform: translateX(4px);
+  }
+  70% {
+    transform: translateX(-2px);
+  }
+}
+.ghost {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  z-index: 2;
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-pill);
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: ghost 1100ms var(--ease-out) both;
+}
+@keyframes ghost {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -14px);
+  }
+  18% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  70% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -10px);
+  }
+}
+
+/* ------------------------------------------------------------- mobile */
+
+.mobile {
+  display: grid;
+  gap: 1rem;
+}
+.days {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  padding: 4px;
+  border-radius: var(--radius-md);
+}
+.dayTab {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 0;
+  min-height: 56px;
+  padding: 0.35rem 0;
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  color: var(--ink-2);
+  font-size: 0.8rem;
+  font-weight: 560;
+  line-height: 1.15;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.dayTab[aria-selected="true"] {
+  background: var(--ink);
+  color: var(--bg);
+}
+.dayNum {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+.dayTab[data-has]::after {
+  content: "";
+  position: absolute;
+  top: 7px;
+  right: 9px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--stage-2);
+}
+.dayName {
+  font-weight: 650;
+  margin-bottom: 0.5rem;
+}
+.rows {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rows li {
+  animation: row-in 420ms var(--ease-out) both;
+  animation-delay: calc(var(--k) * 40ms);
+}
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+.slot[data-row] {
+  justify-content: space-between;
+  height: 56px;
+  padding: 0 1rem;
+  font-size: 0.9rem;
+}
+.rowTime {
+  font-size: 1.1rem;
+  font-weight: 650;
+  color: var(--ink);
+}
+.slot[data-state="mine"] .rowTime {
+  color: inherit;
+}
+.slot[data-state="taken"] .rowTime {
+  color: var(--ink-3);
+}
+
+/* ------------------------------------------------------------- ticket */
+
+/* A perforated edge separates the calendar from the ticket it produces. */
+.ticket {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  margin: 1.4rem calc(clamp(1rem, 2.4vw, 1.8rem) * -1) 0;
+  padding: 1.4rem clamp(1rem, 2.4vw, 1.8rem) 0.2rem;
+  border-top: 2px dashed var(--line-strong);
+}
+.ticket::before,
+.ticket::after {
+  content: "";
+  position: absolute;
+  top: -12px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--bg-2);
+}
+.ticket::before {
+  left: -11px;
+}
+.ticket::after {
+  right: -11px;
+}
+.ticketMain {
+  animation: rise 520ms var(--ease-out) both;
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+.ticketLabel {
+  font-size: var(--step--1);
+  color: var(--ink-3);
+}
+.ticketTitle {
+  font-size: var(--step-1);
+  font-weight: 680;
+  font-variation-settings: "wdth" 88;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+.when {
+  min-height: 2.9em;
+  margin-top: 0.25rem;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  animation: rise 420ms var(--ease-out) both;
+}
+.ticket:not([data-booked]) .when {
+  color: var(--ink-3);
+}
+.when span {
+  display: block;
+  font-size: var(--step--1);
+  color: var(--ink-3);
+}
+.ticketHead {
+  display: grid;
+  gap: 1rem;
+}
+@media (min-width: 1100px) {
+  .ticketHead {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+  }
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 48px;
+  padding: 0 1.1rem 0 0.95rem;
+  border: 0;
+  font-weight: 620;
+  font-size: 0.92rem;
+  color: var(--ink);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.cta svg {
+  width: 18px;
+  height: 18px;
+}
+.cta:disabled,
+.cta[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.secondary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.2rem;
+}
+.quiet {
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--accent-ink);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent-ink) 35%, transparent);
+  text-underline-offset: 0.25em;
+}
+.quiet:first-child {
+  min-width: 10.5rem;
+  text-align: left;
+}
+.quiet:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.quiet:last-child {
+  color: var(--ink-3);
+  text-decoration-color: var(--line-strong);
+}
+.quiet:first-child {
+  min-width: 10.5rem;
+  text-align: left;
+}
+.quiet:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* One fixed slot for the changing notice: nothing below it moves. */
+.notice {
+  display: grid;
+  height: 5rem;
+}
+.notice > * {
+  align-self: stretch;
+}
+.moving {
+  display: flex;
+  align-items: center;
+  padding: 0.7rem 0.9rem;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--stage-2) 10%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--stage-2) 35%, transparent);
+  font-size: 0.92rem;
+  font-weight: 540;
+}
+.other {
+  display: grid;
+  align-content: center;
+  gap: 0.1rem;
+  padding: 0.55rem 0.95rem 0.55rem 1rem;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--signal) 11%, var(--surface));
+  box-shadow: inset 3px 0 0 var(--signal);
+  animation: rise 420ms var(--ease-out) both;
+}
+.otherLabel {
+  font-size: 0.78rem;
+  color: var(--ink-3);
+}
+.otherMsg {
+  font-weight: 620;
+}
+
+.log {
+  display: grid;
+  gap: 0.35rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--line);
+}
+.logTitle {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+.log ol {
+  display: grid;
+  align-content: start;
+  gap: 0.2rem;
+  height: 4.6rem;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.log li {
+  font-size: 0.88rem;
+  color: var(--ink-2);
+  animation: rise 360ms var(--ease-out) both;
+}
+.log li:not(:first-child) {
+  color: var(--ink-3);
+}
+.seq {
+  align-self: center !important;
+  font-size: 0.86rem;
+  color: var(--ink-3);
+  max-width: 52ch;
+}
+.log li.logEmpty {
+  color: var(--ink-3);
+}
+
+.demo {
+  margin-top: 1rem;
+}
+
+@media (max-width: 819px) {
+  .board {
+    margin-inline: calc(var(--gutter) * -0.5);
+  }
+  .range {
+    font-size: 1.4rem;
+  }
+  .actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .secondary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 1rem;
+  }
+  .quiet {
+    text-align: left;
+    line-height: 1.2;
+  }
+  .notice {
+    height: 6.2rem;
+  }
+  .log ol {
+    height: 8rem;
+  }
+  .cta {
+    justify-content: center;
+  }
+}

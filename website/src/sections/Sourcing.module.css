@@ -1,0 +1,239 @@
+.section {
+  background: var(--bg-2);
+}
+
+/* Full-bleed band the shared canvas draws into. */
+.band {
+  position: relative;
+  margin-top: clamp(-1.5rem, -2vw, -0.5rem);
+}
+.scene {
+  position: relative;
+  height: clamp(380px, 46vw, 620px);
+}
+.scene::after {
+  /* soft edges so the field dissolves into the page instead of ending at a box */
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, var(--bg-2), transparent 7%, transparent 93%, var(--bg-2)),
+    linear-gradient(180deg, var(--bg-2), transparent 10%, transparent 90%, var(--bg-2));
+  z-index: 3;
+}
+
+/* ---------------------------------------------------------------- steps */
+.steps {
+  --a: 0;
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1.6rem;
+  margin: clamp(1rem, 2vw, 2rem) 0 0;
+  padding: 1.4rem 0 0;
+  list-style: none;
+}
+.steps::before,
+.steps::after {
+  /* the route the person travels; the lit part ends at the active step */
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 2px;
+  border-radius: 2px;
+}
+.steps::before {
+  right: 0;
+  background: var(--line-strong);
+}
+.steps::after {
+  width: calc((var(--a) + 0.5) / 5 * 100%);
+  background: linear-gradient(90deg, var(--stage-1), var(--stage-2) 60%, var(--stage-3));
+  transition: width 600ms var(--ease-out);
+}
+
+.step {
+  display: grid;
+  gap: 0.75rem;
+  align-content: start;
+  transition: opacity var(--dur-med) var(--ease-out);
+}
+.step[data-state="next"] {
+  opacity: 0.55;
+}
+
+.pick {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.95rem 0.4rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: rgb(var(--glass-tint) / var(--glass-alpha));
+  -webkit-backdrop-filter: blur(14px) saturate(1.5);
+  backdrop-filter: blur(14px) saturate(1.5);
+  color: var(--ink);
+  font: inherit;
+  transition:
+    transform 520ms var(--ease-spring),
+    background-color var(--dur-med) var(--ease-out),
+    border-color var(--dur-med) var(--ease-out);
+}
+.pick:hover {
+  border-color: var(--line-strong);
+}
+.pick:active {
+  transform: scale(0.965, 0.94);
+  transition-duration: 90ms;
+}
+.idx {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--stage-1) 14%, transparent);
+  color: var(--accent-ink);
+  font-size: var(--step--1);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  transition:
+    background-color var(--dur-med) var(--ease-out),
+    color var(--dur-med) var(--ease-out);
+}
+.name {
+  font-size: 1.12rem;
+  font-weight: 700;
+  font-variation-settings: "wdth" 86;
+  letter-spacing: -0.01em;
+}
+.step[data-state="on"] .pick {
+  border-color: color-mix(in srgb, var(--accent-fill) 55%, transparent);
+}
+.step[data-state="on"] .idx,
+.step[data-state="past"] .idx {
+  background: var(--accent-fill);
+  color: var(--bg);
+}
+.step[data-kind="campaign"][data-state="on"] .idx {
+  /* the campaign step is where a reply or bounce stops the send */
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--signal, #b7791f) 35%, transparent);
+}
+.step[data-kind="application"] .idx {
+  border-radius: 6px;
+}
+
+.text {
+  color: var(--ink-2);
+  font-size: 0.98rem;
+  max-width: 30ch;
+}
+
+/* ---------------------------------------------------------------- lower */
+.lower {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 3rem;
+  align-items: end;
+  margin-top: clamp(3rem, 6vw, 5rem);
+}
+.consent {
+  display: grid;
+  gap: 0.9rem;
+  padding-left: 1.4rem;
+  border-left: 3px solid var(--ink);
+}
+.boards {
+  max-width: 38ch;
+}
+
+/* ---------------------------------------------------------------- fallback */
+.fallback {
+  width: min(100%, 1100px);
+  height: 100%;
+  margin: 0 auto;
+}
+.fbRoute {
+  fill: none;
+  stroke: var(--stage-2);
+  stroke-width: 2;
+  stroke-dasharray: 6 6;
+}
+.fbGate {
+  stroke: var(--ink);
+  stroke-width: 3;
+}
+.fbNode {
+  fill: var(--stage-1);
+}
+.fbCard {
+  fill: var(--bg);
+  stroke: var(--stage-2);
+  stroke-width: 2;
+}
+.fbText {
+  fill: var(--ink);
+  font: 650 22px var(--font-sans);
+}
+
+/* Mobile reading text lives under the pill row (see .activeText). */
+.activeText {
+  display: none;
+}
+
+@media (max-width: 960px) {
+  /* Narrow screens: a compact pill row right under the scene, so the scene
+     stays in view while a step is picked; the active step's text follows. */
+  .steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding-top: 1rem;
+  }
+  .step {
+    display: contents;
+  }
+  .step[data-state="next"] .pick {
+    opacity: 0.6;
+  }
+  .pick {
+    padding-right: 0.8rem;
+  }
+  .name {
+    font-size: 0.98rem;
+  }
+  .text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .activeText {
+    display: block;
+    margin: 1rem 0 0;
+    min-height: 3.2em;
+    color: var(--ink-2);
+    max-width: 40ch;
+  }
+  .lower {
+    grid-template-columns: 1fr;
+    gap: 1.6rem;
+  }
+}
+@media (max-width: 820px) {
+  .scene {
+    height: min(118vw, 500px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .steps::after,
+  .step,
+  .pick {
+    transition: none;
+  }
+}

@@ -1,0 +1,233 @@
+.tour {
+  overflow: clip;
+  background: linear-gradient(180deg, var(--bg), var(--bg-2) 70%, var(--bg));
+}
+
+.carousel {
+  --sw: min(86vw, 940px);
+  --step: calc(var(--sw) * 0.84);
+  /* window bar (29px) + 16:10 capture; the stage height is fixed from the first render */
+  --shot-h: calc(var(--sw) * 0.625 + 29px);
+  --cap-h: calc(2 * 1.45em + 1.1rem);
+  position: relative;
+}
+
+.viewport {
+  position: relative;
+  box-sizing: content-box;
+  height: calc(var(--shot-h) + var(--cap-h));
+  padding-block: 1rem 0.5rem;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  outline: none;
+}
+.viewport:focus-visible .slide[data-active] .shotWrap {
+  outline: 2px solid var(--focus);
+  outline-offset: 6px;
+  border-radius: 16px;
+}
+
+.track {
+  display: grid;
+  justify-items: center;
+  perspective: 1800px;
+  perspective-origin: 50% 40%;
+}
+
+.slide {
+  grid-area: 1 / 1;
+  width: var(--sw);
+  z-index: var(--z);
+  transform: translateX(calc(var(--x) * var(--step))) rotateY(var(--ry)) scale(var(--sc));
+  transform-origin: 50% 50%;
+  transition:
+    transform 760ms var(--ease-spring),
+    opacity var(--dur-med) var(--ease-out);
+  will-change: transform;
+}
+.slide[data-far] {
+  visibility: hidden;
+}
+.viewport[data-dragging] .slide {
+  transition: none;
+}
+.slide:not([data-active]) {
+  cursor: pointer;
+}
+
+.shotWrap {
+  position: relative;
+}
+.shot img {
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+
+/* Side slides recede: dimmed toward the page colour, not blurred. */
+.shade {
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  background: var(--bg);
+  opacity: calc(var(--dim) * 0.62);
+  pointer-events: none;
+  transition: opacity var(--dur-med) var(--ease-out);
+}
+
+.caption {
+  margin-top: 1.1rem;
+  max-width: 56ch;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  color: var(--ink-2);
+  font-size: 1rem;
+  line-height: 1.45;
+  opacity: 0;
+  transition: opacity var(--dur-med) var(--ease-out);
+}
+.slide[data-active] .caption {
+  opacity: 1;
+}
+
+/* -------------------------------------------------------------- controls */
+
+.controls {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 1rem 1.4rem;
+  margin-top: 1.8rem;
+}
+
+.buttons {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.navBtn {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border: 0;
+  color: var(--ink);
+}
+.navBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.navBtn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+.chev {
+  width: 18px;
+  height: 18px;
+}
+
+.counter {
+  font-size: 1rem;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.counter strong {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.progress {
+  position: relative;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+  min-width: 60px;
+}
+.progress span {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  transform: scaleX(max(0.04, var(--p)));
+  background: linear-gradient(90deg, var(--stage-1), var(--stage-2), var(--stage-3), var(--stage-4));
+  transition: transform 760ms var(--ease-spring);
+}
+
+.hint {
+  grid-column: 1 / -1;
+}
+
+.controls[data-hidden] {
+  visibility: hidden;
+}
+
+/* ----------------------------------------------------------- placeholder */
+
+.placeholder {
+  display: grid;
+  grid-template-rows: 29px 1fr;
+  height: var(--shot-h);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow:
+    0 0 0 1px var(--line),
+    var(--shot-shadow);
+}
+:root[data-theme="dark"] .placeholder {
+  background: var(--bg-2);
+}
+.phBar {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line);
+}
+:root[data-theme="dark"] .phBar {
+  background: var(--bg-3);
+}
+.phBar i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+.phBody {
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  background-image: repeating-linear-gradient(135deg, var(--line) 0 1px, transparent 1px 12px);
+}
+.phText {
+  padding: 0.6rem 1rem;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--ink-2);
+  font-size: 0.95rem;
+  text-align: center;
+}
+:root[data-theme="dark"] .phText {
+  background: var(--bg-2);
+}
+
+@media (max-width: 640px) {
+  .carousel {
+    --sw: 84vw;
+    --step: calc(var(--sw) * 0.9);
+  }
+  .caption {
+    font-size: 0.95rem;
+  }
+  .controls {
+    grid-template-columns: auto 1fr;
+  }
+  .progress {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}

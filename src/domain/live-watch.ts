@@ -1,3 +1,5 @@
+import { roleHas } from "./rules.ts";
+
 export const LIVE_SIGNAL_KINDS = ["SCREENS", "LEFT_APP", "RETURNED", "LEFT_WINDOW", "COPY", "PASTE"] as const;
 
 export type LiveSignalKind = (typeof LIVE_SIGNAL_KINDS)[number];
@@ -122,6 +124,17 @@ function answerPreview(type: string, answer: unknown): string {
     return ids.length ? `options ${ids.join(", ")}` : "";
   }
   return "";
+}
+
+
+/** True when this staff role may see who is taking an exam / act as live interviewer. */
+export function canWatchActiveAttempts(role: string): boolean {
+  return (
+    roleHas(role, "assessment.assign") ||
+    roleHas(role, "interview.manage") ||
+    roleHas(role, "evaluation.grade") ||
+    roleHas(role, "assessment.author")
+  );
 }
 
 /** Fail-closed: a live watch row is visible only when company and application line up. */

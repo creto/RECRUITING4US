@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { candidateTask, exportMine, listMyApplications, listMyDesk, replyToIntent } from "@/server/talent.functions";
-import { AppLink, Button, Empty, Gate, Loading, MailCard, PageTitle, refreshPage, StageBar, useAuthed, when, Wordmark } from "@/components/talent/kit";
+import { AppLink, Button, Empty, Gate, Loading, MailCard, PageTitle, refreshPage, StageBar, useAuthed, when, MarketingHomeLink } from "@/components/talent/kit";
 import { UserButton } from "@/lib/auth/gates";
 import { useState } from "react";
 
@@ -15,7 +15,7 @@ function Portal() {
     <Gate pending={state.isPending} signedOut={state.signedOut}>
       <main className="mx-auto max-w-3xl px-4 py-8">
         <div className="flex items-center justify-between">
-          <Link to="/"><Wordmark /></Link>
+          <MarketingHomeLink />
           <div className="flex items-center gap-4">
             <Link to="/portal" className="text-sm text-link">Applicant portal</Link>
             <UserButton />

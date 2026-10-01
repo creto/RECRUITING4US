@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { getRequest } from "@tanstack/react-start/server";
 import { assertSameSiteRequest } from "@/lib/auth/isolation.server";
 import { estimateComplexity } from "@/domain/judge";
-import { describeLiveSignal, liveSignalKind } from "@/domain/live-watch";
+import { canWatchActiveAttempts, describeLiveSignal, liveSignalKind } from "@/domain/live-watch";
 import { applyDocument, applyOpChain, canSeeNote, type Edit } from "@/domain/platform/collab";
 import { classifySandboxAddress, chooseMailApplication, deliveryLabel, isTerminal, nextState, renderTokens, retryDelayMinutes, stripQuotedReply, webhookFresh, brandHtml, brandPlain, mailMark, type DeliveryState, type MailBrand } from "@/domain/platform/delivery";
 import { normalizeMailFiles, type MailFile } from "@/domain/platform/smtp";
@@ -110,6 +110,14 @@ export async function drainMail(companyId: string) {
   const sql = await db();
   const mode = mailMode();
   const brand = await companyBrand(companyId);
+  // Claim flips QUEUED→SENDING without a lease. A crashed drain leaves rows stuck;
+  // reclaim stale SENDING so portal OTP / outbound can retry (same idea as outbox).
+  await sql`
+    update message_intents set status = 'QUEUED'
+    where company_id = ${companyId}
+      and status = 'SENDING'
+      and created_at < now() - interval '2 minutes'
+  `;
   const queued = await sql<{
     id: string;
     status: string;
@@ -578,7 +586,14 @@ export async function queueSystemMail(input: {
       on conflict (company_id, idempotency_key) do nothing
       returning id
     `;
-    await drainMail(companyId);
+    try {
+      await drainMail(companyId);
+    } catch (drainError) {
+      // Enqueue succeeded; do not fail OTP/unlock because the immediate send path tripped.
+      // Worker / next drain recovers QUEUED (and stale SENDING).
+      const message = drainError instanceof Error ? drainError.message : String(drainError);
+      console.error("talentflow drainMail", message.slice(0, 240));
+    }
     return { id: inserted[0]?.id ?? id, duplicate: !inserted[0], note: mailMode().note };
   } catch (error) {
     mapDbError(error);
@@ -1069,7 +1084,7 @@ async function liveRole(userId: string, token: string): Promise<{ companyId: str
   const members = await sql<{ role: string }>`
     select role from memberships where company_id = ${companyId} and user_id = ${user.id} and status = 'ACTIVE'
   `;
-  const staff = Boolean(members[0]);
+  const staff = Boolean(members[0]?.role) && canWatchActiveAttempts(members[0]!.role);
   let candidate = false;
   if (session.application_id) {
     const apps = await sql<{ email: string }>`

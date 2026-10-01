@@ -2,7 +2,7 @@ import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { trackApplications } from "@/server/talent.functions";
 import { trackQuery } from "@/domain/sheet";
-import { Alert, Button, Field, inputClass, PageTitle, StageBar, Wordmark } from "@/components/talent/kit";
+import { Alert, Button, Field, inputClass, PageTitle, StageBar, MarketingHomeLink } from "@/components/talent/kit";
 
 export const Route = createFileRoute("/track")({ component: Track });
 
@@ -25,7 +25,7 @@ function Track() {
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
-      <Link to="/"><Wordmark /></Link>
+      <MarketingHomeLink />
       <PageTitle title="Application status" lede="Enter the email you applied with, the receipt from the apply form, or the application id. You see the stage only. Notes, scores, and pay stay with the employer." />
       <p className="mb-4 text-sm text-muted">
         For assessments, interviews, offers, and messages in one place, unlock the{" "}

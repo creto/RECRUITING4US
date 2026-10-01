@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { BrandBar, Wordmark } from "@/components/talent/kit";
+import { createFileRoute } from "@tanstack/react-router";
+import { BrandBar, MarketingHomeLink } from "@/components/talent/kit";
 import { clientErrors, errorSinkConnected, sentryDsnPresent } from "@/lib/observe";
 import type { ObservedError } from "@/domain/observe";
 
@@ -12,7 +12,7 @@ type HealthBody = {
   ready: boolean;
   database: string;
   checkedAt: string;
-  errors: { captured: number; last: ObservedError | null };
+  errors: { captured: number; last: { id: string; at: string; source: string; name: string } | null };
   sentry: { dsn: boolean; sink: boolean };
 };
 
@@ -43,12 +43,8 @@ function StatusPage() {
   return (
     <main className="mx-auto max-w-3xl px-4 py-8 pb-28">
       <header className="flex items-center justify-between gap-4">
-        <Link to="/" className="text-ink">
-          <Wordmark />
-        </Link>
-        <Link to="/" className="text-sm text-link">
-          Back to the main page
-        </Link>
+        <MarketingHomeLink className="text-ink" />
+        <MarketingHomeLink className="text-sm text-link">Back to the main page</MarketingHomeLink>
       </header>
       <div className="mt-6">
         <BrandBar />
@@ -87,13 +83,13 @@ function Pill({ label, ok, pending }: { label: string; ok: boolean; pending: boo
   return <span className={`inline-flex min-h-10 items-center rounded-full border px-4 text-sm ${look}`}>{label}</span>;
 }
 
-function ErrorList({ rows, empty }: { rows: ObservedError[]; empty: string }) {
+function ErrorList({ rows, empty }: { rows: Array<{ id: string; at: string; source: string; name: string; message?: string }>; empty: string }) {
   if (rows.length === 0) return <p className="mt-3 text-sm text-muted">{empty}</p>;
   return (
     <ul className="mt-3 space-y-2">
       {rows.map((row) => (
         <li key={row.id} className="rounded-2xl border border-line bg-[#f7faf8] px-4 py-3 text-sm">
-          <p className="text-ink">{row.name}: {row.message}</p>
+          <p className="text-ink">{row.message ? `${row.name}: ${row.message}` : row.name}</p>
           <p className="mt-1 text-xs text-muted">{row.source} · {row.at}</p>
         </li>
       ))}

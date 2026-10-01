@@ -24,12 +24,12 @@ import {
   PORTAL_OTP_TTL_SECONDS,
 } from "@/domain/portal-otp";
 import { enterTenant } from "@/lib/tenant";
-import { env } from "@/lib/env.server";
+import { accessTokenSecret } from "@/lib/access-token-secret.server";
 import { db, nid } from "./db.server";
 import { mailText } from "@/domain/mail";
 
 function portalAccessSecret(): string {
-  return (env("BETTER_AUTH_SECRET") ?? process.env.BETTER_AUTH_SECRET ?? "recruit4us-dev-assess-access").trim();
+  return accessTokenSecret("Portal");
 }
 
 const CODE_SENT =
@@ -148,26 +148,18 @@ export async function requestPortalOtp(input: { email: string; companySlug?: str
   const companies = await companiesForEmail(email);
   const slug = (input.companySlug ?? "").trim().toLowerCase();
 
-  if (companies.length === 0) {
-    return { status: "code_sent" as const, emailMasked: maskEmail(email), note: CODE_SENT };
-  }
-
-  if (!slug && companies.length > 1) {
+  // Anti-enumeration: always the same shape. Require an employer slug; never
+  // list companies for an email, and never confirm whether the email or slug matched.
+  if (!slug) {
     return {
-      status: "pick_company" as const,
+      status: "need_company" as const,
       emailMasked: maskEmail(email),
-      companies: companies.map((row) => ({
-        slug: row.company_slug,
-        name: row.company_name,
-      })),
+      note: "Enter the employer slug from your application email or careers link, then request a code.",
     };
   }
 
-  const chosen = slug
-    ? companies.find((row) => row.company_slug === slug)
-    : companies[0];
+  const chosen = companies.find((row) => row.company_slug === slug);
   if (!chosen) {
-    // Fail closed: do not reveal whether the slug exists elsewhere.
     return { status: "code_sent" as const, emailMasked: maskEmail(email), note: CODE_SENT };
   }
 
@@ -179,8 +171,6 @@ export async function requestPortalOtp(input: { email: string; companySlug?: str
   return {
     status: "code_sent" as const,
     emailMasked: sent.emailMasked,
-    companySlug: chosen.company_slug,
-    companyName: chosen.company_name,
     note: CODE_SENT,
   };
 }

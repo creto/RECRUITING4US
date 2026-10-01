@@ -39,3 +39,14 @@ export function rememberError(buffer: ObservedError[], event: ObservedError): Ob
   const next = [...buffer, event];
   return next.length > ERROR_BUFFER_LIMIT ? next.slice(next.length - ERROR_BUFFER_LIMIT) : next;
 }
+
+/** Public health payloads omit error message text (may contain internals). */
+export function publicHealthError(event: ObservedError | null | undefined): {
+  id: string;
+  at: string;
+  source: ErrorSource;
+  name: string;
+} | null {
+  if (!event) return null;
+  return { id: event.id, at: event.at, source: event.source, name: event.name };
+}

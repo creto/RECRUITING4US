@@ -1,0 +1,75 @@
+.trace {
+  position: absolute;
+  left: 0;
+  top: 0;
+  /* content layer (.over-canvas): the shared canvas (z 2) paints opaque
+     backdrops such as the code section's pixel field */
+  z-index: 3;
+  pointer-events: none;
+  overflow: visible;
+}
+.base {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 1.5;
+  stroke-dasharray: 2 7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.live {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.tip > * {
+  fill: var(--bg);
+  stroke: var(--line-strong);
+  stroke-width: 1.5;
+  transition:
+    fill 300ms var(--ease-out),
+    stroke 300ms var(--ease-out);
+}
+.tip[data-on] > * {
+  fill: var(--accent-fill);
+  stroke: var(--accent-fill);
+}
+/* invitation stays open; conversation rings stay open with a lit edge */
+.tip[data-kind="1"][data-on] > *,
+.tip[data-kind="4"][data-on] > * {
+  fill: var(--bg);
+}
+.tip[data-on] .check {
+  fill: none;
+  stroke: var(--bg);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.tip .check {
+  fill: none;
+}
+.ticks {
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  opacity: 0.8;
+}
+.strand {
+  fill: none;
+  stroke-width: 1.5;
+  stroke-dasharray: 10 6;
+  opacity: 0.75;
+}
+.head {
+  fill: var(--accent-fill);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent-fill) 70%, transparent));
+}
+@media (max-width: 1099px) {
+  .live {
+    stroke-width: 2;
+  }
+  .tip > * {
+    transform: scale(0.75);
+  }
+}

@@ -1,0 +1,110 @@
+/*
+ * RECRUIT4US design tokens.
+ *
+ * The four stage colours are sampled from the official mark (public/mark.png,
+ * public/favicon.svg): left to right the chevrons read forest → jade → leaf →
+ * sprout. They are never used as a single "accent"; they are a progression
+ * scale. Stage 1 = invitation, 2 = submission, 3 = evidence, 4 = completion.
+ * See docs/design-system.md, "Brand tokens sampled from the official mark".
+ */
+:root {
+  --r4-forest: #036145;
+  --r4-jade: #04a764;
+  --r4-leaf: #78dd55;
+  --r4-sprout: #d0fa8e;
+  --r4-black: #000000;
+
+  --font-sans: "Bricolage Grotesque Variable", "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --font-code: "JetBrains Mono Variable", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  /* Type scale: 1.25 ratio from a 17px body, display sizes fluid. */
+  --step--2: 0.72rem;
+  --step--1: 0.85rem;
+  --step-0: 1.0625rem;
+  --step-1: 1.33rem;
+  --step-2: clamp(1.5rem, 1.2rem + 1vw, 1.9rem);
+  --step-3: clamp(1.9rem, 1.4rem + 1.8vw, 2.7rem);
+  --step-4: clamp(2.4rem, 1.6rem + 3vw, 4rem);
+  --step-5: clamp(3rem, 1.6rem + 5.4vw, 6.6rem);
+
+  --measure: 62ch;
+  --gutter: clamp(1.25rem, 0.6rem + 2.6vw, 3rem);
+  --dock-w: 76px;
+  --header-h: 72px;
+  --section-pad: clamp(6rem, 4rem + 8vw, 11rem);
+
+  --radius-xs: 6px;
+  --radius-sm: 12px;
+  --radius-md: 20px;
+  --radius-lg: 32px;
+  --radius-pill: 999px;
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: linear(0, 0.009, 0.035 2.1%, 0.141 4.4%, 0.723 12.9%, 0.938 16.7%, 1.017 19.4%, 1.067, 1.099 24.3%, 1.108 26%, 1.1, 1.083 30.3%, 1.024 36.1%, 1.003 39.6%, 0.992 43.4%, 0.994 52.4%, 1.001 66.4%, 1);
+  --dur-fast: 180ms;
+  --dur-med: 420ms;
+  --dur-slow: 700ms;
+
+  color-scheme: light;
+}
+
+/* Day: open paper with a cool green cast, ink that reads as near-black green. */
+:root,
+:root[data-theme="light"] {
+  --bg: #f1f4ee;
+  --bg-2: #e6ece2;
+  --bg-3: #dae3d5;
+  --surface: #ffffff;
+  --ink: #08170f;
+  --ink-2: #33443a;
+  --ink-3: #5d6d63;
+  --line: rgba(8, 23, 15, 0.12);
+  --line-strong: rgba(8, 23, 15, 0.24);
+  --accent-ink: #036145;
+  --accent-fill: #04a764;
+  --on-accent: #ffffff;
+  --focus: #036145;
+  --stage-1: #036145;
+  --stage-2: #04a764;
+  --stage-3: #3fae2a;
+  --stage-4: #8fd14f;
+  --stage-4-fill: #d0fa8e;
+  --signal: #b7791f;
+  --glass-tint: 255 255 255;
+  --glass-alpha: 0.58;
+  --glass-edge: rgba(255, 255, 255, 0.9);
+  --glass-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset, 0 18px 40px -18px rgba(3, 50, 32, 0.28), 0 2px 6px rgba(3, 50, 32, 0.06);
+  --shot-shadow: 0 40px 80px -40px rgba(3, 50, 32, 0.45);
+  --noise-opacity: 0.035;
+}
+
+/* Night: interview-room focus. Deep forest-black taken from the first chevron. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #020d09;
+  --bg-2: #061710;
+  --bg-3: #0b2219;
+  --surface: #0a1d15;
+  --ink: #eaf4e5;
+  --ink-2: #b6c8bb;
+  --ink-3: #82978a;
+  --line: rgba(208, 250, 142, 0.11);
+  --line-strong: rgba(208, 250, 142, 0.24);
+  --accent-ink: #d0fa8e;
+  --accent-fill: #78dd55;
+  --on-accent: #02140c;
+  --focus: #d0fa8e;
+  --stage-1: #0a8a5f;
+  --stage-2: #04a764;
+  --stage-3: #78dd55;
+  --stage-4: #d0fa8e;
+  --stage-4-fill: #d0fa8e;
+  --signal: #f0b95a;
+  --glass-tint: 14 38 28;
+  --glass-alpha: 0.52;
+  --glass-edge: rgba(208, 250, 142, 0.16);
+  --glass-shadow: 0 1px 0 rgba(208, 250, 142, 0.09) inset, 0 24px 48px -20px rgba(0, 0, 0, 0.7), 0 2px 8px rgba(0, 0, 0, 0.35);
+  --shot-shadow: 0 40px 90px -40px rgba(0, 0, 0, 0.9);
+  --noise-opacity: 0.05;
+}

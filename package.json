@@ -22,7 +22,13 @@
     "outbox:worker": "node --experimental-strip-types --import ./scripts/test-alias.mjs scripts/outbox-worker.mjs",
     "e2e": "node scripts/e2e-critical.mjs",
     "lint": "eslint . --max-warnings 0",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "website:dev": "npm --prefix website run dev",
+    "website:build": "npm --prefix website run build",
+    "website:install": "npm --prefix website ci",
+    "vercel-build": "node scripts/vercel-unified-build.mjs",
+    "website:merge-output": "node scripts/merge-website-into-vercel-output.mjs",
+    "website:preview": "npm --prefix website run preview"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.4",

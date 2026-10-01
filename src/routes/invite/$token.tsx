@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { acceptInvite } from "@/server/talent.functions";
-import { Alert, Button, Loading, Wordmark } from "@/components/talent/kit";
+import { Alert, Button, Loading, MarketingHomeLink } from "@/components/talent/kit";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 
@@ -17,7 +17,7 @@ function InvitePage() {
   if (!user) return <RedirectToSignIn />;
   return (
     <main className="mx-auto max-w-lg px-4 py-10">
-      <Link to="/"><Wordmark /></Link>
+      <MarketingHomeLink />
       <h1 className="mt-6 text-3xl">Company invitation</h1>
       <p className="mt-3 text-sm text-muted">
         Opening this page does not join the company and does not use up the invitation. Accept only if this address was invited.

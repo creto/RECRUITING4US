@@ -1,6 +1,6 @@
 # Deploy
 
-The production build is `npm run build`. It compiles the app, copies the embedded-database assets, and applies `migrations/*.sql` only when `DATABASE_URL` is set. The Vercel preset is already selected. Put secrets in the host's environment, not in the repository. Names and empty behavior are in [`.env.example`](../.env.example). Nothing in that file is a live credential.
+The production build is `npm run build`, then (on Vercel) the marketing site is merged in — see root `vercel.json` (website build + app build + `scripts/merge-website-into-vercel-output.mjs`). One project serves `/` (marketing) and `/login` (app). It compiles the app, copies the embedded-database assets, and applies `migrations/*.sql` only when `DATABASE_URL` is set. The Vercel preset is already selected. Put secrets in the host's environment, not in the repository. Names and empty behavior are in [`.env.example`](../.env.example). Nothing in that file is a live credential.
 
 ## What has to be set
 

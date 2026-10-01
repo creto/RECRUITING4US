@@ -24,4 +24,3 @@ begin
     grant select, insert, update, delete on mail_attachments to app_user;
   end if;
 end $$;
-

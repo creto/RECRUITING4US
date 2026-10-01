@@ -15,6 +15,8 @@ export default tseslint.config(
       ".nitro/**",
       "node_modules/**",
       "src/routeTree.gen.ts",
+      // The public website is its own package with its own lint config.
+      "website/**",
     ],
   },
   js.configs.recommended,

@@ -1,3 +1,6 @@
 {
-  "installCommand": "npm install --omit=dev --no-audit --no-fund"
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npm ci && npm --prefix website ci",
+  "buildCommand": "npm --prefix website run build && npm run build && node scripts/merge-website-into-vercel-output.mjs"
 }

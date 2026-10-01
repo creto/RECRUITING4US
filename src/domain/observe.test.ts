@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ERROR_BUFFER_LIMIT, redactMessage, rememberError, type ObservedError } from "./observe.ts";
+import { ERROR_BUFFER_LIMIT, publicHealthError, redactMessage, rememberError, type ObservedError } from "./observe.ts";
 
 describe("observe", () => {
   it("redacts secrets and keeps a short message", () => {
@@ -29,5 +29,20 @@ describe("observe", () => {
     assert.equal(buffer.length, ERROR_BUFFER_LIMIT);
     assert.equal(buffer[0]?.message, "3");
     assert.equal(buffer.at(-1)?.message, String(ERROR_BUFFER_LIMIT + 2));
+  });
+
+  it("omits message from public health error payloads", () => {
+    const pub = publicHealthError({
+      id: "s1",
+      at: "2026-10-01T00:00:00.000Z",
+      source: "server",
+      name: "Error",
+      message: "secret connection string leaked",
+    });
+    assert.ok(pub);
+    assert.equal(pub.id, "s1");
+    assert.equal(pub.name, "Error");
+    assert.equal("message" in pub, false);
+    assert.equal(publicHealthError(null), null);
   });
 });

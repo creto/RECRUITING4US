@@ -65,7 +65,7 @@ import {
   PORTAL_OTP_REQUEST_LIMIT,
   PORTAL_OTP_TTL_SECONDS,
 } from "@/domain/portal-otp";
-import { env } from "@/lib/env.server";
+import { accessTokenSecret } from "@/lib/access-token-secret.server";
 
 
 const HUMAN_TYPES = new Set(["text", "code", "file", "sql", "spreadsheet", "recording"]);
@@ -569,7 +569,7 @@ export async function assignAssessment(
 
 
 function assessAccessSecret(): string {
-  return (env("BETTER_AUTH_SECRET") ?? process.env.BETTER_AUTH_SECRET ?? "recruit4us-dev-assess-access").trim();
+  return accessTokenSecret("Assessment");
 }
 
 async function loadInviteAssignment(token: string) {

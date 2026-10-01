@@ -1,5 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { BrandBar, Wordmark } from "@/components/talent/kit";
+import { createFileRoute } from "@tanstack/react-router";
+import { BrandBar, MarketingHomeLink } from "@/components/talent/kit";
 import { useLocale } from "@/lib/i18n/provider";
 
 export const Route = createFileRoute("/notice")({ component: NoticePage });
@@ -93,12 +93,8 @@ function NoticePage() {
   return (
     <main data-keep-lang="" className="mx-auto max-w-3xl px-4 py-8 pb-28">
       <header className="flex items-center justify-between gap-4">
-        <Link to="/" className="text-ink">
-          <Wordmark />
-        </Link>
-        <Link to="/" className="text-sm text-link">
-          {text.back}
-        </Link>
+        <MarketingHomeLink className="text-ink" />
+        <MarketingHomeLink className="text-sm text-link">{text.back}</MarketingHomeLink>
       </header>
       <div className="mt-6">
         <BrandBar />

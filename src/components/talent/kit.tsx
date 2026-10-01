@@ -3,6 +3,7 @@ import { Link, useRouter, useRouterState } from "@tanstack/react-router";
 import { RedirectToSignIn, UserButton } from "@/lib/auth/gates";
 import { useCurrentUserState, type AppUser } from "@/lib/auth/use-current-user";
 import { looksLikeHtml, sanitizeMailHtml } from "@/domain/mail-html";
+import { marketingHref } from "@/lib/marketing";
 
 const inflight = new Map<string, Promise<unknown>>();
 const refreshers = new Set<() => void>();
@@ -440,6 +441,15 @@ export function Wordmark({ className = "" }: { className?: string }) {
       <img src="/mark.png" alt="" width={72} height={40} className="h-6 w-auto max-w-16" />
       <span className="font-brand max-w-full text-sm uppercase leading-none tracking-wide text-ink">RECRUIT4US</span>
     </span>
+  );
+}
+
+/** Logo / home CTA → marketing website (not the in-app / landing). */
+export function MarketingHomeLink({ className, children }: { className?: string; children?: ReactNode }) {
+  return (
+    <a href={marketingHref("/")} className={className}>
+      {children ?? <Wordmark />}
+    </a>
   );
 }
 

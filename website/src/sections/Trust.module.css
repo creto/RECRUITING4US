@@ -1,0 +1,185 @@
+.trust {
+  background:
+    radial-gradient(90% 60% at 20% 30%, color-mix(in srgb, var(--accent-fill) 7%, transparent), transparent 70%),
+    var(--bg);
+}
+
+.onPage {
+  padding-top: clamp(3rem, 6vw, 5.5rem);
+}
+
+.grid {
+  display: grid;
+  gap: clamp(2rem, 4vw, 3.5rem);
+}
+
+.sceneCol {
+  position: relative;
+}
+
+.scene {
+  position: relative;
+  height: clamp(360px, 92vw, 460px);
+  margin-inline: calc(var(--gutter) * -1);
+}
+
+.fallback {
+  position: absolute;
+  inset: 8% 6%;
+  width: 88%;
+  height: 84%;
+}
+
+.content {
+  display: grid;
+  gap: clamp(3rem, 6vw, 4.5rem);
+  align-content: start;
+  min-width: 0;
+}
+
+.subhead {
+  font-size: var(--step-1);
+  margin-bottom: 1.4rem;
+  max-width: 26ch;
+}
+
+/* ---------------------------------------------------------------- doors */
+
+.doorsBody {
+  position: relative;
+}
+
+.spine {
+  position: absolute;
+  left: 6px;
+  top: 0.6rem;
+  bottom: 0.6rem;
+  width: 2px;
+  border-radius: 2px;
+  transform-origin: center top;
+  background: linear-gradient(180deg, var(--stage-1), var(--stage-2), var(--stage-3));
+  opacity: 0.55;
+}
+
+.doors {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+
+.door {
+  position: relative;
+  display: grid;
+  grid-template-columns: 14px 1fr auto;
+  gap: 1.1rem;
+  align-items: start;
+  padding: 1.1rem 0 1.15rem;
+}
+.door + .door {
+  border-top: 1px solid var(--line);
+}
+
+.doorMark {
+  width: 14px;
+  height: 22px;
+  margin-top: 0.1rem;
+  background: var(--tone);
+  clip-path: polygon(0 0, 45% 0, 100% 50%, 45% 100%, 0 100%, 55% 50%);
+}
+
+.doorText {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.doorName {
+  font-size: 1.08rem;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.doorBody {
+  color: var(--ink-2);
+  font-size: 0.98rem;
+  line-height: 1.5;
+}
+
+.reach {
+  width: 40px;
+  height: 30px;
+  margin-top: 0.15rem;
+}
+
+/* --------------------------------------------------------------- points */
+
+.points {
+  display: grid;
+  gap: 1.25rem;
+  margin: 0;
+}
+.points li {
+  display: grid;
+  gap: 0.25rem;
+  padding-left: 1.1rem;
+  border-left: 2px solid var(--line-strong);
+}
+.pointName {
+  font-size: 1.02rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
+.pointBody {
+  color: var(--ink-2);
+  font-size: 0.97rem;
+  line-height: 1.5;
+}
+
+/* ----------------------------------------------------------------- foot */
+
+.foot {
+  display: grid;
+  gap: 1.3rem;
+  justify-items: start;
+  padding-top: 0.4rem;
+}
+
+.noCert {
+  max-width: 48ch;
+}
+
+@media (min-width: 700px) {
+  .scene {
+    margin-inline: 0;
+    height: 520px;
+  }
+  .points {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+  }
+}
+
+/*
+ * Desktop: the volume stays in view (sticky) while the doors, the data
+ * points and the integrity case scroll past it.
+ */
+@media (min-width: 1100px) {
+  .grid {
+    grid-template-columns: minmax(0, 1.22fr) minmax(0, 1fr);
+    align-items: start;
+    gap: clamp(2.5rem, 4vw, 4.5rem);
+  }
+  .sceneCol {
+    position: sticky;
+    top: calc(var(--header-h) + 2rem);
+  }
+  .scene {
+    height: min(calc(100svh - var(--header-h) - 4rem), 600px);
+    min-height: 480px;
+  }
+  .points {
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+  }
+}

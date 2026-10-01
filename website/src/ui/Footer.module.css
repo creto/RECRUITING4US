@@ -1,0 +1,75 @@
+.footer {
+  position: relative;
+  padding-top: clamp(4rem, 8vw, 7rem);
+  border-top: 1px solid var(--line);
+  background: var(--bg-2);
+}
+.grid {
+  display: grid;
+  gap: 2.5rem;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 760px) {
+  .grid {
+    grid-template-columns: 1.6fr 1fr 1fr;
+  }
+}
+.brand {
+  display: grid;
+  gap: 0.6rem;
+  align-content: start;
+}
+.mark {
+  width: 64px;
+  height: auto;
+}
+.word {
+  font-size: var(--step-3);
+  font-weight: 760;
+  font-variation-settings: "wdth" 78;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.tagline {
+  color: var(--ink-2);
+  max-width: 30ch;
+}
+.colTitle {
+  font-weight: 650;
+  margin-bottom: 0.8rem;
+}
+.col ul {
+  margin: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+.col a {
+  text-decoration: none;
+  color: var(--ink-2);
+}
+.col a:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+.legal {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.6rem 2rem;
+  margin-top: 3.5rem;
+  padding-block: 1.6rem 2.4rem;
+  border-top: 1px solid var(--line);
+  font-size: var(--step--1);
+  color: var(--ink-3);
+}
+.horizon {
+  display: flex;
+  height: 6px;
+}
+.horizon i {
+  flex: 1;
+}
+.horizon i:nth-child(1) { background: var(--r4-forest); }
+.horizon i:nth-child(2) { background: var(--r4-jade); }
+.horizon i:nth-child(3) { background: var(--r4-leaf); }
+.horizon i:nth-child(4) { background: var(--r4-sprout); }

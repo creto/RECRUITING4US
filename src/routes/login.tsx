@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { createFileRoute, Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouterState } from "@tanstack/react-router";
 import { goAfterLogin, safeNextPath } from "@/domain/post-login-next";
 import { authClient, GROK_PROVIDERS, signIn } from "@/lib/auth/client";
-import { Alert, BrandBar, Button, Field, inputClass, Wordmark } from "@/components/talent/kit";
+import { Alert, BrandBar, Button, Field, inputClass, MarketingHomeLink } from "@/components/talent/kit";
 
 export const Route = createFileRoute("/login")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -12,7 +12,6 @@ export const Route = createFileRoute("/login")({
 });
 
 function Login() {
-  const navigate = useNavigate();
   const searchNext = Route.useSearch({ select: (s) => s.next });
   const search = useRouterState({ select: (state) => state.location.searchStr });
   const fromRouter = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search).get("next");
@@ -49,12 +48,12 @@ function Login() {
   return (
     <main className="min-h-screen lg:grid lg:grid-cols-2">
       <aside className="border-b border-line px-6 py-8 lg:flex lg:flex-col lg:justify-between lg:border-b-0 lg:border-r lg:px-12 lg:py-12">
-        <Link to="/" className="lg:hidden">
-          <Wordmark />
-        </Link>
+        <MarketingHomeLink className="lg:hidden" />
         <div className="hidden max-w-md lg:block">
-          <img src="/mark.png" alt="" width={96} height={56} className="h-12 w-auto max-w-28" />
-          <p className="font-brand mt-4 text-4xl uppercase leading-none text-ink">RECRUIT4US</p>
+          <MarketingHomeLink className="inline-block">
+            <img src="/mark.png" alt="" width={96} height={56} className="h-12 w-auto max-w-28" />
+            <p className="font-brand mt-4 text-4xl uppercase leading-none text-ink">RECRUIT4US</p>
+          </MarketingHomeLink>
           <p className="mt-4 text-base text-muted">
             Each employer keeps its own candidates, scores, and notes. A score is evidence for a person to read, not an automatic hire or reject.
           </p>
@@ -129,6 +128,20 @@ function Login() {
           >
             {signingUp ? "Already have an account? Sign in" : "Need an account? Create one"}
           </button>
+          <div className="my-8 flex items-center gap-3 text-xs font-medium uppercase tracking-wide text-muted">
+            <span className="h-px flex-1 bg-line" />
+            Applicants
+            <span className="h-px flex-1 bg-line" />
+          </div>
+          <p className="text-sm text-muted">
+            Applied for a job? Unlock your portal with the email from your application and a one-time code.
+          </p>
+          <Link
+            to="/portal"
+            className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-full border border-line bg-white px-5 text-sm font-medium text-ink hover:bg-[#f7faf4]"
+          >
+            Applicant portal unlock
+          </Link>
         </div>
       </section>
     </main>

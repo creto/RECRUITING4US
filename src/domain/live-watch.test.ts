@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   activeAttemptSummary,
   buildAttemptLivePad,
+  canWatchActiveAttempts,
   clipSignalText,
   describeLiveSignal,
   liveSignalKind,
@@ -91,5 +92,18 @@ describe("live watch", () => {
       }),
       false,
     );
+  });
+});
+
+describe("live interviewer authz", () => {
+  it("matches listActiveAttempts permissions (ANALYST cannot act as INTERVIEWER)", () => {
+    assert.equal(canWatchActiveAttempts("ANALYST"), false);
+    assert.equal(canWatchActiveAttempts("INTERVIEWER"), false);
+    assert.equal(canWatchActiveAttempts("RECRUITER"), true);
+    assert.equal(canWatchActiveAttempts("HIRING_MANAGER"), true);
+    assert.equal(canWatchActiveAttempts("ASSESSMENT_AUTHOR"), true);
+    assert.equal(canWatchActiveAttempts("ASSESSMENT_REVIEWER"), true);
+    assert.equal(canWatchActiveAttempts("OWNER"), true);
+    assert.equal(canWatchActiveAttempts("ADMIN"), true);
   });
 });

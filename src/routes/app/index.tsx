@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { createCompany, listMyCompanies, seedDemo } from "@/server/talent.functions";
-import { Alert, AppLink, Button, Field, Gate, inputClass, Loading, PageTitle, useAuthed, Wordmark } from "@/components/talent/kit";
+import { Alert, AppLink, Button, Field, Gate, inputClass, Loading, PageTitle, useAuthed, MarketingHomeLink } from "@/components/talent/kit";
 import { UserButton } from "@/lib/auth/gates";
 
 export const Route = createFileRoute("/app/")({ component: Workspaces });
@@ -42,7 +42,7 @@ function Workspaces() {
     <Gate pending={state.isPending} signedOut={state.signedOut}>
       <main className="mx-auto max-w-3xl px-4 py-8">
         <div className="flex items-center justify-between">
-          <Link to="/"><Wordmark /></Link>
+          <MarketingHomeLink />
           <UserButton />
         </div>
         <PageTitle title="Your companies" lede="A company is a tenant. You only see employers that invited you or that you created." />

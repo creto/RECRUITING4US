@@ -6,13 +6,12 @@ import {
   requestPortalOtp,
   verifyPortalOtp,
 } from "@/server/talent.functions";
-import { Alert, Button, Field, inputClass, PageTitle, Wordmark } from "@/components/talent/kit";
+import { Alert, Button, Field, inputClass, PageTitle, MarketingHomeLink } from "@/components/talent/kit";
 
 export const Route = createFileRoute("/portal/")({
   component: PortalGate,
 });
 
-type CompanyChoice = { slug: string; name: string };
 type UnlockedApp = {
   id: string;
   jobTitle: string;
@@ -22,7 +21,7 @@ type UnlockedApp = {
   accessToken: string;
 };
 
-type Step = "email" | "company" | "code" | "apps";
+type Step = "email" | "code" | "apps";
 
 function PortalGate() {
   const navigate = useNavigate();
@@ -34,7 +33,6 @@ function PortalGate() {
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [companySlug, setCompanySlug] = useState(companyFromSearch);
-  const [companies, setCompanies] = useState<CompanyChoice[]>([]);
   const [companyName, setCompanyName] = useState("");
   const [code, setCode] = useState("");
   const [note, setNote] = useState<string | null>(null);
@@ -54,37 +52,10 @@ function PortalGate() {
           companySlug: companySlug.trim() || undefined,
         },
       });
-      if (result.status === "pick_company") {
-        setCompanies(result.companies);
-        setStep("company");
-        setNote("Choose the employer you applied to. Codes are scoped per company.");
-      } else {
-        if (result.companySlug) setCompanySlug(result.companySlug);
-        if (result.companyName) setCompanyName(result.companyName);
+      if (result.status === "need_company") {
         setNote(result.note);
-        setStep("code");
-      }
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Could not send a code.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function onPickCompany(slug: string) {
-    setCompanySlug(slug);
-    setError(null);
-    setBusy(true);
-    try {
-      const result = await requestPortalOtp({
-        data: { email: email.trim(), companySlug: slug },
-      });
-      if (result.status === "pick_company") {
-        setCompanies(result.companies);
-        setStep("company");
+        setStep("email");
       } else {
-        if (result.companySlug) setCompanySlug(result.companySlug);
-        if (result.companyName) setCompanyName(result.companyName);
         setNote(result.note);
         setStep("code");
       }
@@ -126,12 +97,12 @@ function PortalGate() {
 
   return (
     <main className="mx-auto max-w-xl px-4 py-8">
-      <Link to="/"><Wordmark /></Link>
+      <MarketingHomeLink />
       <PageTitle title="Applicant portal" lede={applicationPortalGateLede()} />
       {error ? <div className="mb-3"><Alert>{error}</Alert></div> : null}
       {note && step !== "apps" ? <p className="mb-3 text-sm text-muted">{note}</p> : null}
 
-      {step === "email" || step === "company" ? (
+      {step === "email" ? (
         <form
           className="space-y-3 rounded-[24px] border border-line bg-white p-5 shadow-[0_8px_24px_rgba(20,34,27,0.04)]"
           onSubmit={onRequestCode}
@@ -146,29 +117,19 @@ function PortalGate() {
               required
             />
           </Field>
-          {step === "company" ? (
-            <div className="space-y-2">
-              <p className="text-sm text-muted">This email has applications at more than one employer. Pick one:</p>
-              <ul className="space-y-2">
-                {companies.map((company) => (
-                  <li key={company.slug}>
-                    <Button
-                      type="button"
-                      className="w-full rounded-full bg-[#cefa90] text-[#14221b]"
-                      disabled={busy}
-                      onClick={() => void onPickCompany(company.slug)}
-                    >
-                      {company.name}
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : (
-            <Button type="submit" className="rounded-full bg-[#cefa90] text-[#14221b]" disabled={busy}>
-              {busy ? "Sending…" : "Send one-time code"}
-            </Button>
-          )}
+          <Field label="Employer slug">
+            <input
+              className={inputClass}
+              value={companySlug}
+              onChange={(event) => setCompanySlug(event.target.value)}
+              placeholder="from your careers link or application email"
+              autoComplete="organization"
+              required
+            />
+          </Field>
+          <Button type="submit" className="rounded-full bg-[#cefa90] text-[#14221b]" disabled={busy}>
+            {busy ? "Sending…" : "Send one-time code"}
+          </Button>
         </form>
       ) : null}
 
@@ -178,7 +139,7 @@ function PortalGate() {
           onSubmit={onVerifyCode}
         >
           <p className="text-sm text-muted">
-            Code sent{companyName ? ` for ${companyName}` : ""}. Enter the 6-digit code from your email.
+            If that email has applications with this employer, we sent a code. Enter the 6-digit code from your email.
           </p>
           <Field label="One-time code">
             <input

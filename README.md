@@ -1,5 +1,17 @@
 # RECRUIT4US
 
+## Vercel (unified)
+
+One Vercel project: **recruit4us** (`recruit.tiglobal.com.co` / `recruit4us.vercel.app`).
+
+- `/` → marketing site (`website/`)
+- `/login`, `/portal`, `/app`, … → TanStack app
+- Build: `website:build` + app `build` + `scripts/merge-website-into-vercel-output.mjs`
+- Marketing **Ingresar** → `/login` (staff). On `/login`, **Applicant portal unlock** is a secondary button → `/portal` (OTP).
+
+Do not point a second Vercel project at this repo for production after cutover.
+
+
 Hiring workspace for one company at a time: careers pages, a pipeline, assessments, interviews, and offers.
 
 Sign in, then either create a company or open **Northstar Labs**. That demo includes a second employer, Harbor Analytics, which you cannot open. Your own candidate portal lists a numerical exercise and a fictional offer. The exercise is not a validated test. Mail stays inside Settings → Inbox. Reviews rank submitted code by cases passed, then estimated time class, then space, then measured time. A sample run by itself is not that score, and no remote judge is connected.

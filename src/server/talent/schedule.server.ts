@@ -667,9 +667,15 @@ export async function approveOffer(userId: string, input: { slug: string; offerI
     values (${nid()}, ${actor.companyId}, ${input.offerId}, ${input.revision}, ${actor.userId}, 'APPROVED')
     on conflict (company_id, offer_id, revision, approver_user_id) do nothing
   `;
-  await sql`
-    update offers set status = 'APPROVED' where id = ${input.offerId} and current_revision = ${input.revision}
+  const approved = await sql<{ id: string }>`
+    update offers set status = 'APPROVED'
+    where id = ${input.offerId}
+      and company_id = ${actor.companyId}
+      and current_revision = ${input.revision}
+      and status in ('PENDING_APPROVAL', 'APPROVED')
+    returning id
   `;
+  if (!approved[0]) throw new Error("This offer cannot be approved in its current state.");
   await audit(actor, "offer.approve", "offer", input.offerId, `Approved revision ${input.revision}.`);
   return { ok: true };
 }
@@ -692,7 +698,12 @@ export async function sendOffer(userId: string, input: { slug: string; offerId: 
   if (offer.status !== "APPROVED" || Number(approvals[0]?.n ?? 0) < 1) {
     throw new Error("Approve the exact current terms before sending.");
   }
-  await sql`update offers set status = 'SENT' where id = ${input.offerId}`;
+  const sent = await sql<{ id: string }>`
+    update offers set status = 'SENT'
+    where id = ${input.offerId} and company_id = ${actor.companyId} and status = 'APPROVED'
+    returning id
+  `;
+  if (!sent[0]) throw new Error("Approve the exact current terms before sending.");
   const people = await sql<{ email: string }>`
     select c.email from applications a join candidates c on c.id = a.candidate_id where a.id = ${offer.application_id}
   `;
@@ -801,7 +812,15 @@ export async function respondToOffer(
     insert into offer_responses (id, company_id, offer_id, revision, decision, comment)
     values (${nid()}, ${offer.company_id}, ${input.offerId}, ${input.revision}, ${input.decision}, ${input.comment.slice(0, 2000)})
   `;
-  await sql`update offers set status = ${input.decision} where id = ${input.offerId}`;
+  const responded = await sql<{ id: string }>`
+    update offers set status = ${input.decision}
+    where id = ${input.offerId}
+      and company_id = ${offer.company_id}
+      and status = 'SENT'
+      and current_revision = ${input.revision}
+    returning id
+  `;
+  if (!responded[0]) throw new Error("That offer revision is no longer open.");
   if (input.decision === "ACCEPTED") {
     await sql`
       update applications set lifecycle = 'HIRED', closed_at = now(), version = version + 1

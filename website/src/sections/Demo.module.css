@@ -1,0 +1,490 @@
+.demo {
+  background:
+    radial-gradient(70% 55% at 85% 20%, color-mix(in srgb, var(--stage-4-fill) 14%, transparent), transparent 70%),
+    var(--bg-2);
+}
+:root[data-theme="dark"] .demo {
+  background:
+    radial-gradient(70% 55% at 85% 20%, color-mix(in srgb, var(--stage-3) 9%, transparent), transparent 70%),
+    var(--bg-2);
+}
+
+.page {
+  padding-top: calc(var(--header-h) + clamp(3rem, 7vw, 6rem));
+  background: var(--bg);
+}
+:root[data-theme="dark"] .page {
+  background: var(--bg);
+}
+
+.grid {
+  display: grid;
+  gap: clamp(3rem, 6vw, 5rem);
+}
+
+.side {
+  display: grid;
+  gap: 1.6rem;
+  align-content: start;
+}
+
+.title {
+  max-width: 14ch;
+}
+.page .title {
+  font-size: clamp(2.8rem, 1.6rem + 4vw, 5.2rem);
+}
+
+.lede {
+  max-width: 34ch;
+}
+
+/* --------------------------------------------------------------- horizon */
+
+.horizonFig {
+  margin: 1.4rem 0 0;
+  display: grid;
+  gap: 1rem;
+  max-width: 30rem;
+}
+
+.horizon {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin: 0;
+  padding-top: 0.4rem;
+}
+.horizon::before {
+  /* the horizon line the steps sit on */
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(0.4rem + 17px);
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--line-strong) 12%, var(--line-strong) 88%, transparent);
+}
+
+.horizon li {
+  position: relative;
+  display: grid;
+  gap: 0.7rem;
+  justify-items: start;
+}
+
+.hMark {
+  --lit: 1;
+  position: relative;
+  width: 22px;
+  height: 34px;
+  background: var(--tone);
+  clip-path: polygon(0 0, 45% 0, 100% 50%, 45% 100%, 0 100%, 55% 50%);
+  opacity: calc(0.16 + var(--lit) * 0.84);
+  transform: translateX(calc((1 - var(--lit)) * -10px));
+}
+
+.horizon li[data-last] .hMark {
+  width: 30px;
+  height: 46px;
+  margin-top: -6px;
+  background: var(--stage-4-fill);
+  filter: drop-shadow(0 0 0 transparent);
+}
+:root[data-theme="light"] .horizon li[data-last] .hMark,
+:root:not([data-theme]) .horizon li[data-last] .hMark {
+  background: var(--r4-leaf);
+}
+
+.hLabel {
+  font-size: 0.86rem;
+  font-weight: 560;
+  color: var(--ink-3);
+}
+.horizon li[data-last] .hLabel {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.horizonCaption {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--ink-2);
+  max-width: 40ch;
+}
+
+/* ------------------------------------------------------------ next steps */
+
+.next {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 0.6rem;
+}
+.nextTitle {
+  font-size: var(--step-1);
+  font-weight: 660;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+.nextList {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  counter-reset: step;
+}
+.nextList li {
+  counter-increment: step;
+  display: grid;
+  grid-template-columns: 1.8rem 1fr;
+  color: var(--ink-2);
+  line-height: 1.45;
+}
+.nextList li::before {
+  content: counter(step);
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  color: var(--accent-ink);
+}
+
+.signIn {
+  margin-top: 0.4rem;
+  color: var(--ink-2);
+}
+.signInLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-weight: 650;
+  color: var(--accent-ink);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent-ink) 40%, transparent);
+}
+.signInLink:hover {
+  text-decoration-color: currentColor;
+}
+
+/* ------------------------------------------------------------------ form */
+
+.formCol {
+  min-width: 0;
+}
+
+.form {
+  display: grid;
+  gap: 0.7rem;
+  padding: clamp(1.4rem, 3vw, 2.4rem);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow:
+    0 0 0 1px var(--line),
+    0 40px 80px -50px rgba(3, 50, 32, 0.4);
+}
+:root[data-theme="dark"] .form {
+  background: var(--bg);
+  box-shadow:
+    0 0 0 1px var(--line),
+    0 40px 80px -40px rgba(0, 0, 0, 0.7);
+}
+.page .form {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .page .form {
+  background: var(--bg-2);
+}
+
+.row {
+  display: grid;
+  gap: 0.7rem 1.35rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.45rem;
+  align-content: start;
+  min-width: 0;
+}
+
+.label {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ink);
+  padding: 0;
+}
+
+.input {
+  width: 100%;
+  height: 48px;
+  padding: 0 0.95rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 1rem;
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  transition:
+    box-shadow var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+  appearance: none;
+  -webkit-appearance: none;
+}
+:root[data-theme="dark"] .input {
+  background: var(--bg-3);
+}
+.input:hover {
+  box-shadow: inset 0 0 0 1px var(--ink-3);
+}
+.input:focus,
+.input:focus-visible {
+  outline: none;
+  box-shadow:
+    inset 0 0 0 1.5px var(--accent-ink),
+    0 0 0 4px color-mix(in srgb, var(--accent-fill) 24%, transparent);
+}
+.field[data-invalid] .input {
+  box-shadow:
+    inset 0 0 0 1.5px var(--signal),
+    0 0 0 3px color-mix(in srgb, var(--signal) 16%, transparent);
+}
+
+.textarea {
+  height: auto;
+  min-height: 7.5rem;
+  padding: 0.8rem 0.95rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.selectWrap {
+  position: relative;
+  display: block;
+}
+.select {
+  padding-right: 2.6rem;
+  cursor: pointer;
+}
+.select[data-empty] {
+  color: var(--ink-3);
+}
+.select option {
+  color: var(--ink);
+  background: var(--surface);
+}
+.selectCaret {
+  position: absolute;
+  right: 0.95rem;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  translate: 0 -50%;
+  color: var(--ink-3);
+  pointer-events: none;
+}
+
+.hint {
+  font-size: 0.86rem;
+  color: var(--ink-3);
+  line-height: 1.4;
+}
+
+.slot,
+.error {
+  min-height: calc(var(--reserve, 1) * 1.4em);
+  font-size: 0.88rem;
+}
+.slot {
+  display: block;
+}
+
+.error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  font-size: 0.88rem;
+  font-weight: 560;
+  line-height: 1.4;
+  color: var(--ink);
+}
+.error svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 0.1rem;
+  color: var(--signal);
+}
+
+/* ------------------------------------------------------------------ chips */
+
+.fieldset {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0 0 1.2rem;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.fieldset legend {
+  margin-bottom: 0.45rem;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0 1rem 0 0.8rem;
+  border: 0;
+  font-size: 0.92rem;
+  font-weight: 560;
+  color: var(--ink-2);
+}
+.chip:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.chipMark {
+  width: 8px;
+  height: 12px;
+  background: var(--line-strong);
+  clip-path: polygon(0 0, 45% 0, 100% 50%, 45% 100%, 0 100%, 55% 50%);
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.chip[aria-pressed="true"] {
+  color: var(--ink);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent-fill) 22%, transparent), color-mix(in srgb, var(--accent-fill) 14%, transparent)),
+    rgb(var(--glass-tint) / var(--glass-alpha));
+  box-shadow:
+    inset 0 0 0 1.5px var(--accent-fill),
+    var(--glass-shadow);
+}
+.chip[aria-pressed="true"] .chipMark {
+  background: var(--accent-ink);
+}
+
+/* ----------------------------------------------------------------- submit */
+
+.submitRow {
+  display: grid;
+  gap: 1rem;
+  align-items: center;
+  margin-top: 0.4rem;
+}
+
+.submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  height: 56px;
+  padding: 0 1.6rem;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--ink);
+  color: var(--bg);
+  font-weight: 650;
+  font-size: 1.04rem;
+  font-variation-settings: "wdth" 92;
+  box-shadow: 0 14px 30px -16px rgba(3, 50, 32, 0.55);
+  transition:
+    transform 520ms var(--ease-spring),
+    opacity var(--dur-fast) var(--ease-out);
+  justify-self: start;
+}
+:root[data-theme="dark"] .submit {
+  background: var(--r4-sprout);
+  color: #02140c;
+}
+.submit svg {
+  width: 16px;
+  height: 16px;
+  transition: transform 360ms var(--ease-out);
+}
+.submit:active {
+  transform: scale(0.965, 0.93);
+  transition-duration: 90ms;
+}
+.submit:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.submit:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px var(--surface),
+    0 0 0 5px var(--focus);
+}
+@media (hover: hover) {
+  .submit:hover svg {
+    transform: translateX(4px);
+  }
+}
+
+.privacy {
+  font-size: 0.86rem;
+  line-height: 1.45;
+  color: var(--ink-3);
+  max-width: 46ch;
+}
+
+.status {
+  /* reserved: a status message never pushes the page */
+  min-height: 5.2rem;
+}
+@media (max-width: 639px) {
+  .status {
+    min-height: 7rem;
+  }
+}
+.status p {
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.95rem;
+  line-height: 1.45;
+  background: var(--bg-2);
+  box-shadow: inset 3px 0 0 var(--line-strong);
+}
+:root[data-theme="dark"] .status p {
+  background: var(--bg-3);
+}
+.status[data-kind="sent"] p,
+.status[data-kind="mailto"] p {
+  box-shadow: inset 3px 0 0 var(--accent-fill);
+}
+.status[data-kind="invalid"] p,
+.status[data-kind="error"] p {
+  box-shadow: inset 3px 0 0 var(--signal);
+}
+.status a {
+  font-weight: 600;
+  color: var(--accent-ink);
+  word-break: break-all;
+}
+
+@media (min-width: 640px) {
+  .row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .submitRow {
+    grid-template-columns: auto 1fr;
+    gap: 1.4rem;
+  }
+}
+
+@media (min-width: 1100px) {
+  .grid {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    gap: clamp(3rem, 6vw, 6rem);
+    align-items: start;
+  }
+  .side {
+    position: sticky;
+    top: calc(var(--header-h) + 2rem);
+  }
+}

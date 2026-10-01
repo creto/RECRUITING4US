@@ -1,0 +1,56 @@
+.cursor {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 150;
+  pointer-events: none;
+  will-change: transform;
+}
+.ring {
+  position: absolute;
+  left: -15px;
+  top: -15px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--ink) 45%, transparent);
+  transition:
+    transform 320ms var(--ease-out),
+    background-color 200ms var(--ease-out),
+    border-color 200ms var(--ease-out),
+    opacity 200ms;
+}
+.cursor[data-mode="hot"] .ring {
+  transform: scale(1.45);
+  border-color: var(--accent-fill);
+  background: color-mix(in srgb, var(--accent-fill) 10%, transparent);
+}
+.cursor[data-mode="drag"] .ring {
+  transform: scale(1.9);
+  border-color: var(--accent-fill);
+}
+.cursor[data-mode="out"] .ring {
+  opacity: 0;
+}
+.grip {
+  position: absolute;
+  left: -14px;
+  top: -4px;
+  width: 28px;
+  display: flex;
+  justify-content: space-between;
+  opacity: 0;
+  transition: opacity 200ms;
+}
+.grip i {
+  width: 6px;
+  height: 8px;
+  background: var(--accent-ink);
+  clip-path: polygon(100% 0, 100% 100%, 0 50%);
+}
+.grip i:last-child {
+  clip-path: polygon(0 0, 0 100%, 100% 50%);
+}
+.cursor[data-mode="drag"] .grip {
+  opacity: 1;
+}

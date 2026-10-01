@@ -1,0 +1,236 @@
+.wrap {
+  display: grid;
+  gap: 1rem;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem 1.5rem;
+  padding: 0 0.2rem;
+}
+.title {
+  font-weight: 700;
+  font-size: 1.15rem;
+  font-variation-settings: "wdth" 88;
+}
+.note {
+  font-size: var(--step--1);
+  color: var(--ink-3);
+}
+
+.list {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 3.2rem minmax(0, 1.1fr) minmax(0, 1.4fr) minmax(10rem, 1fr);
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.2rem 1rem 0.8rem;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line);
+  will-change: transform;
+}
+.row[data-yours] {
+  box-shadow: 0 0 0 1.5px var(--stage-3);
+}
+
+.place {
+  font-size: 2.3rem;
+  font-weight: 760;
+  font-variation-settings: "wdth" 78;
+  line-height: 1;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+
+.who {
+  min-width: 0;
+}
+.name {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 650;
+  font-size: 1.05rem;
+  line-height: 1.2;
+}
+.tie {
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--radius-pill);
+  background: var(--bg-2);
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.stage {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.2rem;
+  font-size: 0.8rem;
+  color: var(--ink-3);
+}
+/* The stage stays put: a pin, not an arrow. */
+.pin {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1.5px var(--ink-3);
+}
+
+/* Two chip lines reserved: adding your recommendation never grows the row. */
+.recs {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: center;
+  gap: 0.3rem;
+  min-height: 3.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.recs li {
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-pill);
+  background: var(--bg-2);
+  font-size: 0.78rem;
+  font-weight: 560;
+  white-space: nowrap;
+}
+.recs li[data-yours] {
+  background: var(--stage-3);
+  color: var(--ink);
+  font-weight: 640;
+  animation: chip 520ms var(--ease-spring) both;
+}
+:root[data-theme="dark"] .recs li[data-yours] {
+  color: var(--bg);
+}
+@keyframes chip {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+}
+
+.avg {
+  display: grid;
+  gap: 0.35rem;
+}
+.meter {
+  position: relative;
+  display: block;
+  height: 8px;
+  border-radius: 8px;
+  background: var(--bg-3);
+  overflow: hidden;
+}
+.meter i {
+  position: absolute;
+  inset: 0;
+  background: var(--accent-fill);
+  border-radius: inherit;
+  transform-origin: left center;
+  transition: transform var(--dur-slow) var(--ease-out);
+}
+/* Ticks at "No", "Sí": thirds of the scale. */
+.meter b {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--surface);
+  left: calc(100% / 3);
+}
+.meter b + b {
+  left: calc(200% / 3);
+}
+.value {
+  font-size: 0.82rem;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.status {
+  min-height: 3.2em;
+  padding: 0.2rem;
+  font-size: 0.9rem;
+  color: var(--ink-2);
+}
+.status[data-yours] {
+  color: var(--accent-ink);
+  font-weight: 560;
+}
+
+.foot {
+  display: grid;
+  gap: 1rem 2.5rem;
+  margin-top: 0.4rem;
+}
+@media (min-width: 820px) {
+  .foot {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    align-items: start;
+  }
+}
+.rules {
+  display: grid;
+  gap: 0.45rem;
+}
+.rulesTitle {
+  font-size: 0.85rem;
+  font-weight: 620;
+  color: var(--ink-2);
+}
+.rules ol {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rules li {
+  display: flex;
+  gap: 0.6rem;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+.rules li::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 10px;
+  margin-top: 0.4em;
+  background: var(--ink-3);
+  clip-path: polygon(0 0, 45% 0, 100% 50%, 45% 100%, 0 100%, 55% 50%);
+}
+
+@media (max-width: 819px) {
+  .row {
+    grid-template-columns: 2.4rem minmax(0, 1fr);
+    gap: 0.5rem 0.8rem;
+    padding: 0.9rem 0.9rem 0.9rem 0.6rem;
+  }
+  .place {
+    grid-row: span 3;
+    align-self: start;
+    font-size: 1.9rem;
+  }
+  .recs,
+  .avg {
+    grid-column: 2;
+  }
+}

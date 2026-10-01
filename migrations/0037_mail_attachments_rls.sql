@@ -1,5 +1,6 @@
 -- mail_attachments was created after the tenant grant. The app role could not
 -- read it, so every drain that looked for files failed closed.
+-- Idempotent: safe if 0035 already applied grants+RLS.
 do $$
 begin
   alter table mail_attachments enable row level security;

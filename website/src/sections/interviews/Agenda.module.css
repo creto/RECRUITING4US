@@ -1,0 +1,228 @@
+.wrap {
+  display: grid;
+  gap: 2rem;
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 820px) {
+  .wrap {
+    grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+    gap: clamp(2rem, 5vw, 4.5rem);
+    padding: 0.5rem 0 0.5rem clamp(0rem, 3vw, 2.5rem);
+  }
+}
+
+.phone {
+  position: relative;
+  padding: 1.4rem 1.2rem 1.2rem;
+  border-radius: 30px;
+  background: var(--surface);
+  box-shadow:
+    0 0 0 1px var(--line),
+    var(--shot-shadow);
+}
+.phone::before {
+  content: "";
+  position: absolute;
+  top: 0.55rem;
+  left: 50%;
+  width: 3.2rem;
+  height: 4px;
+  margin-left: -1.6rem;
+  border-radius: 4px;
+  background: var(--line-strong);
+}
+
+.view {
+  font-size: var(--step--1);
+  color: var(--ink-3);
+  margin-top: 0.4rem;
+}
+.company {
+  margin-top: 0.9rem;
+  font-weight: 700;
+  font-size: 1.15rem;
+  font-variation-settings: "wdth" 88;
+  line-height: 1.1;
+}
+.role {
+  font-size: var(--step--1);
+  color: var(--ink-2);
+}
+.day {
+  margin: 1.1rem 0 0.6rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--line);
+  font-weight: 620;
+}
+
+.slots {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.slot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 46px;
+  padding: 0 0.95rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: transparent;
+  font-weight: 600;
+  font-size: 0.98rem;
+  text-align: left;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    transform 520ms var(--ease-spring);
+}
+.slot[data-state="taken"] {
+  border-style: dashed;
+  border-color: var(--line);
+  color: var(--ink-3);
+  background: repeating-linear-gradient(-45deg, transparent 0 6px, var(--line) 6px 7px);
+}
+.slot[data-state="mine"] {
+  border-color: var(--stage-2);
+  background: var(--stage-2);
+  color: var(--ink);
+}
+:root[data-theme="dark"] .slot[data-state="mine"] {
+  color: var(--bg);
+}
+@media (hover: hover) {
+  .slot[data-state="free"]:hover {
+    border-color: var(--stage-2);
+    background: color-mix(in srgb, var(--stage-2) 8%, transparent);
+  }
+}
+.slot:active {
+  transform: scale(0.98);
+}
+
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: var(--step--1);
+  font-weight: 560;
+}
+.check {
+  width: 16px;
+  height: 16px;
+  stroke-dasharray: 24;
+  animation: draw 420ms var(--ease-out) both;
+}
+@keyframes draw {
+  from {
+    stroke-dashoffset: 24;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Space is reserved from the start; choosing a slot only reveals it. */
+.after {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-6px);
+  transition:
+    opacity var(--dur-med) var(--ease-out),
+    transform var(--dur-med) var(--ease-out),
+    visibility 0s linear var(--dur-med);
+}
+.after[data-show] {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition-delay: 0s;
+}
+.afterText {
+  margin-top: 0.9rem;
+  font-size: var(--step--1);
+  color: var(--ink-2);
+  line-height: 1.45;
+}
+.files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+.files span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.65rem 0.3rem 0.5rem;
+  border-radius: var(--radius-pill);
+  background: var(--bg-2);
+  font-size: var(--step--1);
+  font-weight: 560;
+}
+.files svg {
+  width: 15px;
+  height: 15px;
+}
+
+.aside {
+  display: grid;
+  gap: 1.4rem;
+  align-content: center;
+}
+.facts {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: f;
+}
+.facts li {
+  counter-increment: f;
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.95rem 0;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--step-1);
+  font-weight: 620;
+  font-variation-settings: "wdth" 90;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+.facts li::before {
+  content: counter(f);
+  font-size: 0.95rem;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+.more {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-weight: 600;
+  color: var(--accent-ink);
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+}
+
+@media (max-width: 819px) {
+  .phone {
+    max-width: 24rem;
+    width: 100%;
+    justify-self: center;
+  }
+  .facts li {
+    font-size: 1.1rem;
+  }
+}

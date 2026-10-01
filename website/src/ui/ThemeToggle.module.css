@@ -1,0 +1,65 @@
+.toggle {
+  width: 66px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  display: inline-block;
+  flex: none;
+}
+
+.horizon {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 9px;
+  display: flex;
+  gap: 2px;
+  opacity: 0.9;
+  transition: opacity var(--dur-med) var(--ease-out);
+}
+.horizon i {
+  flex: 1;
+  height: 2px;
+  border-radius: 2px;
+}
+.horizon i:nth-child(1) { background: var(--r4-forest); }
+.horizon i:nth-child(2) { background: var(--r4-jade); }
+.horizon i:nth-child(3) { background: var(--r4-leaf); }
+.horizon i:nth-child(4) { background: var(--r4-sprout); }
+
+.knob {
+  position: absolute;
+  top: 7px;
+  left: 8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff9d6, #d0fa8e 60%, #9ee36c);
+  box-shadow: 0 0 0 1px rgba(3, 97, 69, 0.18), 0 4px 10px -2px rgba(3, 97, 69, 0.45);
+  overflow: hidden;
+  transition:
+    transform 620ms var(--ease-spring),
+    background 400ms var(--ease-out);
+}
+
+.shade {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgb(var(--glass-tint));
+  transform: translate(130%, -40%);
+  transition: transform 520ms var(--ease-out) 80ms;
+}
+
+.toggle[data-dark] .knob {
+  transform: translateX(30px);
+  background: radial-gradient(circle at 40% 40%, #f4fff0, #d6ecd9);
+  box-shadow: 0 0 0 1px rgba(208, 250, 142, 0.25), 0 0 14px -2px rgba(208, 250, 142, 0.5);
+}
+.toggle[data-dark] .shade {
+  transform: translate(38%, -22%);
+  background: #0e2a1f;
+}
+.toggle[data-dark] .horizon {
+  opacity: 0.35;
+}

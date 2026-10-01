@@ -20,6 +20,7 @@ import {
   StageBar,
   Wordmark,
   when,
+  MarketingHomeLink,
 } from "@/components/talent/kit";
 import { examPaper } from "@/components/talent/exam-shell";
 import { googleCalendarRenderUrl } from "@/domain/interview-invite";
@@ -99,7 +100,7 @@ function PortalShell() {
   if (!accessToken) {
     return (
       <main className="mx-auto max-w-xl px-4 py-8">
-        <Link to="/"><Wordmark /></Link>
+        <MarketingHomeLink />
         <PageTitle
           title="Unlock required"
           lede="Open the applicant portal with your email and a one-time code. Deep links with ?access= still work."
@@ -182,7 +183,7 @@ function PortalBody({ applicationId, accessToken }: { applicationId: string; acc
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
       <div className="flex items-center justify-between gap-4">
-        <Link to="/"><Wordmark /></Link>
+        <MarketingHomeLink />
         <Link to="/portal" className="text-sm text-link">Unlock another</Link>
       </div>
       {error ? <div className="mt-4"><Alert>{error}</Alert></div> : null}

@@ -1,0 +1,96 @@
+.dockWrap {
+  position: fixed;
+  left: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 60;
+  display: none;
+}
+@media (min-width: 1100px) {
+  .dockWrap {
+    display: block;
+  }
+}
+
+.dock {
+  padding: 10px 8px;
+  border-radius: 26px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+
+.list li {
+  --m: 0;
+  display: flex;
+  justify-content: center;
+  transition: margin 260ms var(--ease-out);
+  margin-block: calc(var(--m) * 5px);
+}
+
+.item {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  color: var(--ink-2);
+  transform: scale(calc(1 + var(--m) * 0.32));
+  transition:
+    transform 420ms var(--ease-spring),
+    color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+.item svg {
+  width: 20px;
+  height: 20px;
+}
+.item:hover,
+.item:focus-visible {
+  color: var(--ink);
+  background: rgb(var(--glass-tint) / 0.7);
+}
+.item[aria-current] {
+  color: var(--accent-ink);
+}
+
+/* Chevron marker, one item = 46px (42 + 4 gap). */
+.marker {
+  position: absolute;
+  left: 3px;
+  top: calc(10px + var(--i) * 46px + 15px);
+  width: 6px;
+  height: 12px;
+  background: var(--accent-fill);
+  clip-path: polygon(0 0, 45% 0, 100% 50%, 45% 100%, 0 100%, 55% 50%);
+  transition: top 520ms var(--ease-spring);
+}
+
+.tip {
+  position: absolute;
+  left: calc(100% + 16px);
+  top: 50%;
+  translate: -6px -50%;
+  padding: 0.4rem 0.7rem;
+  border-radius: 10px;
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 180ms var(--ease-out),
+    translate 260ms var(--ease-out);
+}
+.item:hover .tip,
+.item:focus-visible .tip {
+  opacity: 1;
+  translate: 0 -50%;
+}

@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { SignInGate } from "@/lib/auth/gates";
-import { BrandBar, Wordmark } from "@/components/talent/kit";
+import { BrandBar, MarketingHomeLink } from "@/components/talent/kit";
 
 export const Route = createFileRoute("/")({ component: Home });
 
@@ -8,7 +8,7 @@ function Home() {
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
       <header className="flex items-center justify-between gap-4">
-        <Wordmark />
+        <MarketingHomeLink />
         <nav className="flex items-center gap-4">
           <Link to="/portal" className="text-sm text-link">Applicant portal</Link>
           <SignInGate

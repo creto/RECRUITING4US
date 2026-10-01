@@ -1,0 +1,24 @@
+.head {
+  display: grid;
+  gap: 1.4rem;
+  margin-bottom: clamp(2.5rem, 5vw, 4.5rem);
+}
+.title {
+  max-width: 17ch;
+}
+.body {
+  font-size: 1.12rem;
+  line-height: 1.6;
+}
+.side {
+  display: grid;
+  gap: 1rem;
+  align-content: end;
+}
+@media (min-width: 960px) {
+  .split {
+    grid-template-columns: 1.25fr 1fr;
+    align-items: end;
+    gap: 4rem;
+  }
+}

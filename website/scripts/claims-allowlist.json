@@ -1,0 +1,26 @@
+[
+  {
+    "id": "F29",
+    "file": "src/content/es.ts",
+    "contains": "Google Calendar",
+    "reason": "Built-in deep link (Add to Google Calendar / ICS), directive §45; BUILT-IN row in docs/integration-status.md."
+  },
+  {
+    "id": "F29",
+    "file": "src/content/es.ts",
+    "contains": "Judge0",
+    "reason": "Integration status disclosure: sample runs go to the public Judge0 CE endpoint by default (docs/integration-status.md)."
+  },
+  {
+    "id": "F25",
+    "file": "src/content/resumes.ts",
+    "contains": "machine learning",
+    "reason": "A skill keyword inside synthetic demo CVs for the Boolean search demo (directive §30 uses this exact query). Not a claim about RECRUIT4US."
+  },
+  {
+    "id": "F25",
+    "file": "src/sections/CvSearch.tsx",
+    "contains": "machine learning",
+    "reason": "Preset search query in the Boolean search demo (directive §30 example). Not a claim about RECRUIT4US."
+  }
+]

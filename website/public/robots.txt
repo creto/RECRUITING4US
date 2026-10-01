@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://recruit4us.tiglobal.com.co/sitemap.xml

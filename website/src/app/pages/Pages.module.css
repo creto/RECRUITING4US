@@ -1,0 +1,303 @@
+/* ------------------------------------------------------------------ hero */
+
+.hero {
+  padding-top: calc(var(--header-h) + clamp(3.5rem, 8vw, 7rem));
+  padding-bottom: clamp(1rem, 3vw, 2rem);
+}
+
+.heroTitle {
+  max-width: 12ch;
+  font-size: clamp(2.8rem, 1.6rem + 4.4vw, 5.6rem);
+}
+
+.heroLede {
+  margin-top: 1.6rem;
+  max-width: 40ch;
+}
+
+.index {
+  margin-top: 2.4rem;
+}
+.index ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+}
+.indexLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 1rem;
+  font-size: 0.92rem;
+  font-weight: 560;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+/* -------------------------------------------------------- security detail */
+
+.detail {
+  background: var(--bg-2);
+}
+
+.detailTitle {
+  max-width: 16ch;
+  margin-bottom: clamp(2.5rem, 5vw, 4rem);
+}
+
+.articles {
+  display: grid;
+  border-top: 2px solid var(--ink);
+}
+
+.article {
+  display: grid;
+  gap: 1rem;
+  padding: 2rem 0 2.2rem;
+  border-bottom: 1px solid var(--line-strong);
+  scroll-margin-top: calc(var(--header-h) + 1.5rem);
+}
+
+.articleTitle {
+  display: flex;
+  align-items: baseline;
+  gap: 0.8rem;
+}
+.articleTitle::before {
+  content: "";
+  flex: none;
+  width: 11px;
+  height: 18px;
+  background: var(--tone);
+  clip-path: polygon(0 0, 45% 0, 100% 50%, 45% 100%, 0 100%, 55% 50%);
+  translate: 0 1px;
+}
+
+.articleBody {
+  display: grid;
+  gap: 1rem;
+}
+
+.bullets {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+}
+.bullets li {
+  position: relative;
+  padding-left: 1.2rem;
+  color: var(--ink-2);
+  line-height: 1.5;
+  max-width: var(--measure);
+}
+.bullets li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.62em;
+  width: 7px;
+  height: 2px;
+  background: var(--accent-fill);
+}
+
+.donts {
+  margin-top: clamp(3.5rem, 7vw, 5.5rem);
+  padding: clamp(1.5rem, 3vw, 2.4rem);
+  border-radius: var(--radius-md);
+  background-image: repeating-linear-gradient(135deg, var(--line) 0 1px, transparent 1px 9px);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+.dontsTitle {
+  margin-bottom: 1.4rem;
+}
+.dontList {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+}
+.dontList li {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: 0.9rem;
+  align-items: start;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.dontList svg {
+  width: 13px;
+  height: 20px;
+  margin-top: 0.1rem;
+  color: var(--ink-3);
+}
+
+@media (min-width: 900px) {
+  .article {
+    grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.8fr);
+    gap: 3rem;
+  }
+  .dontList {
+    grid-template-columns: 1fr 1fr;
+    gap: 1.2rem 2.5rem;
+  }
+}
+
+/* ------------------------------------------------------------ integrations */
+
+.matrixSection {
+  padding-top: clamp(2rem, 5vw, 4rem);
+}
+
+.intro {
+  margin-bottom: clamp(2.5rem, 5vw, 3.5rem);
+  font-size: 1.12rem;
+}
+
+.notes {
+  background: var(--bg-2);
+}
+
+.notesHead {
+  display: grid;
+  gap: 1.2rem;
+  margin-bottom: clamp(2.5rem, 5vw, 4rem);
+  max-width: 44rem;
+}
+
+.mailBlock {
+  display: grid;
+  gap: 2rem;
+  padding-bottom: clamp(3rem, 6vw, 4.5rem);
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.mailHead {
+  display: grid;
+  gap: 0.9rem;
+  max-width: 44rem;
+}
+
+.states {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  border-top: 1px solid var(--line-strong);
+}
+
+.state {
+  display: grid;
+  gap: 0.3rem;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.stateName {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-weight: 650;
+}
+.stateName::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--ink-3);
+}
+.state[data-accent="accepted"] .stateName::before {
+  box-shadow: inset 0 0 0 1.5px var(--accent-ink);
+  background: color-mix(in srgb, var(--accent-fill) 30%, transparent);
+}
+.state[data-accent="delivered"] .stateName::before {
+  background: var(--accent-fill);
+  box-shadow: none;
+}
+.stateText {
+  color: var(--ink-2);
+  font-size: 0.96rem;
+  line-height: 1.5;
+}
+
+.noteGrid {
+  display: grid;
+  gap: 2.4rem;
+  margin-top: clamp(3rem, 6vw, 4.5rem);
+}
+.note {
+  display: grid;
+  gap: 0.8rem;
+  align-content: start;
+  padding-top: 1.2rem;
+  border-top: 2px solid var(--ink);
+}
+.noteTitle {
+  font-size: var(--step-1);
+  font-weight: 660;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+.noteBody {
+  color: var(--ink-2);
+  line-height: 1.55;
+}
+
+@media (min-width: 821px) {
+  .states {
+    grid-template-columns: repeat(4, 1fr);
+    column-gap: 1.6rem;
+  }
+  .noteGrid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2.5rem;
+  }
+}
+
+/* ------------------------------------------------------------------- cta */
+
+.cta {
+  background: var(--bg);
+}
+.ctaInner {
+  display: grid;
+  gap: 1.8rem;
+}
+.ctaTitle {
+  max-width: 14ch;
+}
+.ctaSide {
+  display: grid;
+  gap: 1.6rem;
+  justify-items: start;
+  align-content: end;
+}
+
+@media (min-width: 960px) {
+  .ctaInner {
+    grid-template-columns: 1.3fr 1fr;
+    align-items: end;
+    gap: 4rem;
+  }
+}
+
+/* ------------------------------------------------------------------- 404 */
+
+.notFound {
+  min-height: 88svh;
+  display: flex;
+  align-items: center;
+  padding-top: calc(var(--header-h) + 3rem);
+  padding-bottom: 5rem;
+}
+.nfInner {
+  display: grid;
+  gap: 1.8rem;
+  justify-items: start;
+}
+.trail {
+  width: clamp(150px, 22vw, 230px);
+  height: auto;
+  margin-bottom: 0.6rem;
+}
+.nfTitle {
+  max-width: 13ch;
+  font-size: clamp(2.6rem, 1.4rem + 4.4vw, 5.4rem);
+}
