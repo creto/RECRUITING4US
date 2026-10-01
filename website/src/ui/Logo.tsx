@@ -1,7 +1,7 @@
 import { Link } from "./Link";
 import s from "./Logo.module.css";
 
-/** The official mark (public/brand/mark.png, copied from the app's public/mark.png) plus the wordmark. */
+/** Official transparent PNG mark (brand/mark*.png from public/mark.png) plus wordmark. */
 export function Logo({ compact = false }: { compact?: boolean }) {
   return (
     <Link href="/" className={s.logo} aria-label="RECRUIT4US, inicio">
