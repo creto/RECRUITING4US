@@ -12,6 +12,7 @@ import {
   verifyPortalOtp,
 } from "./portal.server.ts";
 import { verifyPortalAccess } from "../../domain/application-portal-access.ts";
+import { accessTokenSecret } from "../../lib/access-token-secret.server.ts";
 
 type Sql = {
   <T = Record<string, unknown>>(strings: TemplateStringsArray, ...values: unknown[]): Promise<T[]>;
@@ -121,7 +122,7 @@ describe("portal otp unlock", () => {
       });
       assert.equal(uuidUnlock.applicationId, "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1");
       assert.equal(
-        verifyPortalAccess(uuidUnlock.accessToken, uuidUnlock.applicationId, process.env.BETTER_AUTH_SECRET ?? "recruit4us-dev-assess-access").ok,
+        verifyPortalAccess(uuidUnlock.accessToken, uuidUnlock.applicationId, accessTokenSecret()).ok,
         true,
       );
 
@@ -143,13 +144,9 @@ describe("portal otp unlock", () => {
         /do not match/i,
       );
 
-      const pick = await requestPortalOtp({ email: "ada@example.com" });
-      assert.equal(pick.status, "pick_company");
-      if (pick.status !== "pick_company") throw new Error("expected pick_company");
-      assert.deepEqual(
-        pick.companies.map((c) => c.slug).sort(),
-        ["harbor", "northstar"],
-      );
+      const need = await requestPortalOtp({ email: "ada@example.com" });
+      assert.equal(need.status, "need_company");
+      assert.equal("companies" in need, false);
 
       const sent = await requestPortalOtp({ email: "ada@example.com", companySlug: "northstar" });
       assert.equal(sent.status, "code_sent");
@@ -168,8 +165,14 @@ describe("portal otp unlock", () => {
         "harbor application must not leak into northstar OTP unlock",
       );
 
-      const unknown = await requestPortalOtp({ email: "nobody@example.com" });
+      const unknown = await requestPortalOtp({ email: "nobody@example.com", companySlug: "northstar" });
       assert.equal(unknown.status, "code_sent");
+      assert.equal("companySlug" in unknown, false);
+      assert.equal("companyName" in unknown, false);
+
+      const wrongSlug = await requestPortalOtp({ email: "ada@example.com", companySlug: "no-such-employer" });
+      assert.equal(wrongSlug.status, "code_sent");
+      assert.equal("companySlug" in wrongSlug, false);
     } finally {
       setTestSql(null);
       await pg.close();

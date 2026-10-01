@@ -1,4 +1,4 @@
-import { describeError, rememberError, type ErrorSink, type ObservedError } from "@/domain/observe";
+import { describeError, publicHealthError, rememberError, type ErrorSink, type ObservedError } from "@/domain/observe";
 
 const buffer: ObservedError[] = [];
 let sink: ErrorSink | null = null;
@@ -50,7 +50,7 @@ export async function healthSnapshot() {
     checkedAt: new Date().toISOString(),
     errors: {
       captured: buffer.length,
-      last: buffer.at(-1) ?? null,
+      last: publicHealthError(buffer.at(-1)),
     },
     sentry: {
       dsn: dsn.length > 0,

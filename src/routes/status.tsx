@@ -12,7 +12,7 @@ type HealthBody = {
   ready: boolean;
   database: string;
   checkedAt: string;
-  errors: { captured: number; last: ObservedError | null };
+  errors: { captured: number; last: { id: string; at: string; source: string; name: string } | null };
   sentry: { dsn: boolean; sink: boolean };
 };
 
@@ -87,13 +87,13 @@ function Pill({ label, ok, pending }: { label: string; ok: boolean; pending: boo
   return <span className={`inline-flex min-h-10 items-center rounded-full border px-4 text-sm ${look}`}>{label}</span>;
 }
 
-function ErrorList({ rows, empty }: { rows: ObservedError[]; empty: string }) {
+function ErrorList({ rows, empty }: { rows: Array<{ id: string; at: string; source: string; name: string; message?: string }>; empty: string }) {
   if (rows.length === 0) return <p className="mt-3 text-sm text-muted">{empty}</p>;
   return (
     <ul className="mt-3 space-y-2">
       {rows.map((row) => (
         <li key={row.id} className="rounded-2xl border border-line bg-[#f7faf8] px-4 py-3 text-sm">
-          <p className="text-ink">{row.name}: {row.message}</p>
+          <p className="text-ink">{row.message ? `${row.name}: ${row.message}` : row.name}</p>
           <p className="mt-1 text-xs text-muted">{row.source} · {row.at}</p>
         </li>
       ))}

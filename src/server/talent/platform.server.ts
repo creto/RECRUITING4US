@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { getRequest } from "@tanstack/react-start/server";
 import { assertSameSiteRequest } from "@/lib/auth/isolation.server";
 import { estimateComplexity } from "@/domain/judge";
-import { describeLiveSignal, liveSignalKind } from "@/domain/live-watch";
+import { canWatchActiveAttempts, describeLiveSignal, liveSignalKind } from "@/domain/live-watch";
 import { applyDocument, applyOpChain, canSeeNote, type Edit } from "@/domain/platform/collab";
 import { classifySandboxAddress, chooseMailApplication, deliveryLabel, isTerminal, nextState, renderTokens, retryDelayMinutes, stripQuotedReply, webhookFresh, brandHtml, brandPlain, mailMark, type DeliveryState, type MailBrand } from "@/domain/platform/delivery";
 import { normalizeMailFiles, type MailFile } from "@/domain/platform/smtp";
@@ -1069,7 +1069,7 @@ async function liveRole(userId: string, token: string): Promise<{ companyId: str
   const members = await sql<{ role: string }>`
     select role from memberships where company_id = ${companyId} and user_id = ${user.id} and status = 'ACTIVE'
   `;
-  const staff = Boolean(members[0]);
+  const staff = Boolean(members[0]?.role) && canWatchActiveAttempts(members[0]!.role);
   let candidate = false;
   if (session.application_id) {
     const apps = await sql<{ email: string }>`

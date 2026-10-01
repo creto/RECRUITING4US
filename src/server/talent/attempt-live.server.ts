@@ -1,17 +1,8 @@
-import { activeAttemptSummary, buildAttemptLivePad, liveRowVisibleToTenant, liveWatchPath } from "@/domain/live-watch";
-import { roleHas } from "@/domain/rules";
+import { activeAttemptSummary, buildAttemptLivePad, canWatchActiveAttempts, liveRowVisibleToTenant, liveWatchPath } from "@/domain/live-watch";
 import { enterTenant } from "@/lib/tenant";
 import { allow, db, json, nid, requireActor } from "./db.server";
 
-/** True when this staff role may see who is taking an exam. */
-export function canWatchActiveAttempts(role: string): boolean {
-  return (
-    roleHas(role, "assessment.assign") ||
-    roleHas(role, "interview.manage") ||
-    roleHas(role, "evaluation.grade") ||
-    roleHas(role, "assessment.author")
-  );
-}
+export { canWatchActiveAttempts };
 
 type Meta = {
   company_id: string;
